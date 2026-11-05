@@ -1,12 +1,12 @@
 # Rule and review roadmap
 
-These TODOs describe planned work, not available CLI features. Implement them in
-the order below, one coherent, validated change at a time. All five items remain
-open; writing a specification does not complete an implementation.
+This roadmap tracks implementation in the order below, one coherent, validated
+change at a time. Item 1 is implemented; items 2–5 remain planned work. Writing a
+specification alone does not complete an implementation.
 
 | Order | TODO | Status | Depends on |
 | --- | --- | --- | --- |
-| 1 | [Profiles and execution plans](01-profiles-and-plans.md) | TODO; detailed specification exists | — |
+| 1 | [Profiles and execution plans](01-profiles-and-plans.md) | DONE (`18897c9`) | — |
 | 2 | [Per-review MCP permissions and sessions](02-review-mcp-and-sessions.md) | TODO | 1 |
 | 3 | [Inputs and review scope](03-inputs-and-review-scope.md) | TODO | 1, 2 |
 | 4 | [Budgets and gate reports](04-budgets-and-gate-reports.md) | TODO | 1–3 |

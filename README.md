@@ -9,136 +9,128 @@
 ------ Der Harness ohne 'r' ------
 ```
 
-*Hannes schaut nach dem Rechten.* A small Rust CLI for agent-agnostic project
-verification: deterministic checks first, optional Codex reviews afterwards,
-and an auditable PASS/FAIL/ERROR report.
+*Hannes schaut nach dem Rechten.* A Rust CLI for project verification:
+**checks** run deterministic commands, **reviews** ask an LLM for a structured
+verdict. Both are **rules**. Hannes reports PASS, FAIL or ERROR; it does not repair code.
 
-## Download
+## Install or build
 
-[GitHub Releases](https://github.com/christianpflugradt/hannes/releases) provide
-native archives for **macOS Apple Silicon**, **macOS Intel** and **Linux x64**.
-Choose the matching target, verify its SHA-256 checksum, extract it and install:
+[GitHub Releases](https://github.com/christianpflugradt/hannes/releases) target
+**macOS Apple Silicon**, **macOS Intel** and **Linux x64**. Choose the matching
+archive, verify it against `SHA256SUMS`, extract it and install:
 
 ```sh
 mkdir -p "$HOME/.local/bin"
 install -m 755 hannes-vVERSION-TARGET/hannes "$HOME/.local/bin/hannes"
 ```
 
-Replace `VERSION`/`TARGET` with the downloaded archive's values and put
-`~/.local/bin` on PATH. Git and optional Codex CLI remain external dependencies.
-See [release details](docs/releasing.md) for platform limits and verification.
+Replace `VERSION`/`TARGET` with the archive's values. Add
+`export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` if needed.
+Linux downloads use glibc and are built on Ubuntu 24.04; binaries are not signed
+or notarized. See [release details](docs/releasing.md).
 
-## Build locally
-
-You need **Git**, **stable Rust with Cargo** (edition 2024; Rust 1.85+), and a
-native compiler/linker: Xcode Command Line Tools on macOS, GCC/Clang on Linux,
-or Visual Studio C++ Build Tools on Windows.
+To build locally, install **Git**, **stable Rust/Cargo 1.85+** (edition 2024) and
+a native compiler/linker: Xcode Command Line Tools on macOS, GCC/Clang on Linux,
+or Visual Studio C++ Build Tools on Windows:
 
 ```sh
 cargo build --release --locked
 ./target/release/hannes --help
 ```
 
-The executable is `target/release/hannes` (`hannes.exe` on Windows).
-To install it on your Cargo PATH: `cargo install --path . --locked`.
+The binary is `target/release/hannes` (`hannes.exe` on Windows).
+`cargo install --path . --locked` installs it on your Cargo PATH.
+Git remains a runtime dependency; Codex CLI/login is needed only for LLM reviews.
 
 Optional [mise](https://mise.jdx.dev/) setup installs Rust with rustfmt/Clippy,
 Python 3.13 for developer scripts and Node 24 for release tooling:
 
 ```sh
 mise trust
-mise install
-mise build
-mise deploy
-mise check
+mise install                  # Development tools
+mise build                    # Release binary
+mise deploy                   # Build/install to ~/.local/bin; overwrite existing binary
+mise check                    # Formatting, Clippy, tests, build and smoke test
 ```
 
-`mise install` prepares the tooling; `mise deploy` builds and installs Hannes
-to `~/.local/bin` on macOS/Linux, replacing an existing binary without prompting.
-Add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` if needed.
-Override the prefix with `CARGO_INSTALL_ROOT=/your/prefix mise deploy`
-(the executable goes into its `bin/` directory). Windows uses Cargo's install root.
+Override the install prefix with `CARGO_INSTALL_ROOT=/your/prefix mise deploy`;
+the executable goes into its `bin/` directory. Windows uses Cargo's install root.
+Python and Node are not needed to run Hannes or build it directly with Cargo.
+Other tasks: `format`, `format:check`, `lint`, `test`, `smoke`, `hooks:install`,
+`hooks:test`. `mise format` formats Rust; built-in `mise fmt` formats `mise.toml`.
+`mise run TASK` also works for every project task.
 
-Python is only needed for smoke tests and release scripts, not for the CLI.
-Codex CLI with an existing `codex login` is only needed for enabled LLM reviews.
-Node.js/npm are development-only dependencies for Semantic Release; they are not
-needed for local Rust builds or running the CLI.
-
-From this checkout, `mise release` starts the GitHub Release workflow on remote
-`main` using the authenticated `gh` CLI. It publishes the pushed source, not local
-uncommitted changes; see [release details](docs/releasing.md).
-
-Project tasks: `build`, `deploy`, `release`, `format`, `format:check`, `lint`,
-`test`, `smoke`, `check`, `hooks:install`, `hooks:test`. `mise format` formats Rust;
-the built-in `mise fmt` formats `mise.toml`. `mise install` remains Mise's tool
-installer. `mise run TASK` also works for every project task.
+`mise release` uses the authenticated `gh` CLI to dispatch the release workflow
+for **remote main**, then returns. It does not commit/push local changes or wait
+for publication. Semantic Release handles versions, changelog and native archives;
+see [release instructions](docs/releasing.md).
 
 ## Use
 
-Run from the root of a Git repository:
+Run from the Git working-tree root:
 
 ```sh
-hannes fang an            # Initialize .Hannes/ without overwriting files
-hannes pass auf           # Validate configuration; execute nothing
-hannes mach mal           # Run checks and reviews; write the report
-hannes mach was --geiz-ist-geil # Checks only; no LLM call
-hannes was ist phase      # Show verdicts, short AI summaries and freshness
-hannes was ist phase --details # Inspect saved findings without rerunning reviews
-hannes so hilf mir doch   # Help; --help and --version also work
+hannes fang an                # Create missing .Hannes files; preserve existing ones
+hannes pass auf               # Validate configuration; execute no rules/provider
+hannes mach mal               # Execute selected rules and save a report
+hannes was ist phase          # Show saved results and freshness
+hannes so hilf mir doch        # Help; --help and --version also work
 ```
 
-The generated example passes without Codex. `mach was` is an alias of `mach mal`.
-Checks run sequentially before reviews; progress goes to stderr, the compact
-report to stdout. Failed checks prevent the model call and leave reviews
-`NOT_RUN`. `--geiz-ist-geil` runs checks only, with no provider discovery or model
-call; the report is explicitly checks-only. Full configuration validation still
-applies. `--no-color` or `NO_COLOR` disables colors; redirected output is uncolored.
+`mach was` is an alias of `mach mal`. Initialization creates a passing check and
+a disabled review, so the first run needs no Codex. Selected checks run first in
+ID order; selected reviews follow in one shared model call only if checks pass.
+Failed checks leave reviews NOT_RUN. Progress goes to stderr; compact results and
+short AI summaries go to stdout. Raw output stays in the report/`--details` view.
+With no check or review definitions, Hannes also prints
+`Du hast noch keine Regeln definiert, du Vogel!`.
 
-Install the local commit-message check after cloning with
-`sh scripts/setup-git-hooks.sh`. Commit types follow Angular's allow list;
-see [Contributing](CONTRIBUTING.md#commits).
+| Option | Applies to | Effect |
+| --- | --- | --- |
+| `--profil NAME` | `mach mal` / `mach was` | Override the configured rule-selection profile. |
+| `--plan` | `mach mal` / `mach was` | Preview selection and preparation without executing rules or provider calls. |
+| `--json` | With `--plan` | Machine-readable plan or structured error. |
+| `--geiz-ist-geil` | `mach mal` / `mach was` | Checks only; no provider discovery, MCP connection or review-token usage. |
+| `--details` | `was ist phase` | Show saved findings and captured output without rerunning anything. |
+| `--no-color` | Global | Disable colors; `NO_COLOR` and redirected output also disable them. |
+
+Exit codes: **0** success; **1** verification FAIL or stale saved results;
+**2** configuration/execution/provider errors or UNKNOWN freshness;
+**3** no saved report for status. A plan exits 0 if executable, 2 if blocked/invalid.
+
+Unknown commands show a face and a saying, avoiding the last 20 sayings globally.
+Repeated errors worsen the mood across invocations; recognized commands improve
+it by one step. Five moods range from green to red; maximum anger shouts in capitals.
+The third consecutive maximum-anger reaction actually uninstalls
+Hannes and removes its external mood/history state. Repository files and `.Hannes`
+are preserved. Reinstall with `mise deploy`. See [usage details](docs/usage.md).
 
 ## Configuration: `.Hannes/`
 
-Run from the Git working-tree root. The directory name is exactly `.Hannes`,
-including the capital H. `hannes fang an` creates missing scaffold files and
-preserves existing ones. Versions **1 and 2** are supported; initialization still
-creates version 1. Version 2 adds profiles and tags through explicit opt-in:
+Use exactly the capitalized directory name. Versions **1 and 2** are supported;
+initialization creates version 1. Version 2 enables tags and profiles explicitly.
 
 ```text
 .Hannes/
   config.toml
   provider.toml
-  checks/
-    always-ok.toml
-    deliberately-failing.toml
-  reviews/
-    product-consistency.toml
-    product-consistency.md
-  profiles/                       # Optional; version 2 only
-    local.toml
-  reports/
-    .gitignore
-    last.json                     # Generated; not configuration
-  README.md                       # Editable documentation; not configuration
+  checks/*.toml
+  reviews/*.toml
+  reviews/*.md                 # Referenced review criteria
+  profiles/*.toml              # Optional; version 2 only
+  reports/.gitignore
+  reports/last.json            # Generated, not configuration
+  README.md                    # Editable guidance, not parsed settings
 ```
 
-Add/remove rule TOML files directly in `checks/` or `reviews/`; filenames need not
-match IDs. Only immediate files with the `.toml` extension are loaded as rules.
-Checks are deterministic commands; reviews are LLM evaluations; both are **rules**.
-Enabled checks run in ID order, then enabled reviews in ID order. Disabled rules
-are omitted from execution/results but still fully validated.
+Only immediate `.toml` files in rule/profile directories are loaded. Filenames
+need not match IDs. Unknown fields, duplicate TOML keys/IDs and invalid values are
+errors, including in disabled rules and unused profiles. Text files are UTF-8.
+Paths must exist, be relative to their documented base and resolve inside the
+project; absolute paths and `..` are rejected.
 
-TOML uses strict field names/types: unknown fields, duplicate keys and duplicate
-rule IDs are errors. Text files must be UTF-8. IDs are case-sensitive, unique
-across both rule kinds, and contain 1–80 ASCII letters, digits, `-` or `_`; prefix
-`hannes-` is reserved. Descriptions and other required text must be nonblank and
-contain no NUL. File/directory paths must exist, be relative to their documented
-base, and resolve inside the project; absolute paths and `..` are rejected.
-
-Validate edits with `hannes pass auf`: it reads configuration and referenced
-files but runs no checks, provider CLI or model. It does not verify that a model
-is available or that MCP names exist in Codex; those checks happen on execution.
+`hannes pass auf` validates configuration and referenced files without executing
+checks or Codex. Model availability and MCP discovery are checked during execution.
 
 ### Project: `config.toml`
 
@@ -150,61 +142,134 @@ max_display_files = 5
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `version` | Required | `1` for the original format, `2` to enable profiles/tags. |
-| `default_profile` | Optional; `"all"` | Version 2 only: default profile for verification and planning. |
+| `version` | Required | `1`, or `2` for tags/profiles. No automatic migration. |
 | `project` | Required | Nonblank display name; initialization uses the directory name. |
-| `max_display_files` | Required | Integer `1..5`; maximum changed paths shown in status, not a rule or verification limit. |
+| `max_display_files` | Required | Integer `1..5`; changed paths shown in status, not a verification limit. |
+| `default_profile` | Optional; `"all"` | Version 2 only: default profile for execution and planning. |
 
-### Profiles and tags (version 2)
+### Common rule fields
 
-To opt in, change only `version` to `2` in `config.toml`, keeping the existing
-project/display fields. Add `default_profile = "local"` if desired. Version 1
-rejects `default_profile`, rule `tags` (even `[]`) and profile TOML files rather
-than silently ignoring them. Existing projects are never migrated automatically.
+Checks and reviews share these fields:
 
-Both checks and reviews accept an optional version-2 `tags` field:
+| Field | Required / default | Meaning |
+| --- | --- | --- |
+| `id` | Required | Case-sensitive, unique across both kinds: 1–80 ASCII letters, digits, `-` or `_`; `hannes-` is reserved. |
+| `description` | Required | Nonblank progress description. |
+| `enabled` | Required | Boolean; disabled rules are validated but omitted from execution/results. |
+| `tags` | Optional; `[]` | Version 2 only: up to 32 unique lowercase ASCII tags, each 1–32 characters, starting with a letter/digit and otherwise using letters, digits, `-` or `_`. |
+
+Required nonblank text fields reject NUL. Version 1 rejects `tags`, even `[]`.
+Execution uses selected enabled checks first, then reviews, each kind sorted by ID.
+
+### Checks: `checks/*.toml`
 
 ```toml
-tags = ["local", "critical"]
+id = "unit-tests"
+description = "Run Rust unit and integration tests"
+enabled = true
+command = ["cargo", "test", "--locked"]
+working_directory = "."
+timeout_seconds = 120
 ```
 
-Tags are unique, case-sensitive, lowercase ASCII strings of 1–32 characters,
-starting with a letter/digit and otherwise containing letters, digits, `-` or `_`.
-There are at most 32 tags per rule; omission means `[]`.
+In addition to the common fields:
 
-Create one profile per `.Hannes/profiles/*.toml` file, for example:
+| Field | Required / default | Meaning |
+| --- | --- | --- |
+| `command` | Required | `1..256` argv strings; first is a nonblank executable. Each string is at most 32768 bytes and contains no NUL. |
+| `working_directory` | Optional; `"."` | Existing directory relative to the project root. |
+| `timeout_seconds` | Required | Integer `1..3600` for this check. |
+
+Commands run without a shell or stdin and inherit the environment. Bare executable
+names resolve through PATH; paths such as `./scripts/check.sh` resolve relative to
+`working_directory` and must be runnable files inside the project. Pipes, `&&` and
+variable expansion require an explicit shell, e.g.
+`command = ["sh", "-c", "cargo test && cargo clippy"]`.
+
+Checks are trusted commands, not sandboxed code. Exit 0 means PASS, nonzero/signal
+means FAIL, and timeout/spawn/capture problems mean ERROR. Remaining checks still
+run after a failure. Changes to verified files prevent overall PASS. Captured
+stdout/stderr are limited to 64 KiB each, with truncation/byte totals recorded;
+output is not automatically redacted, so avoid printing secrets.
+
+### Reviews: `reviews/*.toml` and criteria Markdown
+
+```toml
+id = "accessibility"
+description = "Check documented keyboard accessibility requirements"
+enabled = true
+instructions = "accessibility.md"
+files = ["Sources/App/Settings.swift", "Tests/SettingsTests.swift"]
+
+[[context]]
+path = "Product.md"
+headings = ["Keyboard accessibility"]
+```
+
+This example needs the listed files and heading. The generated `product-consistency`
+review starts disabled; customize its criteria before enabling it.
+
+| Field | Required / default | Meaning |
+| --- | --- | --- |
+| `instructions` | Required | Nonblank UTF-8 `.md` file relative to `.Hannes/reviews/`, staying inside that directory. |
+| `files` | Optional; `[]` | Up to 64 unique existing files relative to the project root; exact paths, no globs. Source entry points. |
+| `context` | Optional; `[]` | Up to 32 requirement-document selections using `[[context]]`. |
+| `context.path` | Required per entry | Existing UTF-8 file relative to the project root. |
+| `context.headings` | Optional; `[]` | Up to 32 nonblank exact Markdown heading titles; empty/omitted selects the whole file. |
+
+Write the criterion in `reviews/accessibility.md`, for example:
+
+```markdown
+Check the keyboard requirements in the supplied Product.md section. Inspect the
+listed source/tests and necessary dependencies. FAIL for a concrete violation,
+ERROR for missing essential evidence, PASS only with grounded evidence.
+```
+
+Heading selections match one ATX title (`#`–`######`) without its `#` prefix,
+including subsections until the next heading of equal/higher level. Code-block
+headings are ignored; missing/ambiguous titles are errors. Shared/overlapping
+selections are merged with original line numbers. Across all definitions, including
+disabled ones, limits are 32 distinct context files, 1 MiB per file and 64 KiB of
+selected text. Empty files and excessive context fail; nothing is silently dropped.
+
+Selected reviews share one read-only Codex call. If all declare `files`, initial
+manifest/diff hints focus on their combined entry/context paths; otherwise they
+remain project-wide. Entry points do not restrict further dependency reads.
+Reviews evaluate current working files, not just the diff; untracked contents
+need direct inspection. Criteria cannot change provider permissions/output format.
+
+Each requested review must return exactly one PASS/FAIL/ERROR, a nonblank summary
+of at most 120 characters on one line, and up to 20 findings of at most 2000 bytes
+each. PASS/FAIL require an existing verified file and positive line reference.
+Malformed/missing/duplicate results make the batch ERROR. LLM judgments are fallible.
+
+### Profiles: `profiles/*.toml` (version 2)
+
+Set `version = 2` in `config.toml`, preserving its other fields. Optionally set
+`default_profile = "local"`, then create `profiles/local.toml`:
 
 ```toml
 id = "local"
 rules = ["always-ok"]
-include_tags = ["local"]
+include_tags = []
 gate = false
 input = "worktree"
 ```
 
-This example requires at least one rule tagged `local`. Selection is the **union**
-of explicit IDs and rules matching **any** listed tag, without duplicates. Checks
-run first, then reviews; each kind is sorted by ID. Disabled matches are explained
-in the plan and omitted from execution/results.
-
-| Profile field | Required / default | Meaning |
+| Field | Required / default | Meaning |
 | --- | --- | --- |
-| `id` | Required | Unique profile ID using the tag syntax; `all` is reserved. Filename need not match. |
-| `rules` | Optional; `[]` | Unique existing rule IDs, across checks and reviews. |
+| `id` | Required | Unique profile ID using the tag syntax; `all` is reserved. |
+| `rules` | Optional; `[]` | Unique existing rule IDs. |
 | `include_tags` | Optional; `[]` | Unique tags occurring in at least one rule definition. |
-| `gate` | Optional; `false` | Every selected rule is required; empty selections and disabled requirements are configuration errors. |
-| `input` | Optional; `"worktree"` | Only current working files are supported. `index` and `commit` are rejected. |
+| `gate` | Optional; `false` | Every selected rule is required; empty gates and disabled requirements are errors. |
+| `input` | Optional; `"worktree"` | Current working files only; `index` and `commit` are rejected. |
 
-At most 256 profiles are allowed, with the same 64 KiB metadata limit as rules.
-All profiles are validated, including unused ones. Unknown IDs/tags, duplicate
-selectors/IDs, unknown fields and invalid input kinds are errors. There is no
-inheritance or exclusion language. An ordinary empty profile explicitly verifies
-no active rules; it is not a gate and proves no rule passed.
-
-`--profil NAME` overrides `default_profile`. Without either, reserved `all` selects
-all enabled rules, preserving version-1 behavior. Profile preview also explains
-disabled definitions. Profiles do not install hooks or grant provider permissions.
-A worktree gate is not proof about staged changes or a pushed commit.
+Selection is the union of explicit IDs and rules matching **any** listed tag,
+without duplicates. To use tags, add e.g. `tags = ["local"]` to a rule and
+`include_tags = ["local"]` to the profile. Unknown selectors/duplicates fail.
+`--profil` overrides `default_profile`; absent both, `all` selects all enabled rules.
+Version 1 rejects profile TOML files and `default_profile`. No inheritance,
+exclusions, implicit hooks or provider permissions are attached to profiles.
 
 ```sh
 hannes mach was --profil local --plan
@@ -213,30 +278,22 @@ hannes mach mal --profil local
 hannes mach was --profil local --geiz-ist-geil
 ```
 
-`--plan` reads/validates local configuration, prepares bounded context and records
-the input fingerprint. It runs no checks, Codex CLI, MCP servers or network calls;
-the last report is preserved. Normal CLI mood handling remains global. Plans show
-selection reasons, scheduled/omitted rules, gate requirements, declared model/MCP
-settings, context sizes/limits and orientation-diff truncation. Provider defaults
-remain unresolved and availability is not checked. Planned model calls are zero
-or one under current batching; no token/cost estimate is invented.
+Plans show order, selection reasons, omissions, gate requirements, input identity,
+model/MCP settings and bounded context/diff sizes. No checks, provider CLI, MCP
+servers or network calls run; the existing report is preserved. Availability and
+inherited Codex defaults remain unchecked/unresolved. Normal mood handling applies.
+JSON uses plan schema 1 with `planned`/`blocked` status and structured diagnostics.
+Each execution rebuilds its plan; a plan ID is not a cached result or permission
+to run a later changed tree. See [plan details](docs/profiles-and-plans.md).
 
-`--json` requires `--plan`. JSON uses `plan_schema_version = 1`, status `planned`
-or `blocked`, stable ordering and explicit blocking reasons. Invalid configuration
-produces a structured error. Preview exits 0 for an executable plan, 2 otherwise.
-Plan IDs hash canonical rule/profile/provider settings, criteria, context and code
-identity. Metadata formatting, selector order and metadata filenames are normalized;
-the separately recorded raw snapshot still detects exact file changes. Every run
-rebuilds its plan; a preview is not a saved authorization or a result cache.
-
-`--geiz-ist-geil` omits selected reviews in ordinary profiles, marks the report
-checks-only and never invokes the provider. A gate requiring reviews rejects it
-before any check starts. Gates containing only checks may use it. All executed
-rules remain blocking even when `gate = false`.
+Checks-only runs omit reviews and label the limited scope. Gates requiring reviews
+reject `--geiz-ist-geil` before checks; checks-only gates may use it. Executed
+failures always block, including outside gate mode. Empty ordinary profiles
+explicitly prove no rule passed. A worktree gate does not verify staged/pushed code.
 
 ### Provider: `provider.toml`
 
-Only **Codex CLI** is supported. These are the generated settings:
+Only **Codex CLI** is supported. Generated settings:
 
 ```toml
 provider = "codex-cli"
@@ -252,26 +309,20 @@ tool_output_token_limit = 2000
 | Field | Required / default | Meaning |
 | --- | --- | --- |
 | `provider` | Required | Exactly `"codex-cli"`. |
-| `timeout_seconds` | Required | Integer `1..3600`; shared deadline for MCP configuration discovery and the model invocation. Discovery itself is limited to at most 10 seconds. |
-| `model` | Optional; Codex default if omitted | Nonblank model identifier passed as `--model`. New scaffolds explicitly select GPT-6.1 Sol (`gpt-6.1-sol`); other identifiers must be supported by your CLI/account. |
-| `mcp_servers` | Optional; `[]` | Allow list of MCP server names already defined in Codex. Empty disables all discovered servers. |
-| `review_profile` | Optional table | Provider execution settings below; not a rule-selection profile. |
-| `review_profile.reasoning_effort` | Optional; Codex default if omitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra`. Actual availability depends on model/CLI. |
-| `review_profile.tool_output_token_limit` | Optional; `2000` | Integer `256..16384`; retained tokens per tool output, not a total token/spending cap. |
+| `timeout_seconds` | Required | Integer `1..3600` for discovery plus model invocation; discovery itself has a maximum of 10 seconds. |
+| `model` | Optional; Codex default | Nonblank identifier passed as `--model`. New scaffolds select GPT-6.1 Sol (`gpt-6.1-sol`); alternatives must be supported by your CLI/account. |
+| `mcp_servers` | Optional; `[]` | Allow list of server names already configured in Codex; empty/omitted disables all. |
+| `review_profile` | Optional table | Provider settings below; not a selection profile. |
+| `review_profile.reasoning_effort` | Optional; Codex default | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra`; availability depends on model/CLI. |
+| `review_profile.tool_output_token_limit` | Optional; `2000` | Integer `256..16384`, retained tokens per tool output, not a total token/spending cap. |
 
-Unsupported models/settings fail rather than silently switching models. Model,
-effort, timeout and MCP settings apply to the single shared call for **all enabled
-reviews**; per-review overrides are not supported.
+These settings apply to the shared call for selected reviews. Unsupported models
+or settings fail; Hannes does not silently substitute another model.
 
-#### Finding Codex and authentication
-
-Hannes starts the executable named `codex` using the **PATH inherited by Hannes**,
-with the project root as working directory. It does not open an interactive shell
-or load shell startup files; aliases/functions do not supply an executable. There
-is no configurable Codex binary path in `.Hannes`. Put the installed CLI's binary
-directory on PATH before starting Hannes, including in an IDE, hook or CI runner.
-
-From the same environment, check:
+**Finding Codex.** Hannes starts `codex` through its inherited PATH from the project
+root, without an interactive shell, startup files or aliases/functions. There is
+no configurable binary path. Ensure the CLI directory is on PATH in the same
+terminal, IDE or hook environment, then check:
 
 ```sh
 command -v codex                 # POSIX shells; Windows: where.exe codex
@@ -279,154 +330,43 @@ codex --version
 codex login
 ```
 
-Use an existing local Codex login; Hannes neither copies credentials nor performs
-login itself. Child processes remove `OPENAI_API_KEY` and `CODEX_API_KEY` to avoid
-accidentally using inherited API-key billing. Login-backed reviews can still
-consume account allowance. Your CLI must support the invocation used by Hannes:
-noninteractive `exec`, structured JSON output/schema, ephemeral sessions,
-`read-only` sandbox, `never` approvals, and MCP configuration listing/overrides.
-Missing executables, incompatible CLI/authentication or exhausted allowance yield
-ERROR. Checks-only execution and disabled example reviews need no Codex process.
+Hannes uses the existing local login with a compatible noninteractive CLI,
+structured output, ephemeral sessions, read-only sandbox and no approvals.
+It removes `OPENAI_API_KEY`/`CODEX_API_KEY` from Codex child processes; login-backed
+reviews still consume account allowance. Missing CLI/authentication, unsupported
+options or exhausted allowance yield ERROR. Credentials are never copied to CI.
 
-#### MCP access
-
-To permit servers already configured in Codex, replace the empty list, for example:
+**MCP access.** Replace the top-level empty list to allow existing Codex servers:
 
 ```toml
 mcp_servers = ["project-memory", "browser"]
 ```
 
-This is a replacement field in `provider.toml`, not an additional table. Hannes
-accepts at most 32 unique allowed names, each 1–256 ASCII letters, digits, `_` or
-`-`. There is no wildcard. Server commands, URLs, transports and credentials
-cannot be defined in `.Hannes`; configure them in Codex first.
+At most 32 unique names, each 1–256 ASCII letters, digits, `_` or `-`; no wildcard.
+Server commands, URLs, transports and credentials are configured in Codex, not
+`.Hannes`. All selected reviews get the same allow list; no per-review overrides.
 
-Before the model call, Hannes reads `codex mcp list --json` without starting a
-model or MCP server. It explicitly enables only listed servers and disables all
-other discovered servers for the child process. Unknown allowed names, failed
-discovery, more than 256 discovered servers or unsafe names in the discovered
-list block the review. An omitted/empty allow list does not inherit all personal
-MCPs. Every enabled review gets the same allowed set; per-review permissions and
-separate MCP sessions are not implemented.
+Before the model call, `codex mcp list --json` reads configuration without starting
+a model/server. Hannes disables every unlisted server in the child process.
+Unknown allowed names, failed discovery, more than 256 discovered servers or unsafe
+names anywhere in that list block the review. Empty does not inherit personal MCPs.
+Automatic skill instructions, bundled skills, skill search/installation,
+apps/plugins, subagents and web search are disabled. Codex login, project AGENTS.md
+and ordinary safety settings remain; user Codex configuration is not rewritten.
+Enabled MCPs remain trusted capabilities rather than an additional permission sandbox.
 
-Review child processes disable automatic skill instructions, bundled skills,
-skill search/automatic MCP installation, apps/plugins, subagents and web search.
-Existing Codex authentication, project AGENTS.md and ordinary safety settings
-remain in effect. Hannes does not rewrite the user's Codex configuration. Enabled
-MCP servers are trusted capabilities, not an additional permission sandbox.
+### Reports and other editable files
 
-### Checks: `checks/*.toml`
+`reports/last.json` is generated atomically with verdicts, short summaries, full
+findings, captured check output, available usage and input identity. Schema 2 saves
+the selected profile/plan and omissions. Status displays that historical scope,
+not today's default. Selection completeness does not mean execution completeness:
+failed checks leave reviews NOT_RUN. Old schema-1 reports remain readable as
+unprofiled legacy evidence and cannot certify a profile gate.
 
-```toml
-id = "unit-tests"
-description = "Run Rust unit and integration tests"
-enabled = true
-command = ["cargo", "test", "--locked"]
-working_directory = "."
-timeout_seconds = 120
-```
-
-| Field | Required / default | Meaning |
-| --- | --- | --- |
-| `id` | Required | Unique rule ID under the rules above. |
-| `description` | Required | Short, nonblank description shown in progress output. |
-| `enabled` | Required | Boolean; `false` disables execution, not validation. |
-| `tags` | Optional; `[]` | Version 2 only; profile selection tags as described above. |
-| `command` | Required | Array of `1..256` argv strings; first element is the nonblank executable. Each string is at most 32768 bytes and contains no NUL. |
-| `working_directory` | Optional; `"."` | Existing directory relative to the project root. |
-| `timeout_seconds` | Required | Integer `1..3600` for this check. |
-
-Commands run directly without a shell or stdin. Bare executable names resolve
-through inherited PATH. Executable paths such as `./scripts/check.sh` resolve
-relative to `working_directory`, must be files inside the project, and must be
-runnable on the host. Shell expansion, pipes, `&&` and `$VARIABLE` require an
-explicit shell, e.g. `command = ["sh", "-c", "cargo test && cargo clippy"]`.
-Checks inherit the environment; they are trusted commands, not sandboxed code.
-If a check changes verified files, final stability checks prevent overall PASS.
-
-Exit `0` means PASS; nonzero exit/signal means FAIL; timeout, spawn/capture errors
-mean ERROR. Remaining checks still run after a failure. Hannes captures stdout
-and stderr, keeping the first 64 KiB of each and recording truncation/byte totals;
-raw output is available in the saved report and `--details`, not default output.
-It is not automatically redacted, so avoid printing secrets.
-
-### Reviews: `reviews/*.toml` and instruction Markdown
-
-```toml
-id = "accessibility"
-description = "Check documented keyboard accessibility requirements"
-enabled = true
-instructions = "accessibility.md"
-files = ["Sources/App/Settings.swift", "Tests/SettingsTests.swift"]
-
-[[context]]
-path = "Product.md"
-headings = ["Keyboard accessibility"]
-```
-
-This example assumes the listed files and heading exist. The generated
-`product-consistency` review starts disabled: customize its `.md` before enabling.
-
-| Field | Required / default | Meaning |
-| --- | --- | --- |
-| `id`, `description`, `enabled` | Required | Same common fields as checks. |
-| `tags` | Optional; `[]` | Version 2 only; same tag rules as checks. |
-| `instructions` | Required | Path relative to `.Hannes/reviews/` to a nonblank UTF-8 `.md` file that stays inside that directory. |
-| `files` | Optional; `[]` | Up to 64 unique existing files relative to the project root; exact paths, not globs. Starting points for source inspection. |
-| `context` | Optional; `[]` | Up to 32 requirement-document selections, using `[[context]]` tables. |
-| `context.path` | Required per entry | Existing UTF-8 file relative to the project root. |
-| `context.headings` | Optional; `[]` | Up to 32 nonblank exact Markdown heading titles. Omitted/empty selects the whole file. |
-
-Write review criteria in the referenced Markdown, for example:
-
-```markdown
-Check the keyboard accessibility requirements in the supplied Product.md section.
-Inspect the listed source/tests and necessary dependencies. Report FAIL for a
-concrete violation, ERROR if essential evidence is unavailable, and PASS only
-with grounded evidence. Do not invent additional requirements.
-```
-
-Headings use ATX Markdown (`#` through `######`). Supply the title without `#`;
-matching is exact and must identify one heading. Its section includes subsections
-until the next heading of equal/higher level. Headings inside fenced/indented
-code are ignored. Missing/ambiguous titles are errors, even in disabled reviews.
-Overlapping/shared selections are merged and sent once with original line numbers.
-
-The whole configuration permits 32 distinct context files, each at most 1 MiB,
-and at most 64 KiB of selected text after merging, including disabled definitions
-during validation. Empty context files and oversized selections are errors;
-required context is never silently dropped.
-
-All active reviews share **one** read-only model invocation and deduplicated
-context. If every active review has entry `files`, initial manifest hints and the
-bounded HEAD-relative orientation diff focus on the union of entry/context paths.
-Otherwise initial orientation remains project-wide. The model may follow
-necessary dependencies: entry files/sections do not restrict reads or define an
-exhaustive review boundary. Untracked contents require direct inspection.
-
-Reviews evaluate **current working files**, not just the diff. Instructions are
-criteria, not a way to change provider permissions or output format. Hannes
-requires exactly one structured PASS/FAIL/ERROR per requested ID, a nonblank
-single-line summary of at most 120 characters, and at most 20 findings (each
-message at most 2000 bytes). PASS/FAIL require at least one existing verified
-file/positive line reference. Invalid/missing/duplicate results make the whole
-review batch ERROR. LLM judgments remain fallible; evidence references are not
-proof that the judgment is correct.
-
-### Reports, documentation and fixed limits
-
-`reports/last.json` is generated atomically, contains verdicts, detailed findings,
-captured check output, snapshot identity and available usage, and is not user
-configuration. New reports use schema 2 and retain the effective profile, plan ID,
-ordered scheduled rules, omissions, required gate IDs and input identity. Selection
-completeness is distinct from execution: failed checks leave planned reviews
-NOT_RUN. Status renders the saved profile, not the current default. Schema-1
-reports remain readable as legacy/unprofiled and cannot certify profile gates.
-`was ist phase` reads the report without rerunning anything; `--details`
-adds findings/output. Freshness compares current working files and HEAD against
-the saved snapshot: CURRENT, STALE or UNKNOWN. Line deltas since verification are
-unavailable with the hash-only baseline. Configuration errors preserve the prior
-report; deleting it resets saved status, not the configuration.
+Status compares working files and HEAD with the saved snapshot: CURRENT, STALE or
+UNKNOWN. Line deltas are unavailable with the hash-only baseline. Invalid
+configuration preserves the previous report; deleting it clears saved status.
 
 Keep reports local with the editable `reports/.gitignore`:
 
@@ -435,38 +375,37 @@ Keep reports local with the editable `reports/.gitignore`:
 !.gitignore
 ```
 
-Commit project configuration, criteria and requirement documents; do not commit
-reports or credentials. `.Hannes/README.md` is editable guidance and has no parsed
-settings. Other documentation/assets inside `.Hannes` have no implicit execution
-meaning; Markdown instructions run only when referenced by review metadata.
-Patience/quote history is global state outside repositories, never a setting in
-`.Hannes`; configuration does not customize faces, sayings or uninstall behavior.
+Commit configuration/criteria, not reports or credentials. `.Hannes/README.md` is
+editable guidance with no parsed settings. Other assets have no implicit execution
+meaning; criteria Markdown must be referenced by a review. Mood/quote state lives
+outside repositories; faces, sayings and uninstall behavior have no `.Hannes` setting.
 
-These are built-in limits, not additional configurable fields:
+### Fixed limits
+
+These are built in, not configurable fields:
 
 | Area | Limit / behavior |
 | --- | --- |
-| Rule/config metadata | 64 KiB per TOML file; 256 rule TOML files per kind. |
-| Review instructions | 32 KiB per Markdown file; 256 KiB combined across all reviews, including disabled ones. |
-| Initial orientation | At most 200 manifest paths and 32 KiB of diff; truncation is indicated, necessary evidence still requires inspection. |
-| Snapshot | 8 MiB per file, 128 MiB total, 100,000 paths; bounded Git enumeration can impose a lower practical limit. |
-| Snapshot coverage | Tracked and nonignored untracked working files plus `.Hannes` even when ignored; `.git` and `.Hannes/reports` excluded. Unsupported symlinks/submodules/paths or exceeded limits block PASS. |
-| Stability | Files must match before/after verification and before a review call; Hannes does not verify staged state or pushed commits separately. |
-| Token reporting | Available input/cached-input/output counters once per model call; total = input + output. Missing telemetry stays unavailable. No money/quota estimate or enforced total token budget. |
+| Metadata | 64 KiB per TOML file; up to 256 checks, 256 reviews and 256 profiles. |
+| Review instructions | 32 KiB per file; 256 KiB combined, including disabled reviews. |
+| Initial orientation | Up to 200 manifest paths and 32 KiB of diff, with truncation indicated. Required evidence still needs inspection. |
+| Snapshot | 8 MiB/file, 128 MiB total, 100,000 paths; Git file enumeration is capped at 64 KiB; `.Hannes` nesting at 16 levels. |
+| Coverage | Tracked and nonignored untracked files, plus `.Hannes` even if ignored; `.git` and `.Hannes/reports` excluded. Unsupported symlinks/submodules/paths or exceeded limits block PASS. |
+| Stability | Working files/HEAD must match before/after execution and before a model call. This does not separately verify staging or pushed commits. |
+| Usage | Available input/cached-input/output counters once per call; total = input + output. Optional reasoning/cache-write counters are subsets. Missing telemetry stays unavailable; no money/quota estimate or enforced total token budget. |
 
-Not available yet: per-review model/MCP settings, true change-only review scope,
-index/commit inputs, configurable
-run-wide budgets or result caching. No hooks are installed by initialization.
-See the [ordered TODOs](docs/todo/README.md) for planned work.
+Not implemented: per-review model/MCP settings, true change-only reviews,
+index/commit inputs, configurable run-wide budgets and result caching. See the
+[remaining TODOs](docs/todo/README.md).
 
 ## More
 
 [Usage and Git hook](docs/usage.md) · [Configuration](docs/configuration.md) ·
-[Planned work](docs/todo/README.md) ·
 [Design and limits](docs/design.md) · [Passing By example](examples/passing-by/README.md) ·
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Releasing](docs/releasing.md)
 
-Released under the [Unlicense](LICENSE).
+Install the local Angular commit-message check with `mise hooks:install`;
+see [Contributing](CONTRIBUTING.md#commits). Released under the [Unlicense](LICENSE).
 
 ## Frequently Asked Questions
 

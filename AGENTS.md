@@ -36,7 +36,10 @@ lean and Cargo.lock current. See docs/design.md for module boundaries and limits
 For Rust changes, run `mise run check`, or the equivalent commands in
 CONTRIBUTING.md. Tests must not call Codex, the network or a paid API; Cargo may
 fetch build dependencies. For documentation/config-only changes, validate affected
-formats, links and commands. Keep README concise; details belong in docs/.
+formats, links and commands. Keep README approachable, concise and complete for
+supported CLI commands and every user-editable `.Hannes` field, default and limit.
+Update it alongside behavior/configuration changes, clearly separating current
+features from planned work. Implementation details belong in docs/.
 Keep LICENSE and Cargo.toml license metadata aligned. Do not add machine-specific
 paths, credentials or per-developer reports to versioned files.
 

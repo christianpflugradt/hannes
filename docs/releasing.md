@@ -87,10 +87,9 @@ Native downloads still need Git and, for enabled reviews, Codex CLI/login.
   blocks high/critical release-tooling advisories. Moderate npm advisories remain
   visible but do not block. Advisory feeds require network access; unavailable
   audits fail the job rather than silently pass.
-- Monthly Dependabot updates cover Cargo, npm and GitHub Actions. Action references
-  use full commit SHAs; runtime/tool versions and dependency updates are reviewed.
-  Dependency-bot commit prefixes use `build`, including the repository's Renovate
-  configuration, to satisfy the same commit policy.
+- Dependency updates use Renovate, with `build` commit prefixes to satisfy the
+  commit policy. Action references use full commit SHAs; runtime/tool versions
+  and dependency updates are reviewed.
 
 ## Permissions and local checks
 

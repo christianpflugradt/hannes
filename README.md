@@ -48,21 +48,30 @@ Python 3.13 for developer scripts and Node 24 for release tooling:
 ```sh
 mise trust
 mise install
-mise run build
-mise run install
-mise run check
+mise build
+mise deploy
+mise check
 ```
 
-`mise install` prepares the tooling; `mise run install` builds and installs Hannes
+`mise install` prepares the tooling; `mise deploy` builds and installs Hannes
 to `~/.local/bin` on macOS/Linux, replacing an existing binary without prompting.
 Add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` if needed.
-Override the prefix with `CARGO_INSTALL_ROOT=/your/prefix mise run install`
+Override the prefix with `CARGO_INSTALL_ROOT=/your/prefix mise deploy`
 (the executable goes into its `bin/` directory). Windows uses Cargo's install root.
 
 Python is only needed for smoke tests and release scripts, not for the CLI.
 Codex CLI with an existing `codex login` is only needed for enabled LLM reviews.
 Node.js/npm are development-only dependencies for Semantic Release; they are not
 needed for local Rust builds or running the CLI.
+
+From this checkout, `mise release` starts the GitHub Release workflow on remote
+`main` using the authenticated `gh` CLI. It publishes the pushed source, not local
+uncommitted changes; see [release details](docs/releasing.md).
+
+Project tasks: `build`, `deploy`, `release`, `format`, `format:check`, `lint`,
+`test`, `smoke`, `check`, `hooks:install`, `hooks:test`. `mise format` formats Rust;
+the built-in `mise fmt` formats `mise.toml`. `mise install` remains Mise's tool
+installer. `mise run TASK` also works for every project task.
 
 ## Use
 

@@ -7,10 +7,14 @@ node = "24"
 description = "Build the native release executable"
 run = "cargo build --release --locked"
 
-[tasks.install]
+[tasks.deploy]
 description = "Build and install Hannes to ~/.local/bin, replacing an existing binary"
 run = 'cargo install --path . --locked --force --root "${CARGO_INSTALL_ROOT:-$HOME/.local}"'
 run_windows = "cargo install --path . --locked --force"
+
+[tasks.release]
+description = "Start the GitHub Release workflow for remote main"
+run = "gh workflow run release.yml --ref main"
 
 [tasks."hooks:install"]
 description = "Install the local Angular commit-message hook"
@@ -21,11 +25,11 @@ description = "Test accepted/rejected commit messages in an isolated Git reposit
 run = "python3 scripts/test-commit-hook.py"
 run_windows = "python scripts/test-commit-hook.py"
 
-[tasks.fmt]
+[tasks.format]
 description = "Format Rust source"
 run = "cargo fmt --all"
 
-[tasks."fmt:check"]
+[tasks."format:check"]
 description = "Check Rust formatting"
 run = "cargo fmt --all -- --check"
 
@@ -47,7 +51,7 @@ run_windows = "python scripts/smoke.py target/release/hannes.exe"
 description = "Run formatting, Clippy, tests, release build and smoke test"
 run = [
   { task = "hooks:test" },
-  { task = "fmt:check" },
+  { task = "format:check" },
   { task = "lint" },
   { task = "test" },
   { task = "smoke" },

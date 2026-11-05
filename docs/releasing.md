@@ -5,6 +5,19 @@ following the same manual trigger as Passing By. No hand-written version tag is
 needed. CI runs automatically on pushes to main and pull requests; release uses
 the same reusable quality workflow before publishing.
 
+From the source checkout, the equivalent command is:
+
+```sh
+mise release
+```
+
+This dispatches `gh workflow run release.yml --ref main`, assuming `gh` is already
+authenticated with the required permissions. It starts the workflow for **remote
+main** and returns after dispatch; it neither commits/pushes local changes nor
+waits for publication. Follow progress in GitHub Actions or with `gh run list
+--workflow release.yml`. `mise run release` is equivalent. `mise deploy` instead
+builds and installs the CLI locally; it does not publish a GitHub release.
+
 ## Version policy
 
 Semantic Release determines the next version from commits since the last `v*`

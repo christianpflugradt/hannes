@@ -196,7 +196,7 @@ preserved and directories are never deleted recursively. Repository paths and
 `.Hannes` paths are rejected as state locations, including symlinked overrides.
 If cleanup fails, the executable is kept and an error is reported.
 
-From the Hannes source checkout, reinstall with `mise run install`. Its forced
+From the Hannes source checkout, reinstall with `mise deploy`. Its forced
 Cargo installation also works when the deleted executable still has an installation
 receipt. The first invalid command after reinstall shows the green friendly face.
 `mise install` alone installs the development toolchain, not the Hannes executable.

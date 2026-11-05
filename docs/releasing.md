@@ -5,6 +5,12 @@ following the same manual trigger as Passing By. No hand-written version tag is
 needed. CI runs automatically on pushes to main and pull requests; release uses
 the same reusable quality workflow before publishing.
 
+CI runs have no project-defined concurrency limit or automatic cancellation of
+older runs. Releases execute one at a time to avoid competing version/tag writes.
+Newer dispatches do not cancel a running release, but GitHub's default concurrency
+queue allows only one pending release and replaces it if another is dispatched.
+GitHub account limits and runner availability still apply.
+
 From the source checkout, the equivalent command is:
 
 ```sh

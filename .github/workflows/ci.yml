@@ -5,10 +5,6 @@ on:
   pull_request:
 permissions:
   contents: read
-concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   quality:
     uses: ./.github/workflows/quality.yml

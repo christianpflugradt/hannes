@@ -1,5 +1,8 @@
 # Hannes configuration, version 1
 
+For the proposed, not yet implemented version-2 selection contract, see
+[rule profiles and execution plans](profiles-and-plans.md).
+
 Run Hannes from the Git working-tree root. `.Hannes` uses a capital H.
 `config.toml` requires `version = 1`, a nonempty `project` and
 `max_display_files = 1..5`. `provider.toml` requires `provider = "codex-cli"`,

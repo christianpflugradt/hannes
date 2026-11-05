@@ -2,6 +2,10 @@
 
 Status: implementation-ready specification, v0.1. Language: English for source, configuration, documentation and directories. German conversational command names and restrained German CLI copy are intentional.
 
+Planned extension: [rule profiles and execution plans](docs/profiles-and-plans.md)
+specifies a proposed version-2 contract. It is not implemented and does not change
+the version-1 behavior described here.
+
 ## 1. Vision and motivation
 
 Hannes is a small, self-contained, agent-agnostic **meta-harness** for governance of agentic software development. It does not implement code, manage an agent's task loop, prescribe a development methodology, or run production infrastructure. It verifies that an evolving codebase satisfies project-specific expectations at a chosen moment. A hobby developer can install it in a repository, define cheap deterministic **checks** and fallible LLM-based **reviews**, and obtain an auditable, human-readable PASS/FAIL report. Future ambitions include enterprise governance, other AI providers, CI-enforced policy, policy packs, and broader software lifecycle controls; do not implement them in this prototype.

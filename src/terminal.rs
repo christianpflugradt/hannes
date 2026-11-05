@@ -236,6 +236,119 @@ pub fn render_progress(event: &crate::Progress<'_>, color: bool) -> String {
         ),
     }
 }
+pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
+    let mut text = format!(
+        "{} · {}\nProfil: {} ({}) · {} · Input: {}\nPlan-ID: {}\nHEAD: {}\nSnapshot: {} · {}\n",
+        paint("Hannes Ausführungsplan", Tone::Heading, color),
+        paint(
+            &plan.status.to_uppercase(),
+            if plan.executable() {
+                Tone::Accent
+            } else {
+                Tone::Warning
+            },
+            color
+        ),
+        clean(&plan.profile),
+        clean(&plan.profile_source),
+        if plan.gate { "Gate" } else { "Regelauswahl" },
+        clean(&plan.input.kind),
+        plan.plan_id,
+        plan.input.head.as_deref().unwrap_or("unborn"),
+        plan.input.fingerprint,
+        if plan.input.complete {
+            "vollständig"
+        } else {
+            "UNKNOWN"
+        }
+    );
+    if plan.checks_only {
+        text.push_str("Modus: Nur Checks · kein Provider-Aufruf\n");
+    }
+    text.push_str(&format!(
+        "Auswahl: {}\n",
+        if plan.selection_complete {
+            "vollständig"
+        } else {
+            "Reviews ausgelassen"
+        }
+    ));
+    for (index, rule) in plan.scheduled.iter().enumerate() {
+        text.push_str(&format!(
+            "[{}] {} {} · {}\n    Tags: {} · Auswahl: {}\n",
+            index + 1,
+            rule.kind,
+            clean(&rule.id),
+            clean(&rule.description),
+            clean(&rule.tags.join(", ")),
+            clean(&rule.selected_by.join(", "))
+        ));
+    }
+    if plan.scheduled.is_empty() {
+        text.push_str("Keine aktiven Regeln ausgewählt; kein Regel-PASS belegt.\n");
+    }
+    for omitted in &plan.omitted {
+        text.push_str(&format!(
+            "Ausgelassen: {} {} · {}\n",
+            omitted.rule.kind,
+            clean(&omitted.rule.id),
+            omitted.reason
+        ));
+    }
+    if plan.gate {
+        text.push_str(&format!(
+            "Pflichtregeln: {}\n",
+            clean(&plan.required_ids.join(", "))
+        ));
+    }
+    text.push_str(&format!("Provider: {} · Modell: {} · Reasoning: {} · Timeout: {} s\nMCP: {} · Verfügbarkeit nicht geprüft\nTool-Ausgabe: {} Tokens pro Ausgabe · Geplante Modellaufrufe: {}\nKontext: {} / {} Bytes · Diff: {} Bytes{}\n",
+        clean(&plan.provider.provider), clean(plan.provider.model.as_deref().unwrap_or("Codex-Standard (nicht aufgelöst)")),
+        clean(plan.provider.review_profile.reasoning_effort.as_deref().unwrap_or("Codex-Standard (nicht aufgelöst)")), plan.provider.timeout_seconds,
+        if plan.provider.mcp_servers.is_empty() { "keine".into() } else { clean(&plan.provider.mcp_servers.join(", ")) },
+        plan.provider.review_profile.tool_output_token_limit, plan.planned_model_calls,
+        plan.context.selected_bytes, plan.context.byte_limit, plan.context.orientation_diff_bytes,
+        if plan.context.orientation_diff_truncated { " (gekürzt; weitere Evidenz muss gelesen werden)" } else { "" }));
+    for path in &plan.context.entry_files {
+        text.push_str(&format!("Einstiegsdatei: {}\n", clean(path)));
+    }
+    text.push_str(&format!(
+        "Review-Kriterien: {} / {} Bytes · Orientierung: höchstens {} Manifest-Pfade\n",
+        plan.context.instruction_bytes,
+        plan.context.instruction_byte_limit,
+        plan.context.manifest_hint_limit
+    ));
+    for selection in &plan.context.selections {
+        text.push_str(&format!(
+            "Anforderungen: {} · {}\n",
+            clean(&selection.path),
+            if selection.headings.is_empty() {
+                "gesamte Datei".into()
+            } else {
+                clean(&selection.headings.join(", "))
+            }
+        ));
+    }
+    for section in &plan.context.sections {
+        text.push_str(&format!(
+            "Kontextabschnitt: {}:{}–{} · {} Bytes\n",
+            clean(&section.path),
+            section.start_line,
+            section.end_line,
+            section.bytes
+        ));
+    }
+    for reason in plan.blocking_reasons.iter().chain(&plan.input.limitations) {
+        text.push_str(&format!(
+            "Blockiert: {}\n",
+            paint(&clean(reason), Tone::Warning, color)
+        ));
+    }
+    text.push_str(
+        "Vorschau: keine Regeln ausgeführt, keine Token verbraucht, kein Report überschrieben.\n",
+    );
+    text
+}
+
 pub fn render(report: &Report, color: bool) -> String {
     let mut text = format!(
         "{} · {} · {}\n",
@@ -243,6 +356,24 @@ pub fn render(report: &Report, color: bool) -> String {
         clean(&report.project),
         paint(&clean(&report.timestamp), Tone::Muted, color)
     );
+    if let Some(plan) = &report.plan {
+        text.push_str(&format!(
+            "Profil: {} · Input: {} · {}{}\n",
+            clean(&plan.profile),
+            clean(&plan.input.kind),
+            if plan.gate { "Gate" } else { "Regelauswahl" },
+            if plan.selection_complete {
+                ""
+            } else {
+                " · unvollständig: nur Checks"
+            }
+        ));
+        if plan.scheduled.is_empty() {
+            text.push_str("Keine aktiven Regeln ausgewählt; kein Regel-PASS belegt.\n");
+        }
+    } else {
+        text.push_str("Profil: Legacy-Report ohne Profilzuordnung · kein Profil-Gate-Nachweis\n");
+    }
     if report.checks_only {
         text.push_str(&paint(
             "Modus: Nur Checks · Reviews ausgelassen · kein LLM-Aufruf\n",
@@ -295,6 +426,30 @@ pub fn render(report: &Report, color: bool) -> String {
 /// Render the saved report only; this never executes commands or invokes a provider.
 pub fn render_details(report: &Report, color: bool) -> String {
     let mut text = render(report, color);
+    if let Some(plan) = &report.plan {
+        text.push_str(&format!(
+            "Plan-ID: {} · Auswahl: {}\n",
+            clean(&plan.plan_id),
+            if plan.selection_complete {
+                "vollständig"
+            } else {
+                "eingeschränkt"
+            }
+        ));
+        if plan.gate {
+            text.push_str(&format!(
+                "Pflichtregeln: {}\n",
+                clean(&plan.required_ids.join(", "))
+            ));
+        }
+        for omitted in &plan.omitted {
+            text.push_str(&format!(
+                "Ausgelassen: {} · {}\n",
+                clean(&omitted.rule.id),
+                clean(&omitted.reason)
+            ));
+        }
+    }
     if let Some(usage) = report.provider_usage {
         text.push_str(&format!(
             "Reasoning-Tokens (in Ausgabe enthalten): {} · Cache-Schreib-Tokens (in Eingabe enthalten): {}\n",

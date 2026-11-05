@@ -153,7 +153,7 @@ fn init_exact_paths_idempotent_preserves_edits() {
 #[test]
 fn validation_rejects_invalid_including_disabled() {
     let cases = [
-        ("config.toml", "version = 1", "version = 2"),
+        ("config.toml", "version = 1", "version = 99"),
         ("config.toml", "version = 1", "version = 1\nunknown = 1"),
         ("config.toml", "version = 1", "version = 1\nversion = 1"),
         (
@@ -1876,7 +1876,7 @@ fn mach_was_alias_and_geiz_flag_are_scoped_to_verification() {
             }
             let parsed = Cli::try_parse_from(args).unwrap();
             assert!(
-                matches!(parsed.command, Words::Mach { command: Mach::Mal { geiz_ist_geil } } if geiz_ist_geil == enabled)
+                matches!(parsed.command, Words::Mach { command: Mach::Mal { geiz_ist_geil, .. } } if geiz_ist_geil == enabled)
             );
         }
     }

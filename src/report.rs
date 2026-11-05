@@ -100,6 +100,8 @@ pub struct Report {
     pub provider_usage: Option<TokenUsage>,
     #[serde(default)]
     pub checks_only: bool,
+    #[serde(default)]
+    pub plan: Option<crate::planner::Plan>,
 }
 pub fn overall(items: &[Item]) -> Status {
     if items.iter().any(|x| x.status == Status::Error) {
@@ -133,10 +135,87 @@ pub fn read(root: &Path) -> Result<Report> {
     let report: Report =
         serde_json::from_str(&crate::config::read_bounded(&path, 128 * 1024 * 1024)?)?;
     ensure!(
-        report.schema_version == 1,
+        matches!(report.schema_version, 1 | 2),
         "unsupported report schema {}; rerun hannes mach mal",
         report.schema_version
     );
+    if report.schema_version == 2 {
+        let plan = report
+            .plan
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("schema 2 report requires a plan"))?;
+        ensure!(
+            plan.plan_schema_version == 1
+                && matches!(plan.config_version, 1 | 2)
+                && matches!(plan.status.as_str(), "planned" | "blocked")
+                && plan.executable() == plan.blocking_reasons.is_empty()
+                && plan.input.kind == "worktree"
+                && plan.plan_id.len() == 64
+                && plan.plan_id.bytes().all(|b| b.is_ascii_hexdigit())
+                && plan.checks_only == report.checks_only
+                && plan.input.fingerprint == report.snapshot.fingerprint
+                && plan.input.head == report.snapshot.head
+                && plan.input.complete == report.snapshot.complete,
+            "inconsistent report plan/input"
+        );
+        let expected: std::collections::BTreeSet<_> =
+            plan.scheduled.iter().map(|r| (&r.id, &r.kind)).collect();
+        let actual: std::collections::BTreeSet<_> = report
+            .results
+            .iter()
+            .filter(|r| r.kind != "integrity")
+            .map(|r| (&r.id, &r.kind))
+            .collect();
+        ensure!(
+            expected == actual
+                && expected.len() == plan.scheduled.len()
+                && plan
+                    .scheduled
+                    .iter()
+                    .all(|r| matches!(r.kind.as_str(), "check" | "review"))
+                && report
+                    .results
+                    .iter()
+                    .filter(|r| r.kind != "integrity")
+                    .count()
+                    == actual.len(),
+            "inconsistent report rule coverage"
+        );
+        let required: std::collections::BTreeSet<_> = plan.required_ids.iter().collect();
+        ensure!(
+            if plan.gate {
+                !required.is_empty()
+                    && required.len() == plan.required_ids.len()
+                    && required == plan.scheduled.iter().map(|r| &r.id).collect()
+                    && plan.omitted.is_empty()
+                    && plan.selection_complete
+            } else {
+                required.is_empty()
+            },
+            "inconsistent required gate rules"
+        );
+        ensure!(
+            report.overall != Status::Pass || (plan.executable() && plan.input.complete),
+            "blocked/incomplete plan cannot pass"
+        );
+        if plan.gate && report.overall == Status::Pass {
+            ensure!(
+                plan.executable()
+                    && plan.selection_complete
+                    && !plan.required_ids.is_empty()
+                    && plan.required_ids.iter().all(|id| report
+                        .results
+                        .iter()
+                        .any(|r| &r.id == id && r.status == Status::Pass)),
+                "incomplete gate cannot pass"
+            );
+        }
+    } else {
+        ensure!(
+            report.plan.is_none(),
+            "legacy report cannot certify a profile plan"
+        );
+    }
     ensure!(
         report.repository == root.canonicalize()?.to_string_lossy(),
         "report belongs to a different repository; rerun hannes mach mal"

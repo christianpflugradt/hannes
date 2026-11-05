@@ -1,8 +1,8 @@
 # Rule profiles and execution plans
 
-Status: proposed configuration version 2; not implemented. Version 1 remains the
-current contract in [configuration.md](configuration.md). Do not copy these new
-fields into a version-1 project: current Hannes rejects them.
+Status: implemented for configuration version 2. Version 1 remains supported;
+see [configuration.md](configuration.md). Explicitly opt in to version 2 before
+using the new fields; version-1 projects reject them.
 
 Implementation tracking: [TODO 1](todo/01-profiles-and-plans.md). The ordered
 [roadmap](todo/README.md) records subsequent work and agreed decisions.
@@ -93,7 +93,7 @@ with no rule definitions at all.
 
 ## CLI and offline planning
 
-The existing command phrases stay unchanged. These flags are proposed for both
+The existing command phrases stay unchanged. These flags are supported for both
 `mach mal` and its alias `mach was`:
 
 ```sh
@@ -140,9 +140,14 @@ timestamps, absolute checkout paths and runtime telemetry. Rebuild and validate
 the plan for every execution; a previously displayed plan does not authorize or
 certify a later changed tree. There is no saved-plan execution mechanism yet.
 
+Metadata TOML is canonicalized by decoded fields, IDs and sorted set selectors;
+metadata filenames/formatting do not affect plan identity. All other in-scope
+file hashes and HEAD form the code identity. The raw snapshot fingerprint remains
+separate and detects exact metadata changes for execution stability and freshness.
+
 ## Reports and integration boundaries
 
-A future report schema records the plan ID, effective profile, gate mode, input
+Report schema 2 records the plan ID, effective profile, gate mode, input
 identity, ordered scheduled rules, omissions and required gate IDs. Distinguish
 selection completeness from actual execution: a full plan can still leave
 reviews NOT_RUN when checks fail. Preserve existing rule statuses, short AI

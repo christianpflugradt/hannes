@@ -26,8 +26,9 @@ Checks and reviews are collectively called **rules**. If neither is defined,
 report. Defined but disabled rules do not trigger this message.
 
 `pass auf` validates all files, even disabled entries, and runs nothing.
-`mach mal` validates first, executes all enabled checks in ID order, then all
-active reviews in one call if checks passed. Disabled items never enter results.
+`mach mal` validates first, executes selected enabled checks in ID order, then
+selected active reviews in one call if checks passed. Without a profile it selects
+all enabled rules. Disabled items never enter results.
 Any failed check prevents spending review tokens; those reviews are `NOT_RUN`.
 
 Use `hannes mach was --geiz-ist-geil` (also `hannes mach mal --geiz-ist-geil`)
@@ -39,6 +40,36 @@ clearly identify the limited scope. PASS means the selected checks passed, not
 that reviews passed. If no checks are enabled, the report explicitly says so.
 The flag applies only to that invocation; an ordinary run still includes reviews.
 No review result is cached or reused. Earlier reports default to the full scope.
+
+## Select and preview rules
+
+Opt in to configuration version 2 to define rule tags and profiles; see
+[profiles and plans](profiles-and-plans.md). Existing version-1 projects retain
+their selection of all enabled rules. Initialization still creates version 1.
+
+```sh
+hannes mach was --profil local --plan
+hannes mach was --profil local --plan --json
+hannes mach mal --profil local
+```
+
+`--profil` overrides `default_profile`; otherwise the implicit profile is `all`.
+Preview validates and reads local evidence without executing rules, Codex, MCP
+or network calls, and preserves the previous report. It shows the selected scope,
+omissions, requirements, input fingerprint and declared provider/context settings.
+JSON errors are structured; executable plans exit 0, blocked/invalid plans exit 2.
+`--json` requires `--plan`. Each execution rebuilds the same deterministic plan.
+
+Ordinary profiles support checks-only execution. A gate requires every selected
+rule, rejects empty/disabled requirements, and rejects `--geiz-ist-geil` if it
+would omit a review. Current profiles verify working files only; staging/commit
+inputs and per-review MCP permissions remain future work.
+
+New reports retain the profile, plan ID and omissions. Status uses that saved
+scope even after the default profile changes; legacy reports cannot certify a
+profile gate. `--details` includes plan identity and omission reasons.
+
+## Run results
 
 Errors and failures block success. A valid run writes `.Hannes/reports/last.json`
 atomically, including on FAIL/ERROR. Invalid configuration leaves the previous

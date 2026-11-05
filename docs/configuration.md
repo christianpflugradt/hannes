@@ -1,10 +1,10 @@
-# Hannes configuration, version 1
+# Hannes configuration, versions 1 and 2
 
-For the proposed, not yet implemented version-2 selection contract, see
-[rule profiles and execution plans](profiles-and-plans.md).
+Initialization creates version 1. Existing configurations are never automatically
+migrated. To enable profiles/tags, explicitly set `version = 2` in config.toml.
 
 Run Hannes from the Git working-tree root. `.Hannes` uses a capital H.
-`config.toml` requires `version = 1`, a nonempty `project` and
+`config.toml` requires `version = 1` or `2`, a nonempty `project` and
 `max_display_files = 1..5`. `provider.toml` requires `provider = "codex-cli"`,
 `timeout_seconds = 1..3600` and an optional nonempty `model`. New scaffolds use
 GPT-6.1 Sol, medium reasoning, and no MCP servers:
@@ -113,3 +113,45 @@ necessary evidence or provider problems. Codex must supply a `reason` summary on
 one line (at most 120 characters), plus grounded `findings`. The summary is shown
 for every review, including PASS. Inspect full findings and captured command
 output with `hannes was ist phase --details`; this reads the saved report only.
+
+## Profiles and tags (version 2)
+
+Checks and reviews may declare `tags = ["local", "critical"]`: at most 32 unique
+lowercase ASCII tags, 1..32 characters, starting with a letter/digit and otherwise
+using letters, digits, hyphens or underscores. Version 1 rejects the field even
+when empty. Configuration version 2 permits optional `default_profile = "local"`.
+
+Add `.Hannes/profiles/local.toml`:
+
+```toml
+id = "local"
+rules = ["always-ok"]
+include_tags = []
+gate = false
+input = "worktree"
+```
+
+Only `id` is required; the other fields default to the values above except `rules`,
+which defaults to `[]`. Profile IDs use the tag syntax, are unique and cannot be
+`all`. Select the union of explicit IDs and rules matching any `include_tags` tag,
+deduplicated; checks precede reviews, each sorted by ID. Unknown IDs/tags,
+duplicate selectors, invalid fields and disabled/empty gate requirements are
+errors, including in unused profiles. There are at most 256 profiles of 64 KiB
+each. Version 1 rejects profile TOML files. Only worktree input is implemented.
+
+`hannes mach was --profil local` overrides the configured default. Without either,
+implicit `all` runs all enabled rules as before. `--plan` previews selection,
+omissions, declared provider settings, input identity and bounded context without
+running checks, Codex, MCP or network calls. `--plan --json` emits plan schema 1;
+blocked/invalid plans exit 2, executable plans exit 0. Availability is not checked.
+The existing report is preserved. Checks-only execution omits reviews without a
+provider call; gates requiring reviews reject `--geiz-ist-geil` before checks.
+
+New report schema 2 saves the plan/profile and actual rule results. Old schema-1
+reports stay readable as unprofiled legacy evidence. Status uses the saved scope,
+not today's default. A plan is neither a cache nor a proof about staged/pushed code.
+Provider-wide MCP settings/shared review batching are unchanged; per-review MCP
+permissions, index/commit inputs, budgets and caching remain future work.
+
+The complete reference is maintained in the
+[Hannes README](https://github.com/christianpflugradt/hannes#configuration-hannes).

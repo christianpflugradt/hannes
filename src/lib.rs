@@ -3,6 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod git_snapshot;
 pub mod mood;
+pub mod planner;
 pub mod process;
 pub mod provider;
 pub mod quotes;
@@ -72,7 +73,26 @@ pub fn verify_project_with_mode(
     mode: VerificationMode,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Report> {
+    verify_project_with_profile(project, provider, mode, None, progress)
+}
+
+pub fn verify_project_with_profile(
+    mut project: config::Project,
+    provider: &dyn provider::Provider,
+    mode: VerificationMode,
+    profile: Option<&str>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Report> {
     let checks_only = mode == VerificationMode::ChecksOnly;
+    progress(Progress::Phase(
+        "Ausführungsplan und Arbeitsdateien vorbereiten …",
+    ));
+    let planner::PreparedPlan { plan, snapshot } = planner::build(&project, profile, checks_only)?;
+    anyhow::ensure!(
+        !plan.gate || plan.selection_complete,
+        "Gate requires reviews; --geiz-ist-geil cannot omit required rules"
+    );
+    planner::apply(&mut project, &plan);
     let check_count = project.checks.iter().filter(|c| c.enabled).count();
     let active: Vec<_> = project
         .reviews
@@ -90,37 +110,37 @@ pub fn verify_project_with_mode(
         }
     }
     progress(Progress::Phase("Arbeitsdateien erfassen …"));
-    let initial = git_snapshot::capture(&project.root);
     let mut items = Vec::new();
     let mut provider_usage = None;
-    let snapshot = match initial {
-        Ok(s) => s,
-        Err(error) => {
-            items.push(Item::simple(
-                "hannes-snapshot",
-                "integrity",
-                Status::Error,
-                format!("{error:#}"),
-            ));
-            git_snapshot::Snapshot {
-                head: None,
-                fingerprint: String::new(),
-                files: Default::default(),
-                complete: false,
-                limitations: vec![format!("{error:#}")],
-            }
-        }
-    };
+    if !plan.executable() {
+        items.push(Item::simple(
+            "hannes-plan",
+            "integrity",
+            Status::Error,
+            plan.blocking_reasons.join("; "),
+        ));
+    }
     for (offset, check) in project.checks.iter().filter(|c| c.enabled).enumerate() {
         let number = offset + 1;
-        progress(Progress::RuleStarted {
-            number,
-            total,
-            kind: "check",
-            id: &check.id,
-            description: &check.description,
-        });
-        let item = checks::execute(&project, check);
+        if plan.executable() {
+            progress(Progress::RuleStarted {
+                number,
+                total,
+                kind: "check",
+                id: &check.id,
+                description: &check.description,
+            });
+        }
+        let item = if plan.executable() {
+            checks::execute(&project, check)
+        } else {
+            Item::simple(
+                &check.id,
+                "check",
+                Status::NotRun,
+                "Execution plan blocked; no command started".into(),
+            )
+        };
         progress(Progress::RuleFinished {
             number,
             total,
@@ -196,7 +216,7 @@ pub fn verify_project_with_mode(
         }
     }
     let report = Report {
-        schema_version: 1,
+        schema_version: 2,
         timestamp: chrono::Utc::now().to_rfc3339(),
         repository: project.root.to_string_lossy().into_owned(),
         project: project.config.project,
@@ -215,6 +235,7 @@ pub fn verify_project_with_mode(
         token_usage: provider_usage.and_then(report::TokenUsage::total),
         provider_usage,
         checks_only,
+        plan: Some(plan),
     };
     progress(Progress::Phase("Report speichern …"));
     report::write(&project.root, &report)?;

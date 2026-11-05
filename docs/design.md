@@ -6,7 +6,11 @@
 examples; `checks` executes deterministic commands; `process` handles deadlines
 and capture; `provider` invokes Codex; `reviews` validates final JSON; `git_snapshot`
 fingerprints working files; `report` serializes/persists; `terminal` renders both
-run and status. `lib::verify` coordinates this fixed sequence.
+run and status. `planner` resolves profiles/tags, prepares bounded offline context
+and fingerprints the plan; preview and `lib::verify` share that selection. Plan
+metadata is canonicalized separately from raw snapshots to keep semantic IDs
+stable across TOML formatting and selector order. Report schema 2 saves the plan;
+schema 1 stays readable as unprofiled legacy evidence.
 
 ## Snapshot definition
 
@@ -54,7 +58,8 @@ Reports contain UTC timestamps, repository/project, HEAD, manifest/fingerprint,
 per-item status/duration/evidence/output and overall result. ERROR takes precedence,
 then FAIL; NOT_RUN is blocking but does not replace an existing FAIL with ERROR.
 Provider review durations reflect the shared invocation, not individual model timings;
-do not sum them. Token usage is unavailable, not estimated.
+do not sum them. Available token usage is recorded once for the shared call;
+missing counters stay unavailable and are never estimated.
 
 JSON is synced to a temporary file in the local reports directory and renamed
 atomically over `last.json`; on Unix the directory is synced too. Normal file

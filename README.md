@@ -102,7 +102,8 @@ see [Contributing](CONTRIBUTING.md#commits).
 
 Run from the Git working-tree root. The directory name is exactly `.Hannes`,
 including the capital H. `hannes fang an` creates missing scaffold files and
-preserves existing ones. All supported configuration is **version 1**:
+preserves existing ones. Versions **1 and 2** are supported; initialization still
+creates version 1. Version 2 adds profiles and tags through explicit opt-in:
 
 ```text
 .Hannes/
@@ -114,6 +115,8 @@ preserves existing ones. All supported configuration is **version 1**:
   reviews/
     product-consistency.toml
     product-consistency.md
+  profiles/                       # Optional; version 2 only
+    local.toml
   reports/
     .gitignore
     last.json                     # Generated; not configuration
@@ -147,9 +150,89 @@ max_display_files = 5
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `version` | Required | Exactly `1`. |
+| `version` | Required | `1` for the original format, `2` to enable profiles/tags. |
+| `default_profile` | Optional; `"all"` | Version 2 only: default profile for verification and planning. |
 | `project` | Required | Nonblank display name; initialization uses the directory name. |
 | `max_display_files` | Required | Integer `1..5`; maximum changed paths shown in status, not a rule or verification limit. |
+
+### Profiles and tags (version 2)
+
+To opt in, change only `version` to `2` in `config.toml`, keeping the existing
+project/display fields. Add `default_profile = "local"` if desired. Version 1
+rejects `default_profile`, rule `tags` (even `[]`) and profile TOML files rather
+than silently ignoring them. Existing projects are never migrated automatically.
+
+Both checks and reviews accept an optional version-2 `tags` field:
+
+```toml
+tags = ["local", "critical"]
+```
+
+Tags are unique, case-sensitive, lowercase ASCII strings of 1–32 characters,
+starting with a letter/digit and otherwise containing letters, digits, `-` or `_`.
+There are at most 32 tags per rule; omission means `[]`.
+
+Create one profile per `.Hannes/profiles/*.toml` file, for example:
+
+```toml
+id = "local"
+rules = ["always-ok"]
+include_tags = ["local"]
+gate = false
+input = "worktree"
+```
+
+This example requires at least one rule tagged `local`. Selection is the **union**
+of explicit IDs and rules matching **any** listed tag, without duplicates. Checks
+run first, then reviews; each kind is sorted by ID. Disabled matches are explained
+in the plan and omitted from execution/results.
+
+| Profile field | Required / default | Meaning |
+| --- | --- | --- |
+| `id` | Required | Unique profile ID using the tag syntax; `all` is reserved. Filename need not match. |
+| `rules` | Optional; `[]` | Unique existing rule IDs, across checks and reviews. |
+| `include_tags` | Optional; `[]` | Unique tags occurring in at least one rule definition. |
+| `gate` | Optional; `false` | Every selected rule is required; empty selections and disabled requirements are configuration errors. |
+| `input` | Optional; `"worktree"` | Only current working files are supported. `index` and `commit` are rejected. |
+
+At most 256 profiles are allowed, with the same 64 KiB metadata limit as rules.
+All profiles are validated, including unused ones. Unknown IDs/tags, duplicate
+selectors/IDs, unknown fields and invalid input kinds are errors. There is no
+inheritance or exclusion language. An ordinary empty profile explicitly verifies
+no active rules; it is not a gate and proves no rule passed.
+
+`--profil NAME` overrides `default_profile`. Without either, reserved `all` selects
+all enabled rules, preserving version-1 behavior. Profile preview also explains
+disabled definitions. Profiles do not install hooks or grant provider permissions.
+A worktree gate is not proof about staged changes or a pushed commit.
+
+```sh
+hannes mach was --profil local --plan
+hannes mach was --profil local --plan --json
+hannes mach mal --profil local
+hannes mach was --profil local --geiz-ist-geil
+```
+
+`--plan` reads/validates local configuration, prepares bounded context and records
+the input fingerprint. It runs no checks, Codex CLI, MCP servers or network calls;
+the last report is preserved. Normal CLI mood handling remains global. Plans show
+selection reasons, scheduled/omitted rules, gate requirements, declared model/MCP
+settings, context sizes/limits and orientation-diff truncation. Provider defaults
+remain unresolved and availability is not checked. Planned model calls are zero
+or one under current batching; no token/cost estimate is invented.
+
+`--json` requires `--plan`. JSON uses `plan_schema_version = 1`, status `planned`
+or `blocked`, stable ordering and explicit blocking reasons. Invalid configuration
+produces a structured error. Preview exits 0 for an executable plan, 2 otherwise.
+Plan IDs hash canonical rule/profile/provider settings, criteria, context and code
+identity. Metadata formatting, selector order and metadata filenames are normalized;
+the separately recorded raw snapshot still detects exact file changes. Every run
+rebuilds its plan; a preview is not a saved authorization or a result cache.
+
+`--geiz-ist-geil` omits selected reviews in ordinary profiles, marks the report
+checks-only and never invokes the provider. A gate requiring reviews rejects it
+before any check starts. Gates containing only checks may use it. All executed
+rules remain blocking even when `gate = false`.
 
 ### Provider: `provider.toml`
 
@@ -248,6 +331,7 @@ timeout_seconds = 120
 | `id` | Required | Unique rule ID under the rules above. |
 | `description` | Required | Short, nonblank description shown in progress output. |
 | `enabled` | Required | Boolean; `false` disables execution, not validation. |
+| `tags` | Optional; `[]` | Version 2 only; profile selection tags as described above. |
 | `command` | Required | Array of `1..256` argv strings; first element is the nonblank executable. Each string is at most 32768 bytes and contains no NUL. |
 | `working_directory` | Optional; `"."` | Existing directory relative to the project root. |
 | `timeout_seconds` | Required | Integer `1..3600` for this check. |
@@ -286,6 +370,7 @@ This example assumes the listed files and heading exist. The generated
 | Field | Required / default | Meaning |
 | --- | --- | --- |
 | `id`, `description`, `enabled` | Required | Same common fields as checks. |
+| `tags` | Optional; `[]` | Version 2 only; same tag rules as checks. |
 | `instructions` | Required | Path relative to `.Hannes/reviews/` to a nonblank UTF-8 `.md` file that stays inside that directory. |
 | `files` | Optional; `[]` | Up to 64 unique existing files relative to the project root; exact paths, not globs. Starting points for source inspection. |
 | `context` | Optional; `[]` | Up to 32 requirement-document selections, using `[[context]]` tables. |
@@ -332,7 +417,12 @@ proof that the judgment is correct.
 
 `reports/last.json` is generated atomically, contains verdicts, detailed findings,
 captured check output, snapshot identity and available usage, and is not user
-configuration. `was ist phase` reads it without rerunning anything; `--details`
+configuration. New reports use schema 2 and retain the effective profile, plan ID,
+ordered scheduled rules, omissions, required gate IDs and input identity. Selection
+completeness is distinct from execution: failed checks leave planned reviews
+NOT_RUN. Status renders the saved profile, not the current default. Schema-1
+reports remain readable as legacy/unprofiled and cannot certify profile gates.
+`was ist phase` reads the report without rerunning anything; `--details`
 adds findings/output. Freshness compares current working files and HEAD against
 the saved snapshot: CURRENT, STALE or UNKNOWN. Line deltas since verification are
 unavailable with the hash-only baseline. Configuration errors preserve the prior
@@ -364,8 +454,8 @@ These are built-in limits, not additional configurable fields:
 | Stability | Files must match before/after verification and before a review call; Hannes does not verify staged state or pushed commits separately. |
 | Token reporting | Available input/cached-input/output counters once per model call; total = input + output. Missing telemetry stays unavailable. No money/quota estimate or enforced total token budget. |
 
-Not available yet: rule tags, selection profiles, `--profil`, `--plan`, per-review
-model/MCP settings, true change-only review scope, index/commit inputs, configurable
+Not available yet: per-review model/MCP settings, true change-only review scope,
+index/commit inputs, configurable
 run-wide budgets or result caching. No hooks are installed by initialization.
 See the [ordered TODOs](docs/todo/README.md) for planned work.
 

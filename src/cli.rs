@@ -52,6 +52,19 @@ pub enum Mach {
     Mal {
         #[arg(long, help = "Nur deterministische Checks ausführen, ohne LLM-Aufruf")]
         geiz_ist_geil: bool,
+        #[arg(long, help = "Regeln aus diesem Profil auswählen")]
+        profil: Option<String>,
+        #[arg(
+            long,
+            help = "Ausführungsplan anzeigen, ohne Regeln oder Provider zu starten"
+        )]
+        plan: bool,
+        #[arg(
+            long,
+            requires = "plan",
+            help = "Plan oder Planfehler als JSON ausgeben"
+        )]
+        json: bool,
     },
 }
 #[derive(Debug, Subcommand)]

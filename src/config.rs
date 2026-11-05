@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
     fs::{self, OpenOptions},
@@ -9,14 +9,15 @@ use std::{
 
 pub const MAX_METADATA: u64 = 64 * 1024;
 pub const MAX_INSTRUCTIONS: u64 = 32 * 1024;
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub version: u32,
     pub project: String,
     pub max_display_files: usize,
+    pub default_profile: Option<String>,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderConfig {
     pub provider: String,
@@ -27,7 +28,7 @@ pub struct ProviderConfig {
     #[serde(default)]
     pub review_profile: ReviewProfile,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ReviewProfile {
     pub reasoning_effort: Option<String>,
@@ -41,14 +42,14 @@ impl Default for ReviewProfile {
         }
     }
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReviewContext {
     pub path: String,
     #[serde(default)]
     pub headings: Vec<String>,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Check {
     pub id: String,
@@ -58,11 +59,13 @@ pub struct Check {
     #[serde(default = "default_directory")]
     pub working_directory: String,
     pub timeout_seconds: u64,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 fn default_directory() -> String {
     ".".into()
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Review {
     pub id: String,
@@ -73,6 +76,8 @@ pub struct Review {
     pub files: Vec<String>,
     #[serde(default)]
     pub context: Vec<ReviewContext>,
+    #[serde(default)]
+    pub tags: Vec<String>,
     #[serde(skip)]
     pub text: String,
 }
@@ -83,6 +88,80 @@ pub struct Project {
     pub provider: ProviderConfig,
     pub checks: Vec<Check>,
     pub reviews: Vec<Review>,
+    pub profiles: Vec<Profile>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Profile {
+    pub id: String,
+    #[serde(default)]
+    pub rules: Vec<String>,
+    #[serde(default)]
+    pub include_tags: Vec<String>,
+    #[serde(default)]
+    pub gate: bool,
+    #[serde(default = "worktree")]
+    pub input: String,
+}
+fn worktree() -> String {
+    "worktree".into()
+}
+impl Profile {
+    pub fn selects(&self, id: &str, tags: &[String]) -> bool {
+        self.id == "all"
+            || self.rules.iter().any(|rule| rule == id)
+            || tags.iter().any(|tag| self.include_tags.contains(tag))
+    }
+    pub fn all() -> Self {
+        Self {
+            id: "all".into(),
+            rules: vec![],
+            include_tags: vec![],
+            gate: false,
+            input: worktree(),
+        }
+    }
+}
+
+fn tag(value: &str) -> Result<()> {
+    ensure!(
+        !value.is_empty()
+            && value.len() <= 32
+            && value.as_bytes()[0].is_ascii_alphanumeric()
+            && value
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"-_".contains(&c)),
+        "invalid tag/profile ID {value:?}: use 1..32 lowercase ASCII letters, digits, - or _, starting with a letter or digit"
+    );
+    Ok(())
+}
+fn unique(values: &mut [String], label: &str) -> Result<()> {
+    values.sort();
+    ensure!(
+        !values.windows(2).any(|pair| pair[0] == pair[1]),
+        "duplicate {label}"
+    );
+    Ok(())
+}
+fn tags(values: &mut [String]) -> Result<()> {
+    ensure!(values.len() <= 32, "at most 32 tags per rule");
+    for value in values.iter() {
+        tag(value)?;
+    }
+    unique(values, "rule tag")
+}
+fn parse_rule<T: serde::de::DeserializeOwned>(root: &Path, path: &Path, version: u32) -> Result<T> {
+    let text = read_bounded(&inside(root, path)?, MAX_METADATA)?;
+    if version == 1 {
+        let table: toml::Table = toml::from_str(&text)?;
+        ensure!(
+            !table.contains_key("tags"),
+            "{}: tags require configuration version 2",
+            path.display()
+        );
+    }
+    toml::from_str(&text).with_context(|| format!("invalid {}", path.display()))
 }
 
 pub fn relative(path: &Path) -> Result<()> {
@@ -187,9 +266,13 @@ pub fn load(root: &Path) -> Result<Project> {
     crate::git_snapshot::require_root(&root)?;
     let config: Config = parse(&root, Path::new(".Hannes/config.toml"))?;
     ensure!(
-        config.version == 1,
+        matches!(config.version, 1 | 2),
         "unsupported configuration version {}",
         config.version
+    );
+    ensure!(
+        config.version == 2 || config.default_profile.is_none(),
+        "default_profile requires configuration version 2"
     );
     nonempty(&config.project, "project")?;
     ensure!(
@@ -239,9 +322,10 @@ pub fn load(root: &Path) -> Result<Project> {
     let mut ids = BTreeSet::new();
     let mut checks = Vec::new();
     for path in metadata_files(&root, ".Hannes/checks")? {
-        let check: Check = parse(&root, &path)?;
+        let mut check: Check = parse_rule(&root, &path, config.version)?;
         (|| -> Result<()> {
             identity(&check.id, &check.description, &mut ids)?;
+            tags(&mut check.tags)?;
             timeout(check.timeout_seconds)?;
             ensure!(
                 !check.command.is_empty() && check.command.len() <= 256,
@@ -279,9 +363,10 @@ pub fn load(root: &Path) -> Result<Project> {
     let mut reviews = Vec::new();
     let mut instruction_bytes = 0;
     for path in metadata_files(&root, ".Hannes/reviews")? {
-        let mut review: Review = parse(&root, &path)?;
+        let mut review: Review = parse_rule(&root, &path, config.version)?;
         (|| -> Result<()> {
             identity(&review.id, &review.description, &mut ids)?;
+            tags(&mut review.tags)?;
             ensure!(
                 review.files.len() <= 64 && review.context.len() <= 32,
                 "review permits at most 64 files and 32 context entries"
@@ -345,12 +430,76 @@ pub fn load(root: &Path) -> Result<Project> {
     checks.sort_by(|a, b| a.id.cmp(&b.id));
     reviews.sort_by(|a, b| a.id.cmp(&b.id));
     crate::review_context::collect(&root, &reviews.iter().collect::<Vec<_>>())?;
+    let mut profiles = Vec::new();
+    if root.join(".Hannes/profiles").symlink_metadata().is_ok() {
+        let paths = metadata_files(&root, ".Hannes/profiles")?;
+        ensure!(
+            config.version == 2 || paths.is_empty(),
+            "profiles require configuration version 2"
+        );
+        let known_tags: BTreeSet<_> = checks
+            .iter()
+            .flat_map(|r| &r.tags)
+            .chain(reviews.iter().flat_map(|r| &r.tags))
+            .collect();
+        let mut profile_ids = BTreeSet::new();
+        for path in paths {
+            let mut profile: Profile = parse(&root, &path)?;
+            (|| -> Result<()> {
+                tag(&profile.id)?;
+                ensure!(
+                    profile.id != "all" && profile_ids.insert(profile.id.clone()),
+                    "reserved or duplicate profile ID: {}",
+                    profile.id
+                );
+                ensure!(
+                    profile.input == "worktree",
+                    "unsupported profile input {}; only worktree is implemented",
+                    profile.input
+                );
+                unique(&mut profile.rules, "profile rule selector")?;
+                unique(&mut profile.include_tags, "profile tag selector")?;
+                for id in &profile.rules {
+                    ensure!(ids.contains(id), "unknown rule selector: {id}");
+                }
+                for value in &profile.include_tags {
+                    tag(value)?;
+                    ensure!(known_tags.contains(value), "unknown tag selector: {value}");
+                }
+                if profile.gate {
+                    let selected: Vec<_> = checks
+                        .iter()
+                        .map(|r| (&r.id, &r.tags, r.enabled))
+                        .chain(reviews.iter().map(|r| (&r.id, &r.tags, r.enabled)))
+                        .filter(|(id, tags, _)| profile.selects(id, tags))
+                        .collect();
+                    ensure!(!selected.is_empty(), "gate {} selects no rules", profile.id);
+                    ensure!(
+                        selected.iter().all(|(_, _, enabled)| *enabled),
+                        "gate {} selects disabled required rules",
+                        profile.id
+                    );
+                }
+                Ok(())
+            })()
+            .with_context(|| format!("invalid {}", path.display()))?;
+            profiles.push(profile);
+        }
+    }
+    profiles.sort_by(|a, b| a.id.cmp(&b.id));
+    if let Some(default) = &config.default_profile {
+        ensure!(
+            default == "all" || profiles.iter().any(|p| &p.id == default),
+            "unknown default profile: {default}"
+        );
+    }
     Ok(Project {
         root,
         config,
         provider,
         checks,
         reviews,
+        profiles,
     })
 }
 

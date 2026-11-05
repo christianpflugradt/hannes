@@ -39,8 +39,39 @@ fn execute(cli: Cli) -> Result<i32> {
             Ok(0)
         }
         Words::Mach {
-            command: Mach::Mal { geiz_ist_geil },
+            command:
+                Mach::Mal {
+                    geiz_ist_geil,
+                    profil,
+                    plan,
+                    json,
+                },
         } => {
+            if plan {
+                let prepared = config::load(&root).and_then(|project| {
+                    hannes::planner::build(&project, profil.as_deref(), geiz_ist_geil)
+                });
+                return match prepared {
+                    Ok(prepared) => {
+                        if json {
+                            println!("{}", serde_json::to_string_pretty(&prepared.plan)?);
+                        } else {
+                            print!("{}", terminal::render_plan(&prepared.plan, color));
+                        }
+                        Ok(if prepared.plan.executable() { 0 } else { 2 })
+                    }
+                    Err(error) if json => {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(
+                                &serde_json::json!({"plan_schema_version":1,"status":"blocked","errors":[format!("{error:#}")]})
+                            )?
+                        );
+                        Ok(2)
+                    }
+                    Err(error) => Err(error),
+                };
+            }
             let progress_color = terminal::error_color(cli.no_color);
             let mut stderr = std::io::stderr().lock();
             let _ = writeln!(
@@ -51,7 +82,7 @@ fn execute(cli: Cli) -> Result<i32> {
             let _ = stderr.flush();
             let project = config::load(&root)?;
             let no_rules = project.checks.is_empty() && project.reviews.is_empty();
-            let report = hannes::verify_project_with_mode(
+            let report = hannes::verify_project_with_profile(
                 project,
                 &Codex::default(),
                 if geiz_ist_geil {
@@ -59,6 +90,7 @@ fn execute(cli: Cli) -> Result<i32> {
                 } else {
                     hannes::VerificationMode::AllRules
                 },
+                profil.as_deref(),
                 &mut |event| {
                     // Progress must be visible before a slow command or Codex call finishes.
                     // Losing the progress stream must not prevent writing the report.

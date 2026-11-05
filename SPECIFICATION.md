@@ -2,11 +2,10 @@
 
 Status: implementation-ready specification, v0.1. Language: English for source, configuration, documentation and directories. German conversational command names and restrained German CLI copy are intentional.
 
-Planned extension: [rule profiles and execution plans](docs/profiles-and-plans.md)
-specifies a proposed version-2 contract. It is not implemented and does not change
-the version-1 behavior described here.
-The [ordered TODO roadmap](docs/todo/README.md) tracks all five planned steps;
-none is implemented yet.
+Implemented extension: [rule profiles and execution plans](docs/profiles-and-plans.md)
+defines opt-in version-2 configuration, offline plans and report schema 2.
+Version-1 configurations remain supported; initialization still creates version 1.
+The [ordered TODO roadmap](docs/todo/README.md) tracks implementation and next steps.
 
 ## 1. Vision and motivation
 

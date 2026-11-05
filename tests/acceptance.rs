@@ -604,7 +604,6 @@ fn terminal_strips_control_sequences_from_untrusted_values() {
 #[cfg(unix)]
 #[test]
 fn real_provider_transport_with_fake_executable_never_calls_codex() {
-    use std::os::unix::fs::PermissionsExt;
     for mode in [
         "pass",
         "malformed",
@@ -641,8 +640,7 @@ fn real_provider_transport_with_fake_executable_never_calls_codex() {
             _ => "printf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1000,\"cached_input_tokens\":800,\"output_tokens\":200,\"reasoning_output_tokens\":50,\"cache_write_input_tokens\":100}}'".into(),
         };
         // The completion arrives after more than the retained stdout limit.
-        fs::write(&executable, format!("#!/bin/sh\nset -eu\nif [ \"${{1:-}}\" = mcp ]; then printf '[]\\n'; exit 0; fi\noutput=''\nwhile [ $# -gt 0 ]; do\n case \"$1\" in --output-last-message) shift; output=$1;; esac\n shift\ndone\ncat > /dev/null\nprintf 'unstructured stdout is not a verdict\\n'\nprintf '%070000d\\n' 0\n{telemetry}\n{behavior}\n")).unwrap();
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+        write_executable(&executable, format!("#!/bin/sh\nset -eu\nif [ \"${{1:-}}\" = mcp ]; then printf '[]\\n'; exit 0; fi\noutput=''\nwhile [ $# -gt 0 ]; do\n case \"$1\" in --output-last-message) shift; output=$1;; esac\n shift\ndone\ncat > /dev/null\nprintf 'unstructured stdout is not a verdict\\n'\nprintf '%070000d\\n' 0\n{telemetry}\n{behavior}\n")).unwrap();
         let provider = hannes::provider::Codex::new(executable);
         let r = hannes::verify(d.path(), &provider).unwrap();
         assert_eq!(
@@ -1216,7 +1214,6 @@ fn provider_summary_must_be_short_nonempty_and_single_line() {
 #[cfg(unix)]
 #[test]
 fn detailed_status_reads_saved_findings_without_another_codex_call() {
-    use std::os::unix::fs::PermissionsExt;
     let d = project();
     enable(d.path());
     let mut value = verdict("product-consistency", "FAIL");
@@ -1229,12 +1226,11 @@ fn detailed_status_reads_saved_findings_without_another_codex_call() {
     let fake = tempdir().unwrap();
     let state = tempdir().unwrap();
     let executable = fake.path().join("codex");
-    fs::write(
+    write_executable(
         &executable,
         "#!/bin/sh\nprintf 'called' > \"$HANNES_TEST_PROVIDER_MARKER\"\nexit 90\n",
     )
     .unwrap();
-    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
     let marker = fake.path().join("provider-called");
     let env_path = std::env::join_paths(
         std::iter::once(fake.path().to_path_buf())
@@ -1526,13 +1522,44 @@ fn usage_is_recorded_once_for_bundled_reviews_and_old_reports_still_load() {
     assert_eq!(provider.calls.get(), 1);
 }
 
+fn copy_executable(source: &Path, executable: &Path) {
+    #[cfg(unix)]
+    {
+        // A concurrent fork can inherit fs::copy's writable descriptor until exec,
+        // causing ETXTBSY even after the copying thread closes it. Copy in a child
+        // process so no writer for this executable exists in the test process.
+        let output = Command::new("cp")
+            .arg(source)
+            .arg(executable)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "cannot copy executable fixture: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[cfg(not(unix))]
+    fs::copy(source, executable).unwrap();
+}
+
+#[cfg(unix)]
+fn write_executable(path: &Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    // Rust may hold writable handles to this staging file, but never executes it.
+    let source = tempfile::NamedTempFile::new()?;
+    fs::write(source.path(), contents)?;
+    copy_executable(source.path(), path);
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+}
+
 fn disposable_hannes(directory: &Path) -> PathBuf {
     let executable = directory.join(if cfg!(windows) {
         "hannes.exe"
     } else {
         "hannes"
     });
-    fs::copy(env!("CARGO_BIN_EXE_hannes"), &executable).unwrap();
+    copy_executable(Path::new(env!("CARGO_BIN_EXE_hannes")), &executable);
     executable
 }
 
@@ -1542,6 +1569,17 @@ fn third_consecutive_screaming_reaction_really_uninstalls_only_the_disposable_bi
     let state = tempdir().unwrap();
     let root = tempdir().unwrap();
     let executable = disposable_hannes(installation.path());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let original = fs::metadata(env!("CARGO_BIN_EXE_hannes")).unwrap();
+        let disposable = fs::metadata(&executable).unwrap();
+        assert_ne!(
+            (original.dev(), original.ino()),
+            (disposable.dev(), disposable.ino()),
+            "uninstall fixture must be an independent copy, not a hard link"
+        );
+    }
     let sentinel = installation.path().join("keep.txt");
     fs::write(&sentinel, "other installed files").unwrap();
     fs::write(root.path().join("keep.txt"), "project content").unwrap();
@@ -1572,6 +1610,7 @@ fn third_consecutive_screaming_reaction_really_uninstalls_only_the_disposable_bi
         !state.path().exists(),
         "external mood data and its empty directory are removed"
     );
+    assert!(Path::new(env!("CARGO_BIN_EXE_hannes")).is_file());
     assert_eq!(
         fs::read_to_string(sentinel).unwrap(),
         "other installed files"
@@ -1853,19 +1892,17 @@ fn mach_was_alias_and_geiz_flag_are_scoped_to_verification() {
 #[cfg(unix)]
 #[test]
 fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
-    use std::os::unix::fs::PermissionsExt;
     let d = project();
     enable(d.path());
     let fake = tempdir().unwrap();
     let state = tempdir().unwrap();
     let executable = fake.path().join("codex");
     let marker = fake.path().join("called");
-    fs::write(
+    write_executable(
         &executable,
         "#!/bin/sh\nif [ \"${1:-}\" = mcp ]; then printf '[]\\n'; exit 0; fi\nprintf called > \"$HANNES_PROVIDER_MARKER\"\nexit 23\n",
     )
     .unwrap();
-    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
     let search_path = std::env::join_paths(
         std::iter::once(fake.path().to_path_buf())
             .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
@@ -2107,7 +2144,6 @@ fn focused_reviews_exclude_unrelated_paths_and_diff_and_include_untracked_entry_
 #[cfg(unix)]
 #[test]
 fn lean_review_transport_disables_unlisted_mcp_and_honors_model_profile_and_allowlist() {
-    use std::os::unix::fs::PermissionsExt;
     let d = project();
     enable(d.path());
     let fake = tempdir().unwrap();
@@ -2139,8 +2175,7 @@ printf '%s' '{}' > "$output"
         input_file.display(),
         payload
     );
-    fs::write(&executable, script).unwrap();
-    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+    write_executable(&executable, script).unwrap();
     let provider = hannes::provider::Codex::new(executable);
     let result = hannes::verify(d.path(), &provider).unwrap();
     assert_eq!(result.overall, Status::Pass);
@@ -2195,7 +2230,6 @@ printf '%s' '{}' > "$output"
 #[cfg(unix)]
 #[test]
 fn failed_mcp_discovery_or_unavailable_allowlist_never_starts_a_review_or_leaks_config() {
-    use std::os::unix::fs::PermissionsExt;
     for mode in [
         "invalid-json",
         "exit",
@@ -2223,8 +2257,7 @@ fn failed_mcp_discovery_or_unavailable_allowlist_never_starts_a_review_or_leaks_
             "unsafe-name" => "printf '[{\"name\":\"unsafe.name\"}]'",
             _ => "printf '[]'",
         };
-        fs::write(&executable, format!("#!/bin/sh\nif [ \"${{1:-}}\" = mcp ]; then {listing}; exit 0; fi\nprintf called > '{}'\nexit 19\n", marker.display())).unwrap();
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+        write_executable(&executable, format!("#!/bin/sh\nif [ \"${{1:-}}\" = mcp ]; then {listing}; exit 0; fi\nprintf called > '{}'\nexit 19\n", marker.display())).unwrap();
         let result = hannes::verify(d.path(), &hannes::provider::Codex::new(&executable)).unwrap();
         assert_eq!(result.overall, Status::Error, "{mode}");
         assert!(!marker.exists(), "{mode}");

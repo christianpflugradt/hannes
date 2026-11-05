@@ -1,3 +1,10 @@
+## 1.0.0 (2026-11-05)
+
+### Features
+
+* initialize hannes governance CLI ([7a1e80f](https://github.com/christianpflugradt/hannes/commit/7a1e80f34650f03bca5fa95bfd4009eda6140067))
+* **profiles:** add rule selection and offline execution plans ([18897c9](https://github.com/christianpflugradt/hannes/commit/18897c9cfe34fa0916e78f431b3fa52f43ec7a47))
+
 # Changelog
 
 ## Unreleased

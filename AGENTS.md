@@ -10,8 +10,9 @@
   Source, configuration, file names and documentation stay in English.
 - Deterministic checks run first. Provider failures, invalid JSON and incomplete
   snapshot coverage must never become PASS. Disabled items stay out of results.
-- Never commit, tag, push, publish, install hooks or change remote services unless
-  explicitly requested. Do not run real Codex reviews without an explicit request.
+- Commit and push completed coherent changes automatically as described below.
+  Never tag, publish, install hooks or change other remote services unless explicitly
+  requested. Do not run real Codex reviews without an explicit request.
 
 ## Code discovery
 
@@ -47,4 +48,10 @@ paths, credentials or per-developer reports to versioned files.
 - Header: `type(scope): summary` (scope optional; breaking-change `!` supported).
   See CONTRIBUTING.md. Install the local `commit-msg` hook with
   `sh scripts/setup-git-hooks.sh`; never bypass it to force an invalid message.
-- The existing requirement for explicit authorization to commit/push still applies.
+- After completing each coherent change, run the applicable validation, commit it
+  on `main` using the allowed commit types, and push `main` to `origin` automatically.
+  This applies to documentation-only changes too; no further approval is needed.
+- Stage only the files belonging to that change. Preserve unrelated user edits,
+  keep commits focused, and never bypass hooks or force-push to complete this flow.
+- Report the commit and push result. If validation, commit or push fails, retain
+  the work and report the failure; do not claim that an unpushed change is pushed.

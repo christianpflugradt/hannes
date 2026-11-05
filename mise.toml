@@ -1,0 +1,53 @@
+[tools]
+rust = { version = "stable", profile = "minimal", components = "rustfmt,clippy" }
+python = "3.13"
+
+[tasks.build]
+description = "Build the native release executable"
+run = "cargo build --release --locked"
+
+[tasks.install]
+description = "Build and install Hannes to ~/.local/bin, replacing an existing binary"
+run = 'cargo install --path . --locked --force --root "${CARGO_INSTALL_ROOT:-$HOME/.local}"'
+run_windows = "cargo install --path . --locked --force"
+
+[tasks."hooks:install"]
+description = "Install the local Angular commit-message hook"
+run = "sh scripts/setup-git-hooks.sh"
+
+[tasks."hooks:test"]
+description = "Test accepted/rejected commit messages in an isolated Git repository"
+run = "python3 scripts/test-commit-hook.py"
+run_windows = "python scripts/test-commit-hook.py"
+
+[tasks.fmt]
+description = "Format Rust source"
+run = "cargo fmt --all"
+
+[tasks."fmt:check"]
+description = "Check Rust formatting"
+run = "cargo fmt --all -- --check"
+
+[tasks.lint]
+description = "Run Clippy with warnings treated as errors"
+run = "cargo clippy --all-targets --locked -- -D warnings"
+
+[tasks.test]
+description = "Run credential-free tests"
+run = "cargo test --locked"
+
+[tasks.smoke]
+description = "Smoke-test the release CLI in an isolated Git repository"
+depends = ["build"]
+run = "python3 scripts/smoke.py target/release/hannes"
+run_windows = "python scripts/smoke.py target/release/hannes.exe"
+
+[tasks.check]
+description = "Run formatting, Clippy, tests, release build and smoke test"
+run = [
+  { task = "hooks:test" },
+  { task = "fmt:check" },
+  { task = "lint" },
+  { task = "test" },
+  { task = "smoke" },
+]

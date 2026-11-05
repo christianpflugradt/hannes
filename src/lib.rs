@@ -1,0 +1,236 @@
+pub mod checks;
+pub mod cli;
+pub mod config;
+pub mod git_snapshot;
+pub mod mood;
+pub mod process;
+pub mod provider;
+pub mod quotes;
+pub mod report;
+pub mod review_context;
+pub mod reviews;
+pub mod terminal;
+pub mod uninstall;
+
+use anyhow::Result;
+use report::{Item, Report, Status};
+use std::path::Path;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum VerificationMode {
+    AllRules,
+    ChecksOnly,
+}
+
+pub enum Progress<'a> {
+    Plan {
+        total: usize,
+    },
+    Phase(&'static str),
+    RuleStarted {
+        number: usize,
+        total: usize,
+        kind: &'static str,
+        id: &'a str,
+        description: &'a str,
+    },
+    RuleFinished {
+        number: usize,
+        total: usize,
+        item: &'a Item,
+    },
+    ReviewBatch {
+        count: usize,
+        timeout_seconds: u64,
+    },
+}
+
+pub fn verify(root: &Path, provider: &dyn provider::Provider) -> Result<Report> {
+    verify_project(config::load(root)?, provider)
+}
+
+/// Verify an already validated project without loading configuration twice.
+pub fn verify_project(
+    project: config::Project,
+    provider: &dyn provider::Provider,
+) -> Result<Report> {
+    verify_project_with_progress(project, provider, &mut |_| {})
+}
+
+/// Report execution events immediately, without coupling verification to terminal I/O.
+pub fn verify_project_with_progress(
+    project: config::Project,
+    provider: &dyn provider::Provider,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Report> {
+    verify_project_with_mode(project, provider, VerificationMode::AllRules, progress)
+}
+
+pub fn verify_project_with_mode(
+    project: config::Project,
+    provider: &dyn provider::Provider,
+    mode: VerificationMode,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Report> {
+    let checks_only = mode == VerificationMode::ChecksOnly;
+    let check_count = project.checks.iter().filter(|c| c.enabled).count();
+    let active: Vec<_> = project
+        .reviews
+        .iter()
+        .filter(|r| r.enabled && !checks_only)
+        .collect();
+    let total = check_count + active.len();
+    progress(Progress::Plan { total });
+    if checks_only {
+        progress(Progress::Phase(
+            "Geiz-ist-geil: Nur Checks; Reviews ausgelassen, kein LLM-Aufruf.",
+        ));
+        if check_count == 0 {
+            progress(Progress::Phase("Keine aktiven Checks konfiguriert."));
+        }
+    }
+    progress(Progress::Phase("Arbeitsdateien erfassen …"));
+    let initial = git_snapshot::capture(&project.root);
+    let mut items = Vec::new();
+    let mut provider_usage = None;
+    let snapshot = match initial {
+        Ok(s) => s,
+        Err(error) => {
+            items.push(Item::simple(
+                "hannes-snapshot",
+                "integrity",
+                Status::Error,
+                format!("{error:#}"),
+            ));
+            git_snapshot::Snapshot {
+                head: None,
+                fingerprint: String::new(),
+                files: Default::default(),
+                complete: false,
+                limitations: vec![format!("{error:#}")],
+            }
+        }
+    };
+    for (offset, check) in project.checks.iter().filter(|c| c.enabled).enumerate() {
+        let number = offset + 1;
+        progress(Progress::RuleStarted {
+            number,
+            total,
+            kind: "check",
+            id: &check.id,
+            description: &check.description,
+        });
+        let item = checks::execute(&project, check);
+        progress(Progress::RuleFinished {
+            number,
+            total,
+            item: &item,
+        });
+        items.push(item);
+    }
+    if !snapshot.complete && !items.iter().any(|x| x.kind == "integrity") {
+        items.push(Item::simple(
+            "hannes-snapshot",
+            "integrity",
+            Status::Error,
+            "Snapshot incomplete; verification cannot establish coverage".into(),
+        ));
+    }
+    if !active.is_empty() {
+        if items.iter().all(|i| i.status == Status::Pass) {
+            progress(Progress::Phase(
+                "Arbeitsdateien vor dem Codex-Aufruf vergleichen …",
+            ));
+            if let Some(error) = stability_error(&project.root, &snapshot) {
+                items.push(error);
+            }
+        }
+        if items.iter().all(|i| i.status == Status::Pass) {
+            progress(Progress::ReviewBatch {
+                count: active.len(),
+                timeout_seconds: project.provider.timeout_seconds,
+            });
+            for (offset, review) in active.iter().enumerate() {
+                progress(Progress::RuleStarted {
+                    number: check_count + offset + 1,
+                    total,
+                    kind: "review",
+                    id: &review.id,
+                    description: &review.description,
+                });
+            }
+            let (results, usage) =
+                reviews::execute_with_usage(&project, &active, &snapshot, provider);
+            provider_usage = usage;
+            for (offset, item) in results.iter().enumerate() {
+                progress(Progress::RuleFinished {
+                    number: check_count + offset + 1,
+                    total,
+                    item,
+                });
+            }
+            items.extend(results);
+        } else {
+            for (offset, review) in active.iter().enumerate() {
+                let item = Item::simple(
+                    &review.id,
+                    "review",
+                    Status::NotRun,
+                    "Deterministic checks or snapshot failed; no provider call made".into(),
+                );
+                progress(Progress::RuleFinished {
+                    number: check_count + offset + 1,
+                    total,
+                    item: &item,
+                });
+                items.push(item);
+            }
+        }
+    }
+    if snapshot.complete && !items.iter().any(|i| i.id == "hannes-tree-stability") {
+        progress(Progress::Phase(
+            "Abschließenden Stand der Arbeitsdateien prüfen …",
+        ));
+        if let Some(error) = stability_error(&project.root, &snapshot) {
+            items.push(error);
+        }
+    }
+    let report = Report {
+        schema_version: 1,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        repository: project.root.to_string_lossy().into_owned(),
+        project: project.config.project,
+        provider: project.provider.provider,
+        overall: report::overall(&items),
+        git_summary: format!(
+            "{} working files fingerprinted; HEAD {}; {}",
+            snapshot.files.len(),
+            snapshot.head.as_deref().unwrap_or("unborn"),
+            git_snapshot::working_summary(&project.root)
+                .unwrap_or_else(|e| format!("Git status summary unavailable: {e}"))
+        ),
+        snapshot,
+        results: items,
+        max_display_files: project.config.max_display_files,
+        token_usage: provider_usage.and_then(report::TokenUsage::total),
+        provider_usage,
+        checks_only,
+    };
+    progress(Progress::Phase("Report speichern …"));
+    report::write(&project.root, &report)?;
+    Ok(report)
+}
+
+fn stability_error(root: &Path, snapshot: &git_snapshot::Snapshot) -> Option<Item> {
+    let reason = match git_snapshot::capture(root) {
+        Ok(end) if git_snapshot::compare(snapshot, &end, 5).state == "CURRENT" => return None,
+        Ok(_) => "Working files changed during verification or snapshot is incomplete; rerun after changes stop".into(),
+        Err(error) => format!("Cannot confirm final snapshot: {error:#}"),
+    };
+    Some(Item::simple(
+        "hannes-tree-stability",
+        "integrity",
+        Status::Error,
+        reason,
+    ))
+}

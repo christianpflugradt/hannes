@@ -1,0 +1,25 @@
+#!/bin/sh
+# Validate the final message before Git creates the commit. No runtime dependencies.
+set -eu
+if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+    printf '%s\n' 'Usage: commit-msg <message-file>' >&2
+    exit 1
+fi
+if ! LC_ALL=C awk '
+    NR == 1 {
+        sub(/\r$/, "")
+        if ($0 ~ /^(build|ci|docs|feat|fix|perf|refactor|test)(\([a-z0-9][a-z0-9._\/-]*\))?!?: [^[:space:][:cntrl:]][^[:cntrl:]]*$/ && $0 !~ /[[:space:]]$/) exit 0
+        exit 1
+    }
+    END { if (NR == 0) exit 1 }
+' "$1"; then
+    cat >&2 <<'MESSAGE'
+Invalid commit message.
+Use: type(scope): summary
+Allowed types: build, ci, docs, feat, fix, perf, refactor, test
+Scope is optional; use lowercase letters, digits, dots, underscores, / or -.
+Use a nonempty summary without leading/trailing whitespace. Breaking-change ! is optional.
+Example: feat(reviews): add focused context selection
+MESSAGE
+    exit 1
+fi

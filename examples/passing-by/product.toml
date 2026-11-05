@@ -1,0 +1,4 @@
+id = "passing-by-product"
+description = "Compare app behavior with documented expectations"
+enabled = false
+instructions = "product.md"

@@ -1,0 +1,4 @@
+id = "product-consistency"
+description = "Evaluate behavior against documented expectations"
+enabled = false
+instructions = "product-consistency.md"

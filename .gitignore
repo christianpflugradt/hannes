@@ -1,0 +1,25 @@
+/target/
+/dist/
+.DS_Store
+.Hannes/reports/*
+!.Hannes/reports/.gitignore
+
+# Local codebase-memory MCP setup and graph data
+/.codex/
+/.codebase-memory/
+/.codebase-memory-local/
+
+# Developer overrides and credentials
+/mise.local.toml
+/mise.*.local.toml
+.env
+.env.*
+!.env.example
+
+# Python helper artifacts and editor/OS files
+__pycache__/
+*.py[cod]
+*.swp
+*.swo
+*~
+Thumbs.db

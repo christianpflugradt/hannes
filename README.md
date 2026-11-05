@@ -75,6 +75,7 @@ see [Contributing](CONTRIBUTING.md#commits).
 ## More
 
 [Usage and Git hook](docs/usage.md) · [Configuration](docs/configuration.md) ·
+[Planned work](docs/todo/README.md) ·
 [Design and limits](docs/design.md) · [Passing By example](examples/passing-by/README.md) ·
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Releasing](docs/releasing.md)
 

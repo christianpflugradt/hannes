@@ -1,0 +1,48 @@
+# Rule and review roadmap
+
+These TODOs describe planned work, not available CLI features. Implement them in
+the order below, one coherent, validated change at a time. All five items remain
+open; writing a specification does not complete an implementation.
+
+| Order | TODO | Status | Depends on |
+| --- | --- | --- | --- |
+| 1 | [Profiles and execution plans](01-profiles-and-plans.md) | TODO; detailed specification exists | — |
+| 2 | [Per-review MCP permissions and sessions](02-review-mcp-and-sessions.md) | TODO | 1 |
+| 3 | [Inputs and review scope](03-inputs-and-review-scope.md) | TODO | 1, 2 |
+| 4 | [Budgets and gate reports](04-budgets-and-gate-reports.md) | TODO | 1–3 |
+| 5 | [Measure and decide result caching](05-cache-decision.md) | TODO; decision task | 1–4 |
+
+## Agreed decisions
+
+- Checks are deterministic and use no LLM provider. Reviews produce structured
+  LLM verdicts. Both are rules. Profiles select rules for a particular invocation.
+- Version 1 retains its behavior. New configuration needs an explicit version
+  change; unsupported fields and capabilities fail clearly, never silently degrade.
+- In version 2, omitted review MCP permissions mean **no MCPs**. Review permissions
+  must be a subset of the provider allow list. An explicit all-provider selection
+  is supported; it never includes unrelated servers from the user's Codex setup.
+- Reviews default to snapshot scope. Change reviews require an explicit diff
+  base in the selected profile, including whether to compare directly or against
+  a merge-base. No inferred standard branch or silent HEAD fallback.
+- Worktree, index and commit are different inputs. A PASS applies only to the
+  selected rules, scope and recorded input; it does not prove arbitrary commits
+  or deployment artifacts satisfy policy.
+- Checks run before reviews. Checks-only execution never starts provider
+  discovery, a model or MCP servers. No paid calls in automated tests.
+- Compact output keeps verdicts and short AI summaries; full evidence belongs in
+  saved details. Usage is measured per actual model call, never per duplicated row.
+- No automatic repairs, retries, hook installation or credential copying. Each
+  implementation updates its TODO status, documentation and acceptance tests,
+  then is committed and pushed under the repository's Git policy.
+
+## Completion tracking
+
+Mark an item done only after implementation, relevant tests, documentation and
+commit/push are complete. Record the implementing commit(s) in that item's file.
+For item 5, a documented decision to defer caching is a valid completion; writing
+an unmeasured cache implementation is not required.
+
+The [version-1 configuration reference](../configuration.md) describes current
+behavior. The [profile specification](../profiles-and-plans.md) contains the
+detailed contract for item 1; later TODOs extend it without pretending those
+extensions already exist.

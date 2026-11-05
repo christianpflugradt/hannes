@@ -5,6 +5,8 @@ Status: implementation-ready specification, v0.1. Language: English for source, 
 Planned extension: [rule profiles and execution plans](docs/profiles-and-plans.md)
 specifies a proposed version-2 contract. It is not implemented and does not change
 the version-1 behavior described here.
+The [ordered TODO roadmap](docs/todo/README.md) tracks all five planned steps;
+none is implemented yet.
 
 ## 1. Vision and motivation
 

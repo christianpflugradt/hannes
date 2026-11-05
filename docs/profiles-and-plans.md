@@ -4,6 +4,9 @@ Status: proposed configuration version 2; not implemented. Version 1 remains the
 current contract in [configuration.md](configuration.md). Do not copy these new
 fields into a version-1 project: current Hannes rejects them.
 
+Implementation tracking: [TODO 1](todo/01-profiles-and-plans.md). The ordered
+[roadmap](todo/README.md) records subsequent work and agreed decisions.
+
 This specification defines selection and planning before adding more provider
 features. Checks remain deterministic processes; reviews remain LLM requests with
 structured results. Both are rules. A profile selects rules; it neither defines

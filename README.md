@@ -13,6 +13,21 @@
 verification: deterministic checks first, optional Codex reviews afterwards,
 and an auditable PASS/FAIL/ERROR report.
 
+## Download
+
+[GitHub Releases](https://github.com/christianpflugradt/hannes/releases) provide
+native archives for **macOS Apple Silicon**, **macOS Intel** and **Linux x64**.
+Choose the matching target, verify its SHA-256 checksum, extract it and install:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+install -m 755 hannes-vVERSION-TARGET/hannes "$HOME/.local/bin/hannes"
+```
+
+Replace `VERSION`/`TARGET` with the downloaded archive's values and put
+`~/.local/bin` on PATH. Git and optional Codex CLI remain external dependencies.
+See [release details](docs/releasing.md) for platform limits and verification.
+
 ## Build locally
 
 You need **Git**, **stable Rust with Cargo** (edition 2024; Rust 1.85+), and a
@@ -27,8 +42,8 @@ cargo build --release --locked
 The executable is `target/release/hannes` (`hannes.exe` on Windows).
 To install it on your Cargo PATH: `cargo install --path . --locked`.
 
-Optional [mise](https://mise.jdx.dev/) setup installs Rust with rustfmt/Clippy and
-Python 3.13 for developer scripts:
+Optional [mise](https://mise.jdx.dev/) setup installs Rust with rustfmt/Clippy,
+Python 3.13 for developer scripts and Node 24 for release tooling:
 
 ```sh
 mise trust
@@ -46,6 +61,8 @@ Override the prefix with `CARGO_INSTALL_ROOT=/your/prefix mise run install`
 
 Python is only needed for smoke tests and release scripts, not for the CLI.
 Codex CLI with an existing `codex login` is only needed for enabled LLM reviews.
+Node.js/npm are development-only dependencies for Semantic Release; they are not
+needed for local Rust builds or running the CLI.
 
 ## Use
 
@@ -354,14 +371,14 @@ Released under the [Unlicense](LICENSE).
 
 ## Frequently Asked Questions
 
-### Was unterscheidet Hannes von einem Harness?
+### What is the difference between Hannes and a harness?
 
-Das R.
+The R.
 
-### Ist Hannes eine künstliche Intelligenz?
+### Is Hannes an artificial intelligence?
 
-Nein. Künstliche Intelligenz gibt es schon genug. Hannes ist eine künstliche Emotionalität.
+No. There is enough artificial intelligence already. Hannes is artificial emotionality.
 
-### Gibt es Hannes auch für Windows?
+### Is Hannes available for Windows?
 
-Ich verstehe die Frage nicht.
+I don't understand the question.

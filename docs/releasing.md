@@ -1,37 +1,125 @@
-# Publishing the first release
+# Releases and pipeline quality
 
-Nothing in local initialization or development creates remote services or commits.
-Review and commit the source yourself, create an empty GitHub repository, and add
-its remote when you are ready. Do not include `.codex/`, `.codebase-memory-local/`
-or reports; the repository ignore rules exclude these local development files.
+Releases are started manually from **Actions → Release → Run workflow → main**,
+following the same manual trigger as Passing By. No hand-written version tag is
+needed. CI runs automatically on pushes to main and pull requests; release uses
+the same reusable quality workflow before publishing.
 
-After pushing reviewed source and confirming CI is green, verify the package
-version in Cargo.toml matches the intended tag. The release workflow checks this.
-Then explicitly publish the tag yourself:
+## Version policy
+
+Semantic Release determines the next version from commits since the last `v*`
+release tag, then generates release notes and updates `CHANGELOG.md`:
+
+| Commit | Release |
+| --- | --- |
+| `feat` | Minor |
+| `fix`, `perf` | Patch |
+| Any allowed type with `!` or a `BREAKING CHANGE:` footer | Major |
+| `build`, `ci`, `docs`, `refactor`, `test` without a breaking change | None |
+
+The commit types remain Angular's eight allowed types; the Conventional Commits
+parser also recognizes the documented breaking `!` syntax. The local hook and CI
+reject other types. CI validates PR commit messages and the PR title used for a
+squash merge. Use squash/rebase merging with conventional messages; default merge
+commit messages do not satisfy this project's policy.
+Push/PR checks validate the proposed commit range; manual releases without a
+base validate the selected tip, not legacy commit messages from before this policy.
+
+Without a previous release tag, Semantic Release starts at **1.0.0**, independent
+of the development version currently in Cargo.toml. If no release-worthy commits
+exist, the release workflow exits without building or publishing a release.
+Node 24.15+ (24.x) and `npm ci --ignore-scripts` are needed only for release tooling,
+not to build or run Hannes. Dependencies are locked in `package-lock.json`.
+
+## Release sequence
+
+1. A dry run on main calculates the proposed version. Prepare/publish plugins do
+   not run; no tag, commit, changelog update or release is created at this stage.
+2. The quality workflow validates release tooling, dependencies and native builds.
+   Each native runner stamps Cargo.toml/Cargo.lock with that version, runs
+   format/Clippy/tests, builds the target and smoke-tests the actual executable.
+3. Packaging verifies `hannes --version` matches the proposed version. It archives
+   the tested executable, README and Unlicense, and records hashes, target and
+   source commit as internal artifact metadata.
+4. Only after every quality job passes, publish downloads the three archives,
+   calculates `SHA256SUMS`, and verifies completeness, hashes, permissions,
+   documentation, source commit and the planned version before creating a tag.
+5. Semantic Release updates Cargo.toml/Cargo.lock and CHANGELOG.md, commits them as
+   `build(release): VERSION [skip ci]`, tags the release and publishes the archives,
+   checksums, README and LICENSE to GitHub Releases. Nothing is published to npm
+   or crates.io. Issue/PR comments and release labels are disabled.
+
+If main advanced while building, publication is refused; rerun on its latest
+commit. Do not push new work during publication. Ordinary Git pushes reject a
+conflicting remote branch update; there is no force push. Release operations are
+not atomic: a network/API failure after tagging can leave a tag or partially
+uploaded release. Inspect the workflow log and remote state before retrying;
+never assume a failed run published nothing or delete release tags blindly.
+Pull main after a successful release to obtain its generated version commit.
+
+## Native downloads
+
+| Platform | Rust target | Archive |
+| --- | --- | --- |
+| macOS Apple Silicon | `aarch64-apple-darwin` | `hannes-vVERSION-aarch64-apple-darwin.tar.gz` |
+| macOS Intel | `x86_64-apple-darwin` | `hannes-vVERSION-x86_64-apple-darwin.tar.gz` |
+| Linux x64 (GNU/glibc) | `x86_64-unknown-linux-gnu` | `hannes-vVERSION-x86_64-unknown-linux-gnu.tar.gz` |
+
+Runners are `macos-15`, `macos-15-intel` and `ubuntu-24.04` respectively. Windows
+builds/releases are intentionally excluded. Linux is built on Ubuntu 24.04; this
+is not a static musl binary or a promise of compatibility with older glibc systems.
+Verify downloads with `shasum -a 256 -c SHA256SUMS` on macOS or
+`sha256sum -c SHA256SUMS` on Linux (select the downloaded archive's checksum line
+if downloading only one platform). Checksums verify integrity, not signed identity.
+No code signing, macOS notarization or auto-update mechanism is included.
+Native downloads still need Git and, for enabled reviews, Codex CLI/login.
+
+## Quality gates
+
+- All three native hosts: rustfmt, Clippy with warnings denied, unit/acceptance
+  tests, optimized native build and real CLI smoke test. Tests use fake providers,
+  never real Codex, credentials or paid APIs.
+- Linux: compile-check all Rust targets in the package with the declared minimum
+  Rust 1.85, test the Git commit hook, validate commit messages and squash title.
+- Workflow syntax/expressions: pinned actionlint. Release rules, breaking-change
+  notes, version stamping and archive-integrity checks: credential-free tests.
+- Dependency audits: cargo-audit checks Cargo.lock against RustSec; npm audit
+  blocks high/critical release-tooling advisories. Moderate npm advisories remain
+  visible but do not block. Advisory feeds require network access; unavailable
+  audits fail the job rather than silently pass.
+- Monthly Dependabot updates cover Cargo, npm and GitHub Actions. Action references
+  use full commit SHAs; runtime/tool versions and dependency updates are reviewed.
+  Dependency-bot commit prefixes use `build`, including the repository's Renovate
+  configuration, to satisfy the same commit policy.
+
+## Permissions and local checks
+
+Normal CI and native builds have read-only repository access and checkout never
+persists credentials. Only release planning/publishing request `contents: write`:
+Semantic Release verifies Git push permission even in a dry run. The job-scoped
+`GITHUB_TOKEN` suffices when repository rules permit release tags and the generated
+main-branch commit. No personal login credentials or Codex secrets belong in CI.
+
+Protected branches/rulesets may forbid the generated release commit. Configure an
+approved release identity (typically a GitHub App) before using this workflow in
+such a repository; do not disable branch protection or bypass required checks.
+This setup does not create an App or change repository rules automatically.
+
+Run locally before committing workflow/tooling changes:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+npm ci --ignore-scripts
+npm test
+python3 scripts/test-release.py
+python3 scripts/test-commit-hook.py
+mise run check
 ```
 
-The tag workflow builds and tests native executables on `macos-15` (ARM64),
-`macos-15-intel` (x64), `ubuntu-24.04` (x64 GNU/Linux) and `windows-2025` (x64 MSVC).
-These labels follow GitHub's [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
-Each archive is named with its Rust target triple and includes README and LICENSE.
-One SHA256SUMS file covers all archives; standalone README/LICENSE are also attached.
-Verify downloaded archive hashes using `shasum -a 256` or `sha256sum` (PowerShell:
-`Get-FileHash -Algorithm SHA256`). This verifies integrity, not a signed identity.
+The pipeline also runs actionlint, dependency audits and the minimum-Rust check.
+Do not run `npm run release` locally as a test: it is a publishing command. Local
+validation cannot certify other hosted platforms; inspect all GitHub jobs before
+using a release.
 
-CI runs format, Clippy and tests on the same host matrix, without AI credentials.
-The release job is the only job granted `contents: write`; build jobs are read-only
-and checkout does not persist credentials. Actions are pinned to full commit SHAs
-from their stable v4 tags. Update pins deliberately. Release creation uses GitHub's
-preinstalled `gh` CLI and the scoped job token. No separate release service needed.
-Tag values enter shell commands through environment variables, not interpolation
-into shell code. Existing releases are not overwritten automatically.
-
-No hosted workflows have been run as part of local implementation. The macOS
-ARM64 build is verified locally; the other platforms are configured for hosted
-verification. Downloaded native binaries still require Git and, for active reviews,
-a compatible Codex CLI with local authentication. No code signing/notarization,
-package-manager publication or auto-update mechanism is included.
+References: [Semantic Release configuration](https://semantic-release.gitbook.io/semantic-release/usage/configuration),
+[commit analysis](https://github.com/semantic-release/commit-analyzer),
+[GitHub runner images](https://github.com/actions/runner-images).

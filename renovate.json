@@ -1,5 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "semanticCommits": "enabled",
+  "semanticCommitType": "build",
   "extends": [
     "config:best-practices"
   ]

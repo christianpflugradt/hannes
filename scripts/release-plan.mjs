@@ -1,0 +1,16 @@
+// A semantic-release dry run: no prepare hooks, tags, commits or publication.
+import { appendFileSync } from "node:fs";
+import semanticRelease from "semantic-release";
+import config from "../release.config.mjs";
+
+if (!process.env.GITHUB_OUTPUT || process.env.GITHUB_REF !== "refs/heads/main") {
+  throw new Error("Release planning is restricted to the main-branch workflow.");
+}
+const result = await semanticRelease({
+  ...config,
+  dryRun: true,
+  // Planning needs only analysis/notes, never GitHub mutation or artifact plugins.
+  plugins: config.plugins.slice(0, 2),
+});
+appendFileSync(process.env.GITHUB_OUTPUT,
+  `release=${Boolean(result)}\nversion=${result ? result.nextRelease.version : ""}\n`);

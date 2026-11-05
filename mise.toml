@@ -1,6 +1,7 @@
 [tools]
 rust = { version = "stable", profile = "minimal", components = "rustfmt,clippy" }
 python = "3.13"
+node = "24"
 
 [tasks.build]
 description = "Build the native release executable"

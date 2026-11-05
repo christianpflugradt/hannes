@@ -1,0 +1,129 @@
+name: Quality
+
+on:
+  workflow_call:
+    inputs:
+      release-version:
+        description: Optional version to stamp, test and package for a release
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  tooling:
+    name: Workflow and release tooling
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Validate commits and PR squash title
+        env:
+          COMMIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 scripts/check-commits.py
+      - name: Test commit-message policy
+        run: python3 scripts/test-commit-hook.py
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - name: Test release rules and artifact verification
+        run: |
+          npm test
+          python3 scripts/test-release.py
+      - name: Audit release dependencies
+        run: npm audit --audit-level=high
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: stable
+          cache: false
+      - name: Validate workflow syntax and expressions
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" -color
+
+  rust-audit:
+    name: Rust dependency audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo +stable install cargo-audit --version 0.22.2 --locked
+      - run: cargo +stable audit
+
+  msrv:
+    name: Minimum Rust 1.85
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.85.0 --profile minimal
+      - run: cargo +1.85.0 check --all-targets --locked
+
+  native:
+    name: Native / ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Stamp planned release version
+        if: inputs.release-version != ''
+        env:
+          RELEASE_VERSION: ${{ inputs.release-version }}
+        run: python3 scripts/set-release-version.py "$RELEASE_VERSION"
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+      - run: rustup target add --toolchain stable ${{ matrix.target }}
+      - name: Check formatting
+        run: cargo +stable fmt --all -- --check
+      - name: Lint all targets
+        run: cargo +stable clippy --all-targets --locked -- -D warnings
+      - name: Unit and acceptance tests (no Codex)
+        run: cargo +stable test --locked
+      - name: Build native release executable
+        run: cargo +stable build --release --locked --target ${{ matrix.target }}
+      - name: Smoke-test native executable
+        run: python3 scripts/smoke.py target/${{ matrix.target }}/release/hannes
+      - name: Package tested release executable
+        if: inputs.release-version != ''
+        env:
+          RELEASE_TAG: v${{ inputs.release-version }}
+          BUILD_TARGET: ${{ matrix.target }}
+        run: python3 scripts/package-release.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.release-version != ''
+        with:
+          name: hannes-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7

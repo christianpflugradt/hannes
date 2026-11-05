@@ -58,3 +58,8 @@ Examples: `feat(reviews): add scoped context`, `fix(cli): preserve report output
 In your PR, describe the problem, resulting behavior and actual validation.
 Contributions use the project's [Unlicense](LICENSE). See
 [release instructions](docs/releasing.md) for packaging and publishing.
+
+For release tooling changes, use Node 24.15+ (24.x), run `npm ci --ignore-scripts`,
+`npm test` and `python3 scripts/test-release.py`. CI also validates all proposed
+commit messages and the PR's squash title. Releases are manually started on main;
+Semantic Release handles versions, tags, release notes and three native archives.

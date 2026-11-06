@@ -83,6 +83,11 @@ fn contract<T: Serialize + DeserializeOwned>(sample: &T, text: &str, prefix: &st
                     _ => Some(default.to_string()),
                 };
                 if let Some(expected) = expected {
+                    let expected = if expected == "Codex default" {
+                        expected
+                    } else {
+                        format!("`{expected}`")
+                    };
                     assert!(
                         cell.contains(&expected),
                         "wrong default for {label}: expected {expected}, found {cell}"
@@ -157,6 +162,7 @@ fn documentation_contract_detects_missing_fields_and_wrong_defaults() {
             .collect::<Vec<_>>()
             .join("\n"),
         original.replace("Optional; `[]`", "Optional; `[\"all\"]`"),
+        original.replace("Optional; `2000`", "Optional; `20000`"),
         original.replace(
             "| `review_profile.tool_output_token_limit` |",
             "| `removed` |",
@@ -270,6 +276,14 @@ fn readme_examples_validate_and_plan_without_ai_or_check_execution() {
 fn documented_bounds_and_provider_scaffold_match_the_implementation() {
     use hannes::limits::*;
     let text = README.split_whitespace().collect::<Vec<_>>().join(" ");
+    let digits = MAX_SNAPSHOT_FILES.to_string();
+    let file_count = digits
+        .as_bytes()
+        .rchunks(3)
+        .rev()
+        .map(|chunk| std::str::from_utf8(chunk).unwrap())
+        .collect::<Vec<_>>()
+        .join(",");
     let assertions = [
         format!("1..{MAX_DISPLAY_FILES}"),
         format!("1..{MAX_TIMEOUT_SECONDS}"),
@@ -307,7 +321,7 @@ fn documented_bounds_and_provider_scaffold_match_the_implementation() {
             MAX_SNAPSHOT_FILE_BYTES / 1024 / 1024,
             MAX_SNAPSHOT_BYTES / 1024 / 1024
         ),
-        format!("{},000 paths", MAX_SNAPSHOT_FILES / 1000),
+        format!("{file_count} paths"),
         format!("nesting limited to {MAX_CONFIG_DEPTH} levels"),
         format!(
             "Git file enumeration capped at {} KiB",

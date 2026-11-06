@@ -1,3 +1,13 @@
+## [0.5.0](https://github.com/christianpflugradt/hannes/compare/v0.4.0...v0.5.0) (2026-11-06)
+
+### Features
+
+* **cli:** add explicit auto-approval for reconciliation ([3cdd489](https://github.com/christianpflugradt/hannes/commit/3cdd48936678c584c2907b382b31c8958c426523))
+
+### Maintenance
+
+* **deps:** update rust crate toml to v1.2.1 ([#17](https://github.com/christianpflugradt/hannes/issues/17)) ([3372e29](https://github.com/christianpflugradt/hannes/commit/3372e293f7a2cc3494f7058f0c44a3bda7858604))
+
 ## [0.4.0](https://github.com/christianpflugradt/hannes/compare/v0.3.0...v0.4.0) (2026-11-06)
 
 ### ⚠ BREAKING CHANGES

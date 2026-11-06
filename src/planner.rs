@@ -91,12 +91,18 @@ pub struct PreparedPlan {
 }
 
 fn metadata_path(path: &str) -> bool {
-    if matches!(path, ".hannes/config.toml" | ".hannes/provider.toml") {
+    if [
+        crate::config::path("config.toml"),
+        crate::config::path("provider.toml"),
+    ]
+    .iter()
+    .any(|p| p == std::path::Path::new(path))
+    {
         return true;
     }
     let parts: Vec<_> = path.split('/').collect();
     parts.len() == 3
-        && parts[0] == ".hannes"
+        && parts[0] == crate::limits::CONFIG_DIRECTORY
         && matches!(parts[1], "checks" | "reviews" | "profiles")
         && parts[2].ends_with(".toml")
 }
@@ -209,8 +215,8 @@ pub fn build(
         selected_bytes: 0,
         byte_limit: review_context::MAX_CONTEXT_BYTES,
         instruction_bytes: active.iter().map(|r| r.text.len()).sum(),
-        instruction_byte_limit: 256 * 1024,
-        manifest_hint_limit: 200,
+        instruction_byte_limit: crate::limits::MAX_TOTAL_INSTRUCTION_BYTES,
+        manifest_hint_limit: crate::limits::MAX_MANIFEST_HINTS,
         orientation_diff_bytes: 0,
         orientation_diff_truncated: false,
     };

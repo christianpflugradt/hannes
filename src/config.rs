@@ -1,3 +1,4 @@
+use crate::limits::*;
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -7,8 +8,34 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-pub const MAX_METADATA: u64 = 64 * 1024;
-pub const MAX_INSTRUCTIONS: u64 = 32 * 1024;
+pub use crate::limits::{
+    MAX_INSTRUCTION_BYTES as MAX_INSTRUCTIONS, MAX_METADATA_BYTES as MAX_METADATA,
+};
+
+pub fn path(relative: impl AsRef<Path>) -> PathBuf {
+    // A trailing slash would make symlink_metadata follow a directory symlink.
+    if relative.as_ref().as_os_str().is_empty() {
+        PathBuf::from(CONFIG_DIRECTORY)
+    } else {
+        Path::new(CONFIG_DIRECTORY).join(relative)
+    }
+}
+
+impl ProviderConfig {
+    /// Explicit initialization choices; omitted optional fields still use Codex defaults.
+    pub fn scaffold() -> Self {
+        Self {
+            provider: "codex-cli".into(),
+            timeout_seconds: 180,
+            model: Some("gpt-6.1-sol".into()),
+            mcp_servers: vec![],
+            review_profile: ReviewProfile {
+                reasoning_effort: Some("medium".into()),
+                ..ReviewProfile::default()
+            },
+        }
+    }
+}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -38,7 +65,7 @@ impl Default for ReviewProfile {
     fn default() -> Self {
         Self {
             reasoning_effort: None,
-            tool_output_token_limit: 2000,
+            tool_output_token_limit: DEFAULT_TOOL_OUTPUT_TOKENS,
         }
     }
 }
@@ -127,12 +154,12 @@ impl Profile {
 fn tag(value: &str) -> Result<()> {
     ensure!(
         !value.is_empty()
-            && value.len() <= 32
+            && value.len() <= MAX_TAG_BYTES
             && value.as_bytes()[0].is_ascii_alphanumeric()
             && value
                 .bytes()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"-_".contains(&c)),
-        "invalid tag/profile ID {value:?}: use 1..32 lowercase ASCII letters, digits, - or _, starting with a letter or digit"
+        "invalid tag/profile ID {value:?}: use 1..{MAX_TAG_BYTES} lowercase ASCII letters, digits, - or _, starting with a letter or digit"
     );
     Ok(())
 }
@@ -145,7 +172,7 @@ fn unique(values: &mut [String], label: &str) -> Result<()> {
     Ok(())
 }
 fn tags(values: &mut [String]) -> Result<()> {
-    ensure!(values.len() <= 32, "at most 32 tags per rule");
+    ensure!(values.len() <= MAX_TAGS, "at most {MAX_TAGS} tags per rule");
     for value in values.iter() {
         tag(value)?;
     }
@@ -217,8 +244,8 @@ fn parse<T: serde::de::DeserializeOwned>(root: &Path, path: &Path) -> Result<T> 
 }
 fn timeout(value: u64) -> Result<()> {
     ensure!(
-        (1..=3600).contains(&value),
-        "timeout_seconds must be 1..=3600"
+        (1..=MAX_TIMEOUT_SECONDS).contains(&value),
+        "timeout_seconds must be 1..={MAX_TIMEOUT_SECONDS}"
     );
     Ok(())
 }
@@ -232,11 +259,11 @@ fn nonempty(value: &str, name: &str) -> Result<()> {
 fn identity(id: &str, description: &str, ids: &mut BTreeSet<String>) -> Result<()> {
     ensure!(
         !id.is_empty()
-            && id.len() <= 80
+            && id.len() <= MAX_ID_BYTES
             && id
                 .bytes()
                 .all(|c| c.is_ascii_alphanumeric() || b"-_".contains(&c)),
-        "invalid id {id:?}: use 1..80 ASCII letters, digits, - or _"
+        "invalid id {id:?}: use 1..{MAX_ID_BYTES} ASCII letters, digits, - or _"
     );
     ensure!(
         !id.starts_with("hannes-"),
@@ -245,17 +272,17 @@ fn identity(id: &str, description: &str, ids: &mut BTreeSet<String>) -> Result<(
     ensure!(ids.insert(id.to_owned()), "duplicate id: {id}");
     nonempty(description, "description")
 }
-fn metadata_files(root: &Path, dir: &str) -> Result<Vec<PathBuf>> {
-    let full = inside(root, Path::new(dir))?;
+fn metadata_files(root: &Path, dir: &Path) -> Result<Vec<PathBuf>> {
+    let full = inside(root, dir)?;
     let mut paths = Vec::new();
     for entry in fs::read_dir(full)? {
         let entry = entry?;
         if entry.path().extension().is_some_and(|x| x == "toml") {
-            paths.push(Path::new(dir).join(entry.file_name()));
+            paths.push(dir.join(entry.file_name()));
         }
         ensure!(
-            paths.len() <= 256,
-            "at most 256 metadata files per directory"
+            paths.len() <= MAX_RULES,
+            "at most {MAX_RULES} metadata files per directory"
         );
     }
     paths.sort();
@@ -264,7 +291,7 @@ fn metadata_files(root: &Path, dir: &str) -> Result<Vec<PathBuf>> {
 pub fn load(root: &Path) -> Result<Project> {
     let root = root.canonicalize()?;
     crate::git_snapshot::require_root(&root)?;
-    let config: Config = parse(&root, Path::new(".hannes/config.toml"))?;
+    let config: Config = parse(&root, &self::path("config.toml"))?;
     ensure!(
         matches!(config.version, 1 | 2),
         "unsupported configuration version {}",
@@ -276,10 +303,10 @@ pub fn load(root: &Path) -> Result<Project> {
     );
     nonempty(&config.project, "project")?;
     ensure!(
-        (1..=5).contains(&config.max_display_files),
-        "max_display_files must be 1..=5"
+        (1..=MAX_DISPLAY_FILES).contains(&config.max_display_files),
+        "max_display_files must be 1..={MAX_DISPLAY_FILES}"
     );
-    let provider: ProviderConfig = parse(&root, Path::new(".hannes/provider.toml"))?;
+    let provider: ProviderConfig = parse(&root, &self::path("provider.toml"))?;
     ensure!(
         provider.provider == "codex-cli",
         "unsupported provider: {}; expected codex-cli",
@@ -291,8 +318,9 @@ pub fn load(root: &Path) -> Result<Project> {
     }
     let profile = &provider.review_profile;
     ensure!(
-        (256..=16384).contains(&profile.tool_output_token_limit),
-        "tool_output_token_limit must be 256..=16384"
+        (MIN_TOOL_OUTPUT_TOKENS..=MAX_TOOL_OUTPUT_TOKENS)
+            .contains(&profile.tool_output_token_limit),
+        "tool_output_token_limit must be {MIN_TOOL_OUTPUT_TOKENS}..={MAX_TOOL_OUTPUT_TOKENS}"
     );
     if let Some(effort) = &profile.reasoning_effort {
         ensure!(
@@ -304,14 +332,14 @@ pub fn load(root: &Path) -> Result<Project> {
         );
     }
     ensure!(
-        provider.mcp_servers.len() <= 32,
-        "at most 32 allowed MCP servers"
+        provider.mcp_servers.len() <= MAX_MCP_SERVERS,
+        "at most {MAX_MCP_SERVERS} allowed MCP servers"
     );
     let mut servers = BTreeSet::new();
     for server in &provider.mcp_servers {
         nonempty(server, "MCP server name")?;
         ensure!(
-            server.len() <= 256
+            server.len() <= MAX_MCP_NAME_BYTES
                 && server
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
@@ -321,23 +349,23 @@ pub fn load(root: &Path) -> Result<Project> {
     }
     let mut ids = BTreeSet::new();
     let mut checks = Vec::new();
-    for path in metadata_files(&root, ".hannes/checks")? {
+    for path in metadata_files(&root, &self::path("checks"))? {
         let mut check: Check = parse_rule(&root, &path, config.version)?;
         (|| -> Result<()> {
             identity(&check.id, &check.description, &mut ids)?;
             tags(&mut check.tags)?;
             timeout(check.timeout_seconds)?;
             ensure!(
-                !check.command.is_empty() && check.command.len() <= 256,
-                "command must have 1..=256 argv elements"
+                !check.command.is_empty() && check.command.len() <= MAX_COMMAND_ARGS,
+                "command must have 1..={MAX_COMMAND_ARGS} argv elements"
             );
             nonempty(&check.command[0], "command executable")?;
             ensure!(
                 check
                     .command
                     .iter()
-                    .all(|s| !s.contains('\0') && s.len() <= 32768),
-                "command arguments contain NUL or exceed 32768 bytes"
+                    .all(|s| !s.contains('\0') && s.len() <= MAX_ARGUMENT_BYTES),
+                "command arguments contain NUL or exceed {MAX_ARGUMENT_BYTES} bytes"
             );
             let exe = Path::new(&check.command[0]);
             if exe.is_absolute()
@@ -362,14 +390,15 @@ pub fn load(root: &Path) -> Result<Project> {
     }
     let mut reviews = Vec::new();
     let mut instruction_bytes = 0;
-    for path in metadata_files(&root, ".hannes/reviews")? {
+    for path in metadata_files(&root, &self::path("reviews"))? {
         let mut review: Review = parse_rule(&root, &path, config.version)?;
         (|| -> Result<()> {
             identity(&review.id, &review.description, &mut ids)?;
             tags(&mut review.tags)?;
             ensure!(
-                review.files.len() <= 64 && review.context.len() <= 32,
-                "review permits at most 64 files and 32 context entries"
+                review.files.len() <= MAX_ENTRY_FILES
+                    && review.context.len() <= MAX_CONTEXT_ENTRIES,
+                "review permits at most {MAX_ENTRY_FILES} files and {MAX_CONTEXT_ENTRIES} context entries"
             );
             let mut files = BTreeSet::new();
             for file in &mut review.files {
@@ -397,8 +426,8 @@ pub fn load(root: &Path) -> Result<Project> {
                     .collect::<Vec<_>>()
                     .join("/");
                 ensure!(
-                    source.headings.len() <= 32,
-                    "at most 32 headings per context entry"
+                    source.headings.len() <= MAX_CONTEXT_HEADINGS,
+                    "at most {MAX_CONTEXT_HEADINGS} headings per context entry"
                 );
                 for heading in &source.headings {
                     nonempty(heading, "context heading")?;
@@ -410,17 +439,17 @@ pub fn load(root: &Path) -> Result<Project> {
                 p.extension().is_some_and(|s| s == "md"),
                 "instructions must reference Markdown (.md)"
             );
-            let full = inside(&root, &Path::new(".hannes/reviews").join(p))?;
+            let full = inside(&root, &self::path("reviews").join(p))?;
             ensure!(
-                full.starts_with(root.join(".hannes/reviews").canonicalize()?),
+                full.starts_with(root.join(self::path("reviews")).canonicalize()?),
                 "instructions must stay inside reviews directory"
             );
             review.text = read_bounded(&full, MAX_INSTRUCTIONS)?;
             nonempty(&review.text, "instructions")?;
             instruction_bytes += review.text.len();
             ensure!(
-                instruction_bytes <= 256 * 1024,
-                "total review instructions exceed 256 KiB"
+                instruction_bytes <= MAX_TOTAL_INSTRUCTION_BYTES,
+                "total review instructions exceed {} bytes", MAX_TOTAL_INSTRUCTION_BYTES
             );
             Ok(())
         })()
@@ -431,8 +460,8 @@ pub fn load(root: &Path) -> Result<Project> {
     reviews.sort_by(|a, b| a.id.cmp(&b.id));
     crate::review_context::collect(&root, &reviews.iter().collect::<Vec<_>>())?;
     let mut profiles = Vec::new();
-    if root.join(".hannes/profiles").symlink_metadata().is_ok() {
-        let paths = metadata_files(&root, ".hannes/profiles")?;
+    if root.join(self::path("profiles")).symlink_metadata().is_ok() {
+        let paths = metadata_files(&root, &self::path("profiles"))?;
         ensure!(
             config.version == 2 || paths.is_empty(),
             "profiles require configuration version 2"
@@ -506,13 +535,8 @@ pub fn load(root: &Path) -> Result<Project> {
 pub fn init(root: &Path) -> Result<usize> {
     let root = root.canonicalize()?;
     crate::git_snapshot::require_root(&root)?;
-    for dir in [
-        ".hannes",
-        ".hannes/checks",
-        ".hannes/reviews",
-        ".hannes/reports",
-    ] {
-        let p = root.join(dir);
+    for relative in ["", "checks", "reviews", "reports"] {
+        let p = root.join(path(relative));
         if p.symlink_metadata().is_ok() {
             ensure!(
                 !p.symlink_metadata()?.file_type().is_symlink() && p.is_dir(),
@@ -523,37 +547,49 @@ pub fn init(root: &Path) -> Result<usize> {
             fs::create_dir(&p)?;
         }
     }
-    let project = root.file_name().unwrap_or_default().to_string_lossy();
-    let name = toml::Value::String(project.into_owned()).to_string();
-    let config = format!("version = 1\nproject = {name}\nmax_display_files = 5\n");
+    let project = root
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    let config = Config {
+        version: 1,
+        project,
+        max_display_files: MAX_DISPLAY_FILES,
+        default_profile: None,
+    };
+    let check = |id: &str, description: &str, enabled: bool, argument: &str| Check {
+        id: id.into(),
+        description: description.into(),
+        enabled,
+        command: vec!["git".into(), argument.into()],
+        working_directory: default_directory(),
+        timeout_seconds: 30,
+        tags: vec![],
+    };
+    let review = Review {
+        id: "product-consistency".into(),
+        description: "Evaluate behavior against documented expectations".into(),
+        enabled: false,
+        instructions: "product-consistency.md".into(),
+        files: vec![],
+        context: vec![],
+        tags: vec![],
+        text: String::new(),
+    };
     let files = [
-        ("config.toml", config.as_str()),
-        (
-            "provider.toml",
-            "provider = \"codex-cli\"\ntimeout_seconds = 180\nmodel = \"gpt-6.1-sol\"\nmcp_servers = []\n\n[review_profile]\nreasoning_effort = \"medium\"\ntool_output_token_limit = 2000\n",
-        ),
-        (
-            "checks/always-ok.toml",
-            "id = \"always-ok\"\ndescription = \"Example deterministic pass\"\nenabled = true\ncommand = [\"git\", \"--version\"]\nworking_directory = \".\"\ntimeout_seconds = 30\n",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "id = \"deliberately-failing\"\ndescription = \"Disabled example demonstrating failure\"\nenabled = false\ncommand = [\"git\", \"definitely-not-a-subcommand\"]\ntimeout_seconds = 30\n",
-        ),
-        (
-            "reviews/product-consistency.toml",
-            "id = \"product-consistency\"\ndescription = \"Evaluate behavior against documented expectations\"\nenabled = false\ninstructions = \"product-consistency.md\"\n",
-        ),
-        (
-            "reviews/product-consistency.md",
-            "Evaluate the current working files against expectations explicitly documented in this project. Inspect relevant changed code and documentation. Do not invent requirements. Cite concrete file paths and line numbers. State uncertainty as ERROR when necessary evidence is unavailable. Report FAIL for a grounded contradiction, PASS only with grounded reasons. Customize this guidance before enabling.\n",
-        ),
-        ("reports/.gitignore", "*\n!.gitignore\n"),
-        ("README.md", include_str!("../docs/configuration.md")),
+        ("config.toml", scaffold(&config)?),
+        ("provider.toml", scaffold(&ProviderConfig::scaffold())?),
+        ("checks/always-ok.toml", scaffold(&check("always-ok", "Example deterministic pass", true, "--version"))?),
+        ("checks/deliberately-failing.toml", scaffold(&check("deliberately-failing", "Disabled example demonstrating failure", false, "definitely-not-a-subcommand"))?),
+        ("reviews/product-consistency.toml", scaffold(&review)?),
+        ("reviews/product-consistency.md", "Evaluate the current working files against expectations explicitly documented in this project. Inspect relevant changed code and documentation. Do not invent requirements. Cite concrete file paths and line numbers. State uncertainty as ERROR when necessary evidence is unavailable. Report FAIL for a grounded contradiction, PASS only with grounded reasons. Customize this guidance before enabling.\n".into()),
+        ("reports/.gitignore", "*\n!.gitignore\n".into()),
+        ("README.md", include_str!("../docs/configuration.md").into()),
     ];
     let mut created = 0;
     for (path, content) in files {
-        let full = root.join(".hannes").join(path);
+        let full = root.join(self::path(path));
         match OpenOptions::new().write(true).create_new(true).open(&full) {
             Ok(mut f) => {
                 f.write_all(content.as_bytes())?;
@@ -564,4 +600,19 @@ pub fn init(root: &Path) -> Result<usize> {
         }
     }
     Ok(created)
+}
+
+/// Serialize real configuration types while keeping version-1 examples minimal.
+fn scaffold(value: &impl Serialize) -> Result<String> {
+    let mut table = toml::Value::try_from(value)?;
+    for key in ["tags", "files", "context"] {
+        if table
+            .get(key)
+            .and_then(toml::Value::as_array)
+            .is_some_and(Vec::is_empty)
+        {
+            table.as_table_mut().unwrap().remove(key);
+        }
+    }
+    Ok(toml::to_string(&table)?)
 }

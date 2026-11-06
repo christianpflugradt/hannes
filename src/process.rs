@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const OUTPUT_LIMIT: usize = 64 * 1024;
+pub use crate::limits::MAX_CAPTURE_BYTES as OUTPUT_LIMIT;
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Capture {

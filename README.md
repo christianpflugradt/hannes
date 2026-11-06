@@ -633,6 +633,8 @@ These limits are built in, not additional configuration fields:
 | Snapshot | 8 MiB per file, 128 MiB total, 100,000 paths; Git file enumeration capped at 64 KiB; `.hannes` nesting limited to 16 levels. |
 | Snapshot coverage | Tracked and nonignored untracked files, plus `.hannes` even if ignored. `.git` and `.hannes/reports` are excluded. Unsupported symlinks, submodules, paths or exceeded limits prevent PASS. |
 | Input stability | Working files and HEAD must match before/after execution and before the AI call. Staging and pushed commits are not separately verified. |
+| AI response | 1 MiB final JSON document; summaries and findings have the limits described under reviews. |
+| Saved report input | 128 MiB maximum when reading a saved report. |
 | Token usage | Available counters are saved once per shared call. Optional reasoning/cache-write counters are subsets, not additions to the total. Missing telemetry remains unavailable. |
 
 Not currently supported: other AI providers, per-review model/MCP settings,
@@ -649,7 +651,7 @@ real Codex calls. The toolchain includes Rust with rustfmt/Clippy, Python 3.13
 for scripts and Node 24 for release tooling.
 
 `mise docs:check` checks documentation links, specification test references, all
-configuration fields/defaults and executable README examples without AI calls.
+configuration fields/defaults/limits and executable README examples without AI calls.
 These checks also run in `mise check` and CI.
 
 Other tasks: `format`, `format:check`, `lint`, `test`, `smoke`, `hooks:install`,

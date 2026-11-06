@@ -10,9 +10,10 @@ use std::{
     time::Duration,
 };
 
-const MAX_FILE: u64 = 8 * 1024 * 1024;
-const MAX_TOTAL: u64 = 128 * 1024 * 1024;
-const MAX_FILES: usize = 100_000;
+use crate::limits::{
+    MAX_CONFIG_DEPTH, MAX_DIFF_BYTES, MAX_SNAPSHOT_BYTES as MAX_TOTAL,
+    MAX_SNAPSHOT_FILE_BYTES as MAX_FILE, MAX_SNAPSHOT_FILES as MAX_FILES,
+};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct FileState {
@@ -65,7 +66,7 @@ pub fn require_root(root: &Path) -> Result<()> {
     Ok(())
 }
 fn excluded(path: &Path) -> bool {
-    path.starts_with(".git") || path.starts_with(".hannes/reports")
+    path.starts_with(".git") || path.starts_with(crate::config::path("reports"))
 }
 fn add_config(
     root: &Path,
@@ -77,8 +78,8 @@ fn add_config(
     if excluded(directory) {
         return Ok(());
     }
-    if depth > 16 {
-        limitations.push("configuration nesting exceeds 16".into());
+    if depth > MAX_CONFIG_DEPTH {
+        limitations.push(format!("configuration nesting exceeds {MAX_CONFIG_DEPTH}"));
         return Ok(());
     }
     let full = root.join(directory);
@@ -96,7 +97,7 @@ fn add_config(
             continue;
         }
         if paths.len() >= MAX_FILES {
-            limitations.push("file count exceeds 100000".into());
+            limitations.push(format!("file count exceeds {MAX_FILES}"));
             break;
         }
         if entry.file_type()?.is_dir() {
@@ -164,12 +165,18 @@ pub fn capture(root: &Path) -> Result<Snapshot> {
             paths.insert(raw.to_owned());
         }
     }
-    add_config(root, Path::new(".hannes"), &mut paths, &mut limitations, 0)?;
+    add_config(
+        root,
+        &crate::config::path(""),
+        &mut paths,
+        &mut limitations,
+        0,
+    )?;
     let mut files = BTreeMap::new();
     let mut total = 0;
     for path in paths {
         if files.len() >= MAX_FILES {
-            limitations.push("file count exceeds 100000".into());
+            limitations.push(format!("file count exceeds {MAX_FILES}"));
             break;
         }
         let full = root.join(&path);
@@ -278,7 +285,10 @@ pub fn bounded_diff_for_paths(
     if let Some(paths) = paths {
         cmd.arg("--").args(paths);
     } else {
-        cmd.args(["--", ".", ":(exclude).hannes/reports"]);
+        cmd.args(["--", "."]).arg(format!(
+            ":(exclude){}",
+            crate::config::path("reports").display()
+        ));
     }
     let out = crate::process::run(&mut cmd, Duration::from_secs(20)).context("Git diff failed")?;
     ensure!(
@@ -286,8 +296,8 @@ pub fn bounded_diff_for_paths(
         "Git diff failed or timed out"
     );
     let mut text = out.stdout.text;
-    let truncated = out.stdout.truncated || text.len() > 32768;
-    let mut end = text.len().min(32768);
+    let truncated = out.stdout.truncated || text.len() > MAX_DIFF_BYTES;
+    let mut end = text.len().min(MAX_DIFF_BYTES);
     while !text.is_char_boundary(end) {
         end -= 1;
     }

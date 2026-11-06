@@ -118,7 +118,7 @@ fn execute(cli: Cli) -> Result<i32> {
             },
         } => {
             git_snapshot::require_root(&root)?;
-            let path = root.join(".hannes/reports/last.json");
+            let path = root.join(config::path("reports/last.json"));
             if !path.try_exists()? {
                 eprintln!(
                     "{}",

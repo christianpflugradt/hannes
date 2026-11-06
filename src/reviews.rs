@@ -30,7 +30,11 @@ pub fn parse(
     snapshot: &Snapshot,
     json: &str,
 ) -> Result<Vec<Item>> {
-    ensure!(json.len() <= 1024 * 1024, "provider JSON exceeds 1 MiB");
+    ensure!(
+        json.len() as u64 <= crate::limits::MAX_PROVIDER_RESPONSE_BYTES,
+        "provider JSON exceeds {} bytes",
+        crate::limits::MAX_PROVIDER_RESPONSE_BYTES
+    );
     // Options are nullable, but must still be present as required by the output schema.
     let value: serde_json::Value = serde_json::from_str(json)?;
     if let Some(reviews) = value.get("reviews").and_then(|x| x.as_array()) {
@@ -67,11 +71,15 @@ pub fn parse(
                     .any(|c| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')),
             "review reason must be one nonempty line of at most {MAX_SUMMARY_CHARS} characters"
         );
-        ensure!(verdict.findings.len() <= 20, "too many findings");
+        ensure!(
+            verdict.findings.len() <= crate::limits::MAX_FINDINGS,
+            "too many findings"
+        );
         let mut grounded = false;
         for finding in &verdict.findings {
             ensure!(
-                !finding.message.trim().is_empty() && finding.message.len() <= 2000,
+                !finding.message.trim().is_empty()
+                    && finding.message.len() <= crate::limits::MAX_FINDING_MESSAGE_BYTES,
                 "invalid finding message"
             );
             ensure!(finding.line != Some(0), "evidence line must be positive");
@@ -83,7 +91,8 @@ pub fn parse(
                 let full = crate::config::inside(&project.root, Path::new(path))?;
                 ensure!(full.is_file(), "evidence path must be a file");
                 if let Some(line) = finding.line {
-                    let text = crate::config::read_bounded(&full, 8 * 1024 * 1024)?;
+                    let text =
+                        crate::config::read_bounded(&full, crate::limits::MAX_SNAPSHOT_FILE_BYTES)?;
                     ensure!(
                         (line as usize) <= text.lines().count(),
                         "evidence line beyond file: {path}:{line}"

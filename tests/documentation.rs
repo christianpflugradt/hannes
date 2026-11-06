@@ -265,3 +265,78 @@ fn readme_examples_validate_and_plan_without_ai_or_check_execution() {
     assert_eq!(plan.provider.mcp_servers, ["browser", "project-memory"]);
     assert_eq!(plan.scheduled[0].id, "unit-tests");
 }
+
+#[test]
+fn documented_bounds_and_provider_scaffold_match_the_implementation() {
+    use hannes::limits::*;
+    let text = README.split_whitespace().collect::<Vec<_>>().join(" ");
+    let assertions = [
+        format!("1..{MAX_DISPLAY_FILES}"),
+        format!("1..{MAX_TIMEOUT_SECONDS}"),
+        format!("1–{MAX_ID_BYTES} ASCII"),
+        format!("up to {MAX_TAGS} unique labels"),
+        format!("1–{MAX_TAG_BYTES} lowercase ASCII"),
+        format!("1..{MAX_COMMAND_ARGS}"),
+        format!("{MAX_ARGUMENT_BYTES} bytes"),
+        format!("Up to {MAX_ENTRY_FILES} unique existing source files"),
+        format!("Up to {MAX_CONTEXT_ENTRIES} document selections"),
+        format!("Up to {MAX_CONTEXT_HEADINGS} nonblank exact Markdown"),
+        format!(
+            "{MAX_CONTEXT_FILES} distinct files, {} MiB per file and {} KiB",
+            MAX_CONTEXT_FILE_BYTES / 1024 / 1024,
+            MAX_CONTEXT_BYTES / 1024
+        ),
+        format!("{MIN_TOOL_OUTPUT_TOKENS}..{MAX_TOOL_OUTPUT_TOKENS}"),
+        format!("at most {MAX_MCP_SERVERS} unique names, each 1–{MAX_MCP_NAME_BYTES}"),
+        format!("more than {MAX_DISCOVERED_MCP_SERVERS} discovered servers"),
+        format!(
+            "{} KiB per TOML file; up to {MAX_RULES} checks, {MAX_RULES} reviews and {MAX_RULES} profiles",
+            MAX_METADATA_BYTES / 1024
+        ),
+        format!(
+            "{} KiB per instructions file; {} KiB combined",
+            MAX_INSTRUCTION_BYTES / 1024,
+            MAX_TOTAL_INSTRUCTION_BYTES / 1024
+        ),
+        format!(
+            "Up to {MAX_MANIFEST_HINTS} file-list entries and {} KiB of diff",
+            MAX_DIFF_BYTES / 1024
+        ),
+        format!(
+            "{} MiB per file, {} MiB total",
+            MAX_SNAPSHOT_FILE_BYTES / 1024 / 1024,
+            MAX_SNAPSHOT_BYTES / 1024 / 1024
+        ),
+        format!("{},000 paths", MAX_SNAPSHOT_FILES / 1000),
+        format!("nesting limited to {MAX_CONFIG_DEPTH} levels"),
+        format!(
+            "Git file enumeration capped at {} KiB",
+            MAX_CAPTURE_BYTES / 1024
+        ),
+        format!(
+            "{} MiB final JSON",
+            MAX_PROVIDER_RESPONSE_BYTES / 1024 / 1024
+        ),
+        format!("{} MiB maximum", MAX_REPORT_BYTES / 1024 / 1024),
+        format!("at most {MAX_SUMMARY_CHARS} characters"),
+        format!("up to {MAX_FINDINGS} detailed findings"),
+        format!("{MAX_FINDING_MESSAGE_BYTES} bytes each"),
+    ];
+    for expected in assertions {
+        assert!(
+            text.contains(&expected),
+            "README bound missing or stale: {expected}"
+        );
+    }
+    let example: config::ProviderConfig =
+        toml::from_str(block(section(README, "Configure the AI provider"), "toml")).unwrap();
+    assert_eq!(
+        serde_json::to_value(example).unwrap(),
+        serde_json::to_value(config::ProviderConfig::scaffold()).unwrap()
+    );
+    let root = project();
+    assert_eq!(
+        serde_json::to_value(config::load(root.path()).unwrap().provider).unwrap(),
+        serde_json::to_value(config::ProviderConfig::scaffold()).unwrap()
+    );
+}

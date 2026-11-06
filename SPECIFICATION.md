@@ -227,6 +227,14 @@ Codex authentication is not provisioned and personal tokens are not copied to CI
 No hosted service, database, autonomous development, universal policy engine,
 result cache or additional input/provider implementation is in current scope.
 
+## ARC-001: Shared configuration contract
+
+Defaults, resource bounds and the configuration directory have one source in
+Rust. Initialization serializes the actual configuration types rather than
+maintaining independent TOML templates. README defaults, limits and scaffold
+examples are checked against those values. Validation, planning and execution
+reuse the same bounds; this does not add configurable fields or change defaults.
+
 ## DOC-001: Documentation contract
 
 Every editable configuration field, required/optional marker and default must
@@ -246,6 +254,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
+| ARC-001 | `tests/documentation.rs::documented_bounds_and_provider_scaffold_match_the_implementation` |
 | DOC-001 | `tests/documentation.rs::every_configuration_field_required_marker_and_default_is_documented` |
 | CLI-001 | `tests/acceptance.rs::all_command_paths_and_standard_help` |
 | CFG-001 | `tests/acceptance.rs::validation_rejects_invalid_including_disabled` |

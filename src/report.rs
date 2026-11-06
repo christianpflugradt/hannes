@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, path::Path};
 
-pub const MAX_SUMMARY_CHARS: usize = 120;
+pub use crate::limits::MAX_SUMMARY_CHARS;
 
 /// Provider-reported counters for the single bundled review invocation.
 /// Cache and reasoning counters are subsets, never added to the total again.
@@ -115,10 +115,10 @@ pub fn overall(items: &[Item]) -> Status {
     }
 }
 pub fn write(root: &Path, report: &Report) -> Result<()> {
-    let directory = crate::config::inside(root, Path::new(".hannes/reports"))?;
+    let directory = crate::config::inside(root, &crate::config::path("reports"))?;
     // Reports must be local regular files, never an output symlink into another directory.
     ensure!(
-        directory == root.join(".hannes/reports"),
+        directory == root.join(crate::config::path("reports")),
         "reports directory cannot be a symlink"
     );
     let mut temporary = tempfile::NamedTempFile::new_in(&directory)?;
@@ -131,9 +131,11 @@ pub fn write(root: &Path, report: &Report) -> Result<()> {
     Ok(())
 }
 pub fn read(root: &Path) -> Result<Report> {
-    let path = crate::config::inside(root, Path::new(".hannes/reports/last.json"))?;
-    let report: Report =
-        serde_json::from_str(&crate::config::read_bounded(&path, 128 * 1024 * 1024)?)?;
+    let path = crate::config::inside(root, &crate::config::path("reports/last.json"))?;
+    let report: Report = serde_json::from_str(&crate::config::read_bounded(
+        &path,
+        crate::limits::MAX_REPORT_BYTES,
+    )?)?;
     ensure!(
         matches!(report.schema_version, 1 | 2),
         "unsupported report schema {}; rerun hannes mach was",

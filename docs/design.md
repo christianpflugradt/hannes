@@ -12,6 +12,10 @@ metadata is canonicalized separately from raw snapshots to keep semantic IDs
 stable across TOML formatting and selector order. Report schema 2 saves the plan;
 schema 1 stays readable as unprofiled legacy evidence.
 
+Configuration defaults and bounds are shared through `limits` and typed scaffold
+serialization in `config`. Documentation tests check public fields, defaults,
+bounds and examples against those types and constants.
+
 ## Snapshot definition
 
 A snapshot is Git HEAD plus a sorted manifest of SHA-256 hashes, byte sizes and

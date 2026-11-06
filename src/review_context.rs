@@ -7,8 +7,8 @@ use std::{
     path::Path,
 };
 
-pub const MAX_CONTEXT_BYTES: usize = 64 * 1024;
-const MAX_CONTEXT_FILE: u64 = 1024 * 1024;
+pub use crate::limits::MAX_CONTEXT_BYTES;
+use crate::limits::{MAX_CONTEXT_FILE_BYTES as MAX_CONTEXT_FILE, MAX_CONTEXT_FILES};
 
 #[derive(Debug, Serialize)]
 pub struct Excerpt {
@@ -78,8 +78,8 @@ pub fn collect(root: &Path, reviews: &[&Review]) -> Result<Vec<Excerpt>> {
         }
     }
     ensure!(
-        sources.len() <= 32,
-        "at most 32 distinct review context files"
+        sources.len() <= MAX_CONTEXT_FILES,
+        "at most {MAX_CONTEXT_FILES} distinct review context files"
     );
     let mut excerpts = Vec::new();
     let mut total = 0;
@@ -126,7 +126,8 @@ pub fn collect(root: &Path, reviews: &[&Review]) -> Result<Vec<Excerpt>> {
             total += text.len();
             ensure!(
                 total <= MAX_CONTEXT_BYTES,
-                "selected review context exceeds 64 KiB; select fewer headings"
+                "selected review context exceeds {} bytes; select fewer headings",
+                MAX_CONTEXT_BYTES
             );
             excerpts.push(Excerpt {
                 path: path.into(),

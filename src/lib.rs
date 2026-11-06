@@ -2,6 +2,7 @@ pub mod checks;
 pub mod cli;
 pub mod config;
 pub mod git_snapshot;
+pub mod limits;
 pub mod mood;
 pub mod planner;
 pub mod process;

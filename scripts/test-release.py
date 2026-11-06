@@ -84,7 +84,9 @@ class ReleaseTests(unittest.TestCase):
 
     def test_complete_archives_checksums_and_revision_binding(self):
         with tempfile.TemporaryDirectory() as temporary:
-            dist = Path(temporary)
+            root = Path(temporary)
+            dist = root / "dist"
+            dist.mkdir()
             (dist / "metadata").mkdir()
             for target in verification.TARGETS:
                 name = f"hannes-v1.2.3-{target}"
@@ -103,7 +105,8 @@ class ReleaseTests(unittest.TestCase):
                 (dist / "metadata" / f"{target}.json").write_text(json.dumps(metadata))
             sums = "".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
                            for p in sorted(dist.glob("*.tar.gz")))
-            (dist / "SHA256SUMS").write_text(sums)
+            subprocess.run([sys.executable, str(SCRIPTS / "checksums.py")], cwd=root, check=True)
+            self.assertEqual((dist / "SHA256SUMS").read_text(), sums)
             verification.verify("1.2.3", "a" * 40, dist)
             with self.assertRaises(ValueError):
                 verification.verify("1.2.3", "b" * 40, dist)
@@ -129,6 +132,11 @@ class ReleaseTests(unittest.TestCase):
             dist = Path(temporary)
             with self.assertRaises(ValueError):
                 verification.verify("1.0.0", "a" * 40, dist)
+            (dist / "dist").mkdir()
+            result = subprocess.run([sys.executable, str(SCRIPTS / "checksums.py")], cwd=dist,
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No native archives found", result.stderr)
 
 
 if __name__ == "__main__":

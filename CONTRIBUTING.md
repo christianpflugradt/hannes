@@ -33,12 +33,33 @@ Commit Cargo.lock; exclude reports, credentials and local MCP configuration.
 ## Commits
 
 Use Conventional Commit types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`,
-`perf`, `refactor`, `test`. Other types, including `style` and `revert`,
-are rejected. Use `type(scope): summary`; the scope is optional, but when present
+`perf`, `refactor`, `revert`, `style`, `test`. Other types are rejected.
+Use `type(scope): summary`; the scope is optional, but when present
 must come from the following list. A breaking-change `!` before the
 colon is supported. The summary must be nonempty without leading/trailing
 whitespace. Write a short imperative summary; bodies and footers are optional.
 The shared [commit policy](.githooks/commit-policy) defines the accepted types and scopes.
+
+| Type | Purpose | Release |
+| --- | --- | --- |
+| `feat` | New functionality | Minor |
+| `fix` | Bug fixes, including hotfixes and security fixes | Patch |
+| `perf` | Performance improvements | Patch |
+| `chore` | Other maintenance, including routine dependency updates | Patch |
+| `build` | Build system, packaging and toolchain | Patch |
+| `refactor` | Code restructuring without intended behavior changes | Patch |
+| `revert` | Undo an earlier change | Patch for effective reversions |
+| `ci` | CI/CD workflows | None |
+| `docs` | Documentation | None |
+| `style` | Formatting and whitespace only | None |
+| `test` | Tests and test infrastructure | None |
+
+Use the most specific type; `chore` is the fallback. Dependency updates normally
+use `chore(deps)`; use `fix(deps)` when fixing a known bug or security issue.
+Any type with `!` or a `BREAKING CHANGE:` footer triggers a major release.
+Reserve `build(release)` for automatically generated version commits, which do
+not trigger another release. See [release policy](docs/releasing.md#version-policy)
+for combined changes and reverts.
 
 | Scopes | Use for |
 | --- | --- |

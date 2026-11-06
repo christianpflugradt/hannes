@@ -32,11 +32,12 @@ release tag, then generates release notes and updates `CHANGELOG.md`:
 | Commit | Release |
 | --- | --- |
 | `feat` | Minor |
-| `fix`, `perf` | Patch |
+| `fix`, `perf`, `chore`, `build`, `refactor`, effective `revert` | Patch |
 | Any allowed type with `!` or a `BREAKING CHANGE:` footer | Major |
-| `build`, `chore`, `ci`, `docs`, `refactor`, `test` without a breaking change | None |
+| `ci`, `docs`, `style`, `test` without a breaking change | None |
+| Generated `build(release)` version commit without a breaking change | None |
 
-The [commit policy](../.githooks/commit-policy) allows nine types, including
+The [commit policy](../.githooks/commit-policy) allows eleven types, including
 `chore`, and optional scopes from the list in [CONTRIBUTING.md](../CONTRIBUTING.md#commits).
 The Conventional Commits parser recognizes the documented breaking `!` syntax.
 The local hook and CI reject unsupported types or scopes. CI validates PR commit messages and the PR title used for a
@@ -44,6 +45,27 @@ squash merge. Use squash/rebase merging with conventional messages; default merg
 commit messages do not satisfy this project's policy.
 Push/PR checks validate the proposed commit range; manual releases without a
 base validate the selected tip, not legacy commit messages from before this policy.
+
+The highest required increment across all effective commits wins: major before
+minor before patch. Patch maintenance (`chore`, `build`, `refactor`, `revert`)
+appears in the release notes alongside features, fixes and performance changes.
+Non-release types stay hidden unless they contain a breaking change.
+`build(release)` is reserved for generated version commits and is hidden from notes.
+
+A revert of an already released change triggers a patch. An original commit and
+its revert within the same unreleased range cancel each other in version
+calculation and release notes. Include the exact original header and commit hash
+so Semantic Release can recognize the pair; optional scopes are supported:
+
+```text
+revert(cli): feat(cli): add an experimental command
+
+This reverts commit FULL_ORIGINAL_COMMIT_SHA.
+```
+
+When using `git revert`, edit its default message into the accepted format and
+preserve the `This reverts commit ...` line. Other effective changes in the range
+still determine the release; an explicit breaking change is major.
 
 Without a previous release tag, Semantic Release starts at **1.0.0**, independent
 of the development version currently in Cargo.toml. If no release-worthy commits

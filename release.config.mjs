@@ -1,18 +1,46 @@
+// Share revert parsing between version calculation and release notes, including scopes.
+const parserOpts = {
+  revertPattern: /^revert(?:\([^)]+\))?!?:\s"?([\s\S]+?)"?\s*This reverts commit (\w*)\./i,
+  revertCorrespondence: ["header", "hash"],
+};
+
 export default {
   branches: ["main"],
   tagFormat: "v${version}",
   plugins: [
     ["@semantic-release/commit-analyzer", {
       preset: "conventionalcommits",
+      parserOpts,
       releaseRules: [
         { breaking: true, release: "major" },
         { type: "feat", release: "minor" },
         { type: "fix", release: "patch" },
         { type: "perf", release: "patch" },
-        ...["build", "chore", "ci", "docs", "refactor", "test"].map(type => ({ type, release: false })),
+        ...["chore", "refactor", "revert"].map(type => ({ type, release: "patch" })),
+        // Match scoped and unscoped builds, reserving build(release) for version commits.
+        { type: "build", scope: "!release", release: "patch" },
+        { type: "build", scope: null, release: "patch" },
+        { type: "build", scope: "release", release: false },
+        ...["ci", "docs", "style", "test"].map(type => ({ type, release: false })),
       ],
     }],
-    ["@semantic-release/release-notes-generator", { preset: "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", {
+      preset: "conventionalcommits",
+      parserOpts,
+      presetConfig: {
+        types: [
+          { type: "feat", section: "Features" },
+          { type: "fix", section: "Bug Fixes" },
+          { type: "perf", section: "Performance Improvements" },
+          { type: "chore", section: "Maintenance" },
+          { type: "build", scope: "release", hidden: true },
+          { type: "build", section: "Build System" },
+          { type: "refactor", section: "Code Refactoring" },
+          { type: "revert", section: "Reverts" },
+          ...["ci", "docs", "style", "test"].map(type => ({ type, hidden: true })),
+        ],
+      },
+    }],
     ["@semantic-release/changelog", { changelogFile: "CHANGELOG.md" }],
     "./scripts/semantic-release-plugin.mjs",
     ["@semantic-release/git", {

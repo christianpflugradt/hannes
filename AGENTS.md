@@ -47,7 +47,11 @@ paths, credentials or per-developer reports to versioned files.
 
 - The main branch is `main` locally and on `origin`.
 - Use only Conventional Commit types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`,
-  `refactor`, `test`. No additional types or automatic merge-message exceptions.
+  `refactor`, `revert`, `style`, `test`. No additional types or automatic merge-message exceptions.
+- Release policy: `feat` is minor; `fix`, `perf`, `chore`, `build`, `refactor`
+  and effective `revert` are patch. `ci`, `docs`, `style`, `test` do not release.
+  Breaking changes are major for every type. Reserve `build(release)` for generated
+  version commits, which do not trigger another release. See docs/releasing.md.
 - Header: `type(scope): summary` (scope optional; breaking-change `!` supported).
   When present, scope must be one of `checks`, `ci`, `cli`, `config`, `deps`,
   `docs`, `git`, `mise`, `mood`, `profiles`, `provider`, `release`, `report`,

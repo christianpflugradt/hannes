@@ -405,7 +405,8 @@ index/commit inputs, configurable run-wide budgets and result caching. See the
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Releasing](docs/releasing.md)
 
 Install the local Conventional Commit type/optional-scope check with `mise hooks:install`;
-see [Contributing](CONTRIBUTING.md#commits). Released under the [Unlicense](LICENSE).
+see [Contributing](CONTRIBUTING.md#commits) for types, scopes and release effects.
+Released under the [Unlicense](LICENSE).
 
 ## Frequently Asked Questions
 

@@ -6,6 +6,8 @@ type feat
 type fix
 type perf
 type refactor
+type revert
+type style
 type test
 scope checks
 scope ci

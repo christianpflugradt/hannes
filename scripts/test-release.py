@@ -32,6 +32,7 @@ class ReleaseTests(unittest.TestCase):
             root = Path(temporary)
             (root / ".githooks").mkdir()
             (root / ".githooks/commit-msg").write_bytes((SCRIPTS.parent / ".githooks/commit-msg").read_bytes())
+            (root / ".githooks/commit-policy").write_bytes((SCRIPTS.parent / ".githooks/commit-policy").read_bytes())
             def git(*args):
                 return subprocess.check_output(["git", *args], cwd=root, text=True, stderr=subprocess.DEVNULL).strip()
             git("init", "--quiet")
@@ -47,9 +48,18 @@ class ReleaseTests(unittest.TestCase):
                                       env=env, capture_output=True).returncode
             self.assertEqual(validate(), 0)
             self.assertEqual(validate(base), 0)
+            self.assertEqual(validate(base, "chore(deps): update rust crate toml to v1.2.0"), 0)
             self.assertNotEqual(validate(base, "Invalid squash title"), 0)
             git("commit", "--allow-empty", "-m", "Invalid new message")
             self.assertNotEqual(validate(), 0)
+            output = subprocess.run([sys.executable, str(SCRIPTS / "check-commits.py")], cwd=root,
+                                    env=dict(os.environ, COMMIT_BASE="", COMMIT_HEAD="HEAD", PR_TITLE=""),
+                                    capture_output=True, text=True)
+            self.assertIn(git("rev-parse", "HEAD"), output.stderr)
+            self.assertIn("Invalid new message", output.stderr)
+            self.assertIn("Optional scopes:", output.stderr)
+            self.assertNotIn("Traceback", output.stderr)
+            self.assertNotEqual(validate(base, "chore(unknown): reject scope"), 0)
 
     def test_only_root_version_changes_and_invalid_versions_leave_files_untouched(self):
         with tempfile.TemporaryDirectory() as temporary:

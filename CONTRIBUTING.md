@@ -6,7 +6,7 @@ it fits the small CLI described in [SPECIFICATION.md](SPECIFICATION.md).
 
 ## Development
 
-See the [README](README.md#build-locally) for tooling. With mise:
+See the [README](README.md#install-or-build) for tooling. With mise:
 
 ```sh
 mise trust
@@ -32,13 +32,23 @@ Commit Cargo.lock; exclude reports, credentials and local MCP configuration.
 
 ## Commits
 
-Use [Angular's commit-type allow list](https://github.com/angular/angular/blob/main/contributing-docs/commit-message-guidelines.md#type): `build`, `ci`, `docs`, `feat`, `fix`,
-`perf`, `refactor`, `test`. Other types, including `chore`, `style` and `revert`,
-are rejected. Use `type(scope): summary`; the scope is optional and uses lowercase
-letters, digits, dots, underscores, `/` or `-`. A breaking-change `!` before the
+Use Conventional Commit types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`,
+`perf`, `refactor`, `test`. Other types, including `style` and `revert`,
+are rejected. Use `type(scope): summary`; the scope is optional, but when present
+must come from the following list. A breaking-change `!` before the
 colon is supported. The summary must be nonempty without leading/trailing
 whitespace. Write a short imperative summary; bodies and footers are optional.
-Scopes refer to this project, not Angular's packages.
+The shared [commit policy](.githooks/commit-policy) defines the accepted types and scopes.
+
+| Scopes | Use for |
+| --- | --- |
+| `checks`, `reviews`, `profiles` | Rules and rule selection |
+| `cli`, `mood` | Commands, terminal output and Hannes' patience |
+| `config`, `provider` | Configuration and provider integration |
+| `report`, `snapshot` | Results and review input |
+| `deps`, `release` | Dependency updates and release tooling |
+| `git`, `mise`, `ci` | Git policy, local tasks and workflows |
+| `docs`, `tests` | Documentation and test infrastructure |
 
 ```sh
 sh scripts/setup-git-hooks.sh
@@ -52,7 +62,7 @@ and refuses to replace existing custom hooks/configuration. Each clone needs set
 Git's `--no-verify` can bypass a local hook. Run `mise run hooks:test` to test the
 policy without committing anything in this repository. Work on `main`.
 
-Examples: `feat(reviews): add scoped context`, `fix(cli): preserve report output`,
+Examples: `chore(deps): update dependencies`, `feat(reviews): add scoped context`, `fix(cli): preserve report output`,
 `docs: clarify local installation`.
 
 In your PR, describe the problem, resulting behavior and actual validation.

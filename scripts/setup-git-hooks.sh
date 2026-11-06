@@ -18,6 +18,7 @@ case "$current" in
     *) printf '%s\n' "Existing core.hooksPath preserved: $current. Integrate it before installing project hooks." >&2; exit 1 ;;
 esac
 [ -f .githooks/commit-msg ] || { printf '%s\n' 'Missing .githooks/commit-msg' >&2; exit 1; }
+[ -r .githooks/commit-policy ] || { printf '%s\n' 'Missing .githooks/commit-policy' >&2; exit 1; }
 chmod +x .githooks/commit-msg
 git config --local core.hooksPath .githooks
 printf '%s\n' 'Installed project commit-msg hook: .githooks'

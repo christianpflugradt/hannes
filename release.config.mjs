@@ -9,7 +9,7 @@ export default {
         { type: "feat", release: "minor" },
         { type: "fix", release: "patch" },
         { type: "perf", release: "patch" },
-        ...["build", "ci", "docs", "refactor", "test"].map(type => ({ type, release: false })),
+        ...["build", "chore", "ci", "docs", "refactor", "test"].map(type => ({ type, release: false })),
       ],
     }],
     ["@semantic-release/release-notes-generator", { preset: "conventionalcommits" }],

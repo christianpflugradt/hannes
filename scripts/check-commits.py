@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 head = os.environ.get("COMMIT_HEAD") or "HEAD"
@@ -18,7 +19,16 @@ with tempfile.TemporaryDirectory(prefix="hannes-commits-") as temporary:
         ["git", "show", "-s", "--format=%B", commit], text=True)) for commit in commits]
     if os.environ.get("PR_TITLE"):
         candidates.append(("PR squash title", os.environ["PR_TITLE"]))
+    invalid = False
     for label, body in candidates:
         message.write_text(body)
-        subprocess.run(["sh", str(hook), str(message)], check=True)
-        print(f"Valid conventional commit: {label}")
+        result = subprocess.run(["sh", str(hook), str(message)], capture_output=True, text=True)
+        if result.returncode:
+            invalid = True
+            header = body.splitlines()[0] if body.splitlines() else ""
+            print(f"Invalid commit message ({label}): {header!r}", file=sys.stderr)
+            print(result.stderr, end="", file=sys.stderr)
+        else:
+            print(f"Valid conventional commit: {label}")
+    if invalid:
+        sys.exit(1)

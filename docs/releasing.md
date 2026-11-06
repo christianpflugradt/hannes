@@ -34,11 +34,12 @@ release tag, then generates release notes and updates `CHANGELOG.md`:
 | `feat` | Minor |
 | `fix`, `perf` | Patch |
 | Any allowed type with `!` or a `BREAKING CHANGE:` footer | Major |
-| `build`, `ci`, `docs`, `refactor`, `test` without a breaking change | None |
+| `build`, `chore`, `ci`, `docs`, `refactor`, `test` without a breaking change | None |
 
-The commit types remain Angular's eight allowed types; the Conventional Commits
-parser also recognizes the documented breaking `!` syntax. The local hook and CI
-reject other types. CI validates PR commit messages and the PR title used for a
+The [commit policy](../.githooks/commit-policy) allows nine types, including
+`chore`, and optional scopes from the list in [CONTRIBUTING.md](../CONTRIBUTING.md#commits).
+The Conventional Commits parser recognizes the documented breaking `!` syntax.
+The local hook and CI reject unsupported types or scopes. CI validates PR commit messages and the PR title used for a
 squash merge. Use squash/rebase merging with conventional messages; default merge
 commit messages do not satisfy this project's policy.
 Push/PR checks validate the proposed commit range; manual releases without a
@@ -106,7 +107,7 @@ Native downloads still need Git and, for enabled reviews, Codex CLI/login.
   blocks high/critical release-tooling advisories. Moderate npm advisories remain
   visible but do not block. Advisory feeds require network access; unavailable
   audits fail the job rather than silently pass.
-- Dependency updates use Renovate, with `build` commit prefixes to satisfy the
+- Dependency updates use Renovate, with `chore(deps)` commit prefixes to satisfy the
   commit policy. Action references use full commit SHAs; runtime/tool versions
   and dependency updates are reviewed.
 

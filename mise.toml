@@ -17,7 +17,7 @@ description = "Start the GitHub Release workflow for remote main"
 run = "gh workflow run release.yml --ref main"
 
 [tasks."hooks:install"]
-description = "Install the local Angular commit-message hook"
+description = "Install the local Conventional Commit type/scope hook"
 run = "sh scripts/setup-git-hooks.sh"
 
 [tasks."hooks:test"]

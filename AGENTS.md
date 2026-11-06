@@ -46,9 +46,12 @@ paths, credentials or per-developer reports to versioned files.
 ## Git conventions
 
 - The main branch is `main` locally and on `origin`.
-- Use only Angular commit types: `build`, `ci`, `docs`, `feat`, `fix`, `perf`,
+- Use only Conventional Commit types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`,
   `refactor`, `test`. No additional types or automatic merge-message exceptions.
 - Header: `type(scope): summary` (scope optional; breaking-change `!` supported).
+  When present, scope must be one of `checks`, `ci`, `cli`, `config`, `deps`,
+  `docs`, `git`, `mise`, `mood`, `profiles`, `provider`, `release`, `report`,
+  `reviews`, `snapshot`, `tests`. `.githooks/commit-policy` is the source of truth.
   See CONTRIBUTING.md. Install the local `commit-msg` hook with
   `sh scripts/setup-git-hooks.sh`; never bypass it to force an invalid message.
 - After completing each coherent change, run the applicable validation, commit it

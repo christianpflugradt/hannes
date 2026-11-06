@@ -404,7 +404,7 @@ index/commit inputs, configurable run-wide budgets and result caching. See the
 [Design and limits](docs/design.md) · [Passing By example](examples/passing-by/README.md) ·
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Releasing](docs/releasing.md)
 
-Install the local Angular commit-message check with `mise hooks:install`;
+Install the local Conventional Commit type/optional-scope check with `mise hooks:install`;
 see [Contributing](CONTRIBUTING.md#commits). Released under the [Unlicense](LICENSE).
 
 ## Frequently Asked Questions

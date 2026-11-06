@@ -13,7 +13,9 @@ for (const [message, expected] of [
   ["feat!: remove a command", "major"],
   ["refactor(config)!: change configuration", "major"],
   ["fix: change format\n\nBREAKING CHANGE: old reports need migration", "major"],
-  ...["build", "ci", "docs", "refactor", "test"].map(type => [`${type}: maintenance`, null]),
+  ["chore(deps): update rust crate toml to v1.2.0", null],
+  ["chore(deps)!: drop an older runtime", "major"],
+  ...["build", "chore", "ci", "docs", "refactor", "test"].map(type => [`${type}: maintenance`, null]),
 ]) {
   test(`release rule: ${message.split("\n")[0]}`, async () => {
     assert.equal(await analyzeCommits(options, {

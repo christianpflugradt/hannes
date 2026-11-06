@@ -1,3 +1,24 @@
+## [0.2.0](https://github.com/christianpflugradt/hannes/compare/v0.1.0...v0.2.0) (2026-11-06)
+
+### ⚠ BREAKING CHANGES
+
+* **checks:** configure commands as strings
+
+### Features
+
+* **checks:** configure commands as strings ([a2db259](https://github.com/christianpflugradt/hannes/commit/a2db2592ab1158d834988caffbc81ee2dc5f0bc7))
+
+### Maintenance
+
+* **deps:** update actions/setup-python action to v7 ([#14](https://github.com/christianpflugradt/hannes/issues/14)) ([b17ba77](https://github.com/christianpflugradt/hannes/commit/b17ba771bff5c122ea4a2d6cf3d599afb1c71b47))
+* **deps:** update dependency python to v3.15.2 ([#10](https://github.com/christianpflugradt/hannes/issues/10)) ([ded8d9f](https://github.com/christianpflugradt/hannes/commit/ded8d9f3e48c071cc462e7530578b085e0ca8be1))
+* **deps:** update node.js to v26 ([#16](https://github.com/christianpflugradt/hannes/issues/16)) ([80a5c5e](https://github.com/christianpflugradt/hannes/commit/80a5c5eb224fbcf1fdca1c4e16c7dbdc10185dd1))
+* **deps:** update rust crate toml to v1.2.0 ([#11](https://github.com/christianpflugradt/hannes/issues/11)) ([2a4f9e3](https://github.com/christianpflugradt/hannes/commit/2a4f9e3d3af4614944fa52c7594f091ecf78a8cd))
+
+### Build System
+
+* **mise:** deploy the latest matching release binary ([ebed41c](https://github.com/christianpflugradt/hannes/commit/ebed41cede401561b492f13d5938e952eebce9ce))
+
 # Changelog
 
 ## 0.1.0 (2026-11-06)

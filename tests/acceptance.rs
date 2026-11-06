@@ -158,6 +158,11 @@ fn init_exact_paths_idempotent_preserves_edits() {
 #[test]
 fn validation_rejects_invalid_including_disabled() {
     let cases = [
+        (
+            "checks/always-ok.toml",
+            "enabled = true",
+            "disabled = false",
+        ),
         ("config.toml", "version = 1", "version = 99"),
         ("config.toml", "version = 1", "version = 1\nunknown = 1"),
         ("config.toml", "version = 1", "version = 1\nversion = 1"),

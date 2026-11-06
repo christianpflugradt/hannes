@@ -18,9 +18,9 @@ specification alone does not complete an implementation.
   LLM verdicts. Both are rules. Profiles select rules for a particular invocation.
 - Version 1 retains its behavior. New configuration needs an explicit version
   change; unsupported fields and capabilities fail clearly, never silently degrade.
-- In version 2, omitted review MCP permissions mean **no MCPs**. Review permissions
+- For planned per-review MCP permissions, omission will mean **no MCPs**. Review permissions
   must be a subset of the provider allow list. An explicit all-provider selection
-  is supported; it never includes unrelated servers from the user's Codex setup.
+  will be supported; it never includes unrelated servers from the user's Codex setup.
 - Reviews default to snapshot scope. Change reviews require an explicit diff
   base in the selected profile, including whether to compare directly or against
   a merge-base. No inferred standard branch or silent HEAD fallback.
@@ -42,7 +42,7 @@ commit/push are complete. Record the implementing commit(s) in that item's file.
 For item 5, a documented decision to defer caching is a valid completion; writing
 an unmeasured cache implementation is not required.
 
-The [version-1 configuration reference](../configuration.md) describes current
+The [configuration reference](../configuration.md) describes current
 behavior. The [profile specification](../profiles-and-plans.md) contains the
 detailed contract for item 1; later TODOs extend it without pretending those
 extensions already exist.

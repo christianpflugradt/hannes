@@ -1,162 +1,249 @@
-# Hannes — MVP specification
+# Hannes specification
 
-Status: implementation-ready specification, v0.1. Language: English for source, configuration, documentation and directories. German conversational command names and restrained German CLI copy are intentional.
+Status: current implemented contract. Changes to behavior start here and in the
+acceptance criteria, before implementation. Explicit user decisions take precedence.
 
-The [product vision and architectural direction](docs/product-vision.md) guides
-development. This specification defines the supported behavior; possibilities in
-the vision do not imply implemented capabilities or expand the current scope.
+The [product vision](docs/product-vision.md) defines direction and architectural
+boundaries: Hannes makes development expectations explicit, executable and
+verifiable, independently of who writes the code. This document defines supported
+behavior. The [roadmap](docs/todo/README.md) contains planned extensions; they are
+not implemented merely because they have a proposal.
 
-Implemented extension: [rule profiles and execution plans](docs/profiles-and-plans.md)
-defines opt-in version-2 configuration, offline plans and report schema 2.
-Version-1 configurations remain supported; initialization still creates version 1.
-The [ordered TODO roadmap](docs/todo/README.md) tracks implementation and next steps.
+The [README configuration reference](README.md#configuration) defines every public
+configuration field, default and limit. The [profile contract](docs/profiles-and-plans.md)
+extends this specification for configuration version 2, plan schema 1 and report
+schema 2. These documents must agree; a contradiction must be resolved before work
+proceeds, not interpreted as permission to choose either behavior.
 
-## 1. Vision and motivation
+## CLI-001: Commands and project boundaries
 
-Hannes is a small, self-contained, agent-agnostic **meta-harness** for governance of agentic software development. It does not implement code, manage an agent's task loop, prescribe a development methodology, or run production infrastructure. It verifies that an evolving codebase satisfies project-specific expectations at a chosen moment. A hobby developer can install it in a repository, define cheap deterministic **checks** and fallible LLM-based **reviews**, and obtain an auditable, human-readable PASS/FAIL report. Future ambitions include enterprise governance, other AI providers, CI-enforced policy, policy packs, and broader software lifecycle controls; do not implement them in this prototype.
+Hannes is a small native Rust executable, named `hannes`. It evaluates outcomes;
+it does not implement features, repair files, orchestrate coding agents, prescribe
+a development methodology or run production infrastructure. Source, configuration
+and documentation are English; the intentional German command phrases are:
 
-Examples use the placeholder My_App. Do not couple Hannes to a specific application. Favor transparent behavior, no unnecessary complexity, no separate LLM API billing for the local Codex proof of concept, and modest LLM token consumption.
+| Command | Contract |
+| --- | --- |
+| `hannes fang an` | Create missing `.hannes/` files, preserve edits, install no hooks and make no commits. |
+| `hannes pass auf` | Validate all configuration and referenced files, without checks or provider calls. |
+| `hannes mach was` | Validate, select rules, execute checks before reviews and save results. |
+| `hannes was ist phase` | Read saved results and compare input freshness, without rerunning rules. `--details` shows full findings and captured output. |
+| `hannes so hilf mir doch` | Show help listing exactly the five complete command phrases. |
 
-## 2. Technology and packaging
+`-h`/`--help`, `-V`/`--version` and `--no-color` remain supported. Help must not
+present intermediate words as useful standalone commands, add a separate `help`
+command or redundant examples. Other execution phrases are rejected.
+Run from the Git working-tree root; subdirectory execution is rejected. Hannes
+must not create commits, modify the Git index or silently discover another root.
 
-- Implement as a Rust CLI, called `hannes`, using stable Rust and Cargo. Build a native executable; no Python/Node runtime. External processes (user-defined commands, Git, Codex CLI) are expected dependencies for their respective capabilities, not hidden language runtimes.
-- Reasonable libraries: `clap` (CLI parsing), `serde` + `toml` / `serde_json`, `thiserror` / `anyhow`, `console` or `owo-colors` for TTY styling, `globset` if filtering is implemented, `tempfile` for safe temporary files. Keep dependencies lean and pinned by Cargo.lock.
-- Supported initial development platform: macOS on Apple Silicon. CI release targets: macOS ARM64 and x64, Linux x64, Windows x64 where buildable; integration tests requiring Codex or macOS are explicitly opt-in. Windows should at minimum run help, init, validate, status and bundled non-shell check examples.
-- Configuration directory is **exactly `.hannes/`**, all lowercase (case-sensitive on some filesystems). CLI name and display product are `hannes` and `Hannes`. Use this name consistently for initialization, configuration and reports.
-- Provide `cargo install --path .` and a short install section showing `~/.local/bin` distribution/copy for macOS/Linux, and how to put the directory on PATH. Do not claim the native binary includes Git/Codex.
+## CFG-001: Configuration and initialization
 
-## 3. Exact playful commands (no quoting required)
-
-The positional words are genuine subcommands, not a single string or shell aliases. Implement the exact paths below in clap, and keep standard `--help`, `--version` usable as a bonus.
-
-- `hannes fang an`: initialize the project-local `.hannes` scaffold in the current repository. Never overwrite modified existing configuration; be idempotent and explain if already initialized. Do not create a Git commit or modify user Git hooks.
-- `hannes pass auf`: validate structural, syntactic, and semantic configuration, including allowed provider names, enabled check/review metadata, referenced files, duplicates, values, command arrays, paths and timeout limits. Does **not** execute checks or call the LLM. Clear diagnostics and nonzero status for invalid state.
-- `hannes mach was`: implicitly run `pass auf`, then run enabled deterministic checks, followed by enabled LLM reviews if deterministic checks passed. Write a complete JSON report and print a concise, colorful table. With `--geiz-ist-geil`, execute only enabled deterministic checks, never invoke the review provider, exclude reviews from progress/results, and label the run as checks-only in stdout, saved JSON and status/details. A checks-only PASS applies only to checks; no enabled checks must be stated explicitly. Continue full configuration validation and snapshot integrity checks. Preserve the default full run and make the flag per invocation. Older reports without the scope flag remain readable as full-scope reports. Emit immediate flushed progress on stderr: enabled-rule number/total, kind, ID and description before each check, then verdict/duration/short reason after it. Exclude disabled rules from counts; show skipped reviews as NOT_RUN without claiming execution. Announce the single bundled Codex call, start all active review progress entries together, and publish their verdicts when the shared call returns. Show preparation/report-writing phases. Keep raw check output and provider traces out of default output; final compact report remains on stdout. Exit nonzero unless every required active check/review passes. A disabled item is neither executed nor displayed in the terminal results. Checks and reviews are collectively called rules. If no checks and no reviews are defined, print `Du hast noch keine Regeln definiert, du Vogel!` in addition to the report. Defined but disabled rules do not trigger this message.
-- `hannes was ist phase`: display one compact row per active result, including the AI's short summary for every review (PASS and FAIL). `hannes was ist phase --details` displays full saved findings and captured output separately without rerunning checks or Codex. Render the most recent JSON report with the same formatting and identify whether the working tree's current tracked/untracked files differ from the verified snapshot. Show a bounded change summary: up to five changed file paths with per-file added/deleted line counts if obtainable, total changed files, total insertions/deletions; indicate when counts are unavailable. If no report exists, give actionable guidance and a distinct nonzero exit status (document the code).
-- `hannes so hilf mir doch`: concise CLI help listing exactly the five complete command phrases with descriptions. Never list intermediate words as standalone commands. Omit redundant examples and Clap's additional `help` subcommand; `--help` and `-h` remain available.
-
-Acceptance examples: `hannes fang an`, `hannes pass auf`, `hannes mach was`, `hannes was ist phase`, `hannes so hilf mir doch`. All run directly at shell prompt with those words as separate arguments. For v0.1, current working directory is the project root; optionally auto-detect Git root but clearly document behavior.
-
-## 4. Initialized files
+The directory is exactly `.hannes/`, lowercase. Initialization creates version 1:
 
 ```text
-repo/
-  .hannes/
-    config.toml
-    provider.toml
-    checks/
-      always-ok.toml
-      deliberately-failing.toml
-    reviews/
-      product-consistency.toml
-      product-consistency.md
-    reports/
-      .gitignore
-      last.json                 # generated only after verification
+.hannes/
+  config.toml
+  provider.toml
+  checks/always-ok.toml
+  checks/deliberately-failing.toml
+  reviews/product-consistency.toml
+  reviews/product-consistency.md
+  reports/.gitignore
+  README.md
 ```
 
-`reports/.gitignore` excludes `last.json` and temporary report files; checked-in configuration stays version controlled, per-developer report stays local. Include a `README.md` inside `.hannes` explaining the format and how to add items. All names and directory documentation in English.
+`reports/last.json` is generated only by verification. Configuration and criteria
+are version-controlled; reports and credentials stay local. Examples use generic
+placeholders such as `My_App`. Initialization derives the project name from the
+directory, enables the `git --version` example check and disables the failing
+check and review. A first run needs neither Codex nor credentials.
 
-Prefer one TOML metadata file per check/review to support easy addition and precise diagnostics. Examples are illustrative; finalize an exact versioned format, document it, and enforce it in tests:
+Each immediate rule TOML file defines one check or review. IDs are unique across
+both kinds. `enabled` is the only activation field; `disabled` is rejected.
+Unknown fields, duplicate keys/IDs, invalid values and missing referenced files
+are errors, including in disabled rules and unused profiles. Paths must be
+relative to their documented base, remain inside the project, and never traverse
+parents. Symlink escapes and unsupported input must not produce PASS.
 
-```toml
-# .hannes/config.toml
-version = 1
-project = "My_App" # initialized default should be derived from repository or folder name
-max_display_files = 5
+New provider scaffolds select `codex-cli`, timeout 180 seconds, `gpt-6.1-sol`, no
+MCP servers, medium reasoning and 2000 retained tokens per tool output. Omitting
+optional model/effort uses Codex defaults; omitting the MCP allow list disables
+all MCPs. Configuration versions 1 and 2 remain readable. Version 1 rejects tags,
+profiles and `default_profile`; new capabilities require an explicit supported
+version and compatibility tests rather than silently changing old semantics.
 
-# .hannes/provider.toml
-provider = "codex-cli"
-timeout_seconds = 180
-# model intentionally optional: use the user's Codex default
+## SEL-001: Selection and offline plans
 
-# .hannes/checks/always-ok.toml
-id = "always-ok"
-description = "Example deterministic pass"
-enabled = true
-command = ["git", "--version"] # use a portable, passing no-op check if possible; init assumes Git repository
-working_directory = "."
-timeout_seconds = 30
+Without a profile, all enabled rules run. Version 2 profiles select the union of
+explicit rule IDs and matches for any included tag, deduplicated. Checks precede
+reviews; each kind is ordered by ID. `--profil` overrides `default_profile`;
+otherwise the built-in profile `all` applies. Only `worktree` input is supported.
 
-# .hannes/checks/deliberately-failing.toml
-id = "deliberately-failing"
-description = "Disabled example demonstrating failure"
-enabled = false
-command = ["git", "definitely-not-a-subcommand"]
-timeout_seconds = 30
+`--plan` uses the same selection/preparation as execution. It prints order,
+selection reasons, omissions, required rules, input identity, declared provider
+settings and bounded context sizes, without running checks, Codex, MCPs or network
+calls, changing project/Git state or replacing the report. `--plan --json` uses
+plan schema 1 and structured diagnostics. A plan is neither a cache nor proof
+that a later input is identical. Provider availability is not checked offline.
 
-# .hannes/reviews/product-consistency.toml
-id = "product-consistency"
-description = "Evaluate changes against a project policy"
-enabled = false # example until the developer edits the guidance; don't trigger LLM just after init
-instructions = "product-consistency.md"
-```
+`--geiz-ist-geil` runs checks only, without provider discovery, model calls or MCP
+connections. Reviews are excluded from progress/results and the limited scope is
+explicit in terminal output and reports. Full configuration validation still runs.
+Every executed failure blocks success. Gates additionally require a nonempty,
+complete selection of enabled rules; a gate requiring reviews rejects checks-only
+execution before any check starts. Empty ordinary selections prove no rule PASS.
 
-Use a meaningful **generic** review template (e.g., verify changed behavior against documented expectations; cite concrete evidence; do not invent requirements). It starts disabled because a newly initialized arbitrary repository has no validated project-specific instructions. Document how to enable it. Enable `always-ok` so a first `mach was` succeeds without requiring Codex credentials.
+## CHK-001: Deterministic checks
 
-Check command is an argv array executed without a shell by default, so config is predictable and injection-resistant. Shell commands may be explicit `["sh", "-c", "..."]` when desired (OS dependent). `disabled=false` means enabled; the preferred key is `enabled`. Strictly reject unknown TOML fields and duplicates; paths must be within project root unless a justified exception is explicitly configured. Define deterministic sort order by ID/filename and a documented maximum per command/review, to avoid arbitrary hangs.
+Check commands are argument arrays, executed without an implicit shell or stdin.
+They inherit the environment; bare executables resolve through PATH. Relative
+executables resolve from the configured working directory and must remain inside
+the project. An explicit shell is permitted. Checks are trusted commands, not a
+security sandbox, and should not modify verified files.
 
-## 5. Deterministic checks
+Checks run sequentially. Exit 0 is PASS; nonzero exit or signal is FAIL. Spawn,
+capture failure and timeout are ERROR. Remaining checks run after a failure, but
+reviews do not. Capture the first 64 KiB of each output stream, drain the streams,
+record total bytes/truncation, and clean up child processes on timeout. Raw output
+is not redacted or streamed by default; saved output is available with `--details`.
 
-- Run enabled checks sequentially in deterministic order; capture exit status, elapsed time, bounded stderr/stdout, timeout and errors.
-- Exit status **0 means PASS; nonzero (including termination/timeout) means not passing**. A failed spawn or timeout is `ERROR`, not a fabricated policy violation.
-- Run remaining deterministic checks to produce a useful report even after one failure, but **do not spend LLM tokens if any deterministic check failed**; mark enabled reviews `NOT_RUN` with reason in JSON, do not silently claim all rules were checked. Disabled items are omitted from terminal and report results (or put in a separate optional metadata section, but never count them).
-- Never infer success from empty stdout. No `eval`, no implicit shell expansion.
+## REV-001: Reviews and provider isolation
 
-## 6. Reviews with Codex CLI, first provider
+Only the Codex CLI provider is currently supported. Integration boundaries must
+allow future providers without introducing speculative adapters. Codex resolves
+through inherited PATH and uses the existing local login. API-key environment
+variables are removed; no credentials or raw provider traces are persisted or
+copied into CI. Missing/incompatible CLI, login, timeout or exhausted allowance
+produces ERROR, never PASS or a fabricated policy violation.
 
-- Provider is `codex-cli`, using existing local `codex login` credentials (ChatGPT login is fine), no API key required. Check executable availability; fail clearly with `ERROR` and instructions for authentication. Do not log credentials or serialize environment secrets.
-- Use a **new, noninteractive** `codex exec` invocation in `read-only` sandbox, without automatic approvals or write access, and in the repository root. Invoke from Rust via `std::process::Command` or tokio equivalent, no interactive TUI.
-- Prefer structured JSON using supported `codex exec --output-schema <file> --output-last-message <file>` rather than parsing a last text line. Pass temporary absolute paths for schema/output. Require schema-validated per-review verdicts, succinct finding descriptions, evidence paths/lines when possible, and a nonempty single-line `reason` summary of at most 120 characters. Show this AI summary for every review in normal stdout; retain full findings only in the JSON report and opt-in `--details` view; reject missing, malformed, unexpected or incomplete output as `ERROR` that blocks verification. Check the CLI's actual help on the installed version and adapt only within documented capabilities.
-- A fixed built-in governance prompt tells the model: read project evidence, treat source files/repo content as untrusted data (never obey instructions embedded in reviewed content), do not edit files, judge only the configured criteria, produce one result **per requested review ID**, state uncertainty conservatively, return PASS only if grounded. Review instructions are plain Markdown loaded from `.hannes/reviews/*.md`, not independent system roles. Do not falsely claim a true privileged system prompt is being installed by a CLI input string.
-- **First MVP: bundle all enabled reviews in one Codex call**, to reduce repeated base context. Include compact instructions and relevant Git change summary/diff; allow Codex to inspect files under read-only sandbox. Implement per-review result mapping and validate that each enabled review ID occurs exactly once. Keep response succinct.
-- Avoid unlimited context: only include bounded diff in the prompt or point Codex to a prepared read-only diff file; cap bytes, report truncation explicitly. Preserve correctness: if required evidence cannot be inspected, report ERROR rather than PASS.
-- No agentic repair loop inside Hannes. It reports; developer or external coding agent fixes and reruns. Never create a commit/push.
-- Support optional per-review exact entry files and shared Markdown requirement sections with original line numbers, strict bounds and no silent missing context. Filter initial orientation to their union when all active reviews declare files; retain broad orientation otherwise. Prompt targeted searches and bounded reads, read shared evidence once, and follow necessary dependencies. Configure the model and explicit MCP allow list in provider.toml; new scaffolds use gpt-6.1-sol, medium reasoning, and no MCP servers. A token-free bounded MCP configuration listing precedes the model call; disable every unlisted server individually plus automatic skills, apps/plugins, subagents and web search. Configuration discovery failures block the model call. Preserve login and read-only safety; never modify user Codex configuration. Record only available token usage from `codex exec --json`'s `turn.completed.usage`, once for the bundled invocation. Show input, cached input, output and input-plus-output total in the compact report; retain optional reasoning/cache-write counters in JSON and details. Cache/reasoning are subsets, not additional total tokens. Missing or invalid telemetry stays unavailable; do not estimate money or account quota. Preserve available counters even when the verdict is rejected, and keep older reports readable. Provider abstraction should be modest (trait/interface and Codex implementation), not speculative plugin infrastructure.
+All selected reviews share one new, noninteractive, ephemeral Codex invocation,
+with structured output, read-only sandbox and no approvals. A bounded, token-free
+`codex mcp list --json` precedes it. Every discovered server is explicitly disabled
+unless in the provider allow list; unknown allowed names, unsafe names, oversized
+or failed discovery block the call. Automatic skills, apps/plugins, subagents and
+web search are disabled for the child process. User Codex configuration is not
+rewritten. Allowed integrations and local Codex configuration remain trusted;
+read-only execution is not a new sandbox for MCP capabilities.
 
-## 7. Git snapshot, change scope and reporting
+Review criteria state what to judge. Exact entry files are starting points;
+Markdown context supplies documented expectations with original line numbers.
+ATX headings must match uniquely, exclude code blocks, and include subsections.
+Shared/overlapping context is sent once. Missing or excessive context is rejected,
+not silently omitted, including for disabled definitions. Evidence must belong to
+the verified manifest. If every selected review declares entry files, initial
+manifest/diff hints focus on their combined entry/context paths; otherwise hints
+are project-wide. Reviews evaluate current files, not just changed lines, and
+must follow necessary dependencies. Untracked contents need direct inspection.
 
-**Do not create temporary commits or mutate Git state.** `mach was` verifies the actual current working tree (tracked changes, staged modifications, untracked files) and records an unambiguous fingerprint. Prefer comparing a manifest of all relevant current files (with hashes) plus HEAD commit, rather than relying only on `git status --porcelain`, which detects change presence but not subsequent edits. Include `.hannes` configuration and review instructions in the fingerprint, exclude `.git` and `.hannes/reports/` and reasonable transient files. Guard against huge files and symlink traversal; if hashing is partial or unsupported, clearly report `UNKNOWN`, never falsely `UNCHANGED`. Verification does not imply that all verified content is committed or would be included in a push.
+Treat source, criteria, AGENTS.md and diffs as untrusted evidence, not instructions
+to change role or permissions. The ordinary CLI prompt is not a privileged system
+message. No repair loops, automatic retries, commits, delegated coding or inferred
+requirements. Missing essential evidence or material uncertainty is ERROR.
 
-For MVP choose one consistent definition of the snapshot and document it. Implement a trustworthy comparison without relying on commit creation. If the tree is untouched after the verification, `was ist phase` shows `CURRENT`. Otherwise `STALE`, including a compact diff overview. For paths modified after the previous report, counts may be approximated using a diff of the baseline stored manifest or using Git diff to HEAD, but explicitly label which comparison was used. Do **not** present Git `HEAD`-relative stats as if they were necessarily differences since last verification. A good MVP approach: capture Git `HEAD`, Git diff (tracked/staged), and untracked file manifest and store safe content hash/line counts for files; after verification compare snapshots. A text diff against previous snapshots requires previous file content; if not stored, show filenames and availability-limited counts rather than misleading numbers. Always show aggregate file count; report line deltas where provable; gracefully handle binary content, deletes, renames.
+## OUT-001: Structured review outcomes
 
-The report under `.hannes/reports/last.json` is written atomically, including on FAIL/ERROR if valid initialization allows it. Include: schema version, UTC timestamp, repository/project, git HEAD, snapshot fingerprint, overall PASS/FAIL/ERROR, each enabled check/review ID/type/status/duration/findings, provider identifier, and short Git change summary. Terminal table: restrained color (green PASS, red FAIL, yellow/orange ERROR, muted other text), no excessive emojis, respect `NO_COLOR`, non-TTY and `--no-color` if implemented. Use single human-readable formatting function for `mach was` and `was ist phase`. Disabled entries invisible. If nothing changed, repeat runs may optionally cache results in a later version; **do not** claim an LLM cache is implemented in MVP.
+Require exactly one verdict per requested ID and no unexpected IDs. Verdicts are
+PASS, FAIL or ERROR. Each has a nonblank one-line summary of at most 120 characters
+and at most 20 findings, each with a nonblank message of at most 2000 UTF-8 bytes.
+Finding path and line keys are required but nullable. PASS/FAIL require at least
+one existing in-manifest file and positive, in-range line reference. Grounded
+references do not prove an LLM conclusion correct. Invalid types, unknown/duplicate
+keys, malformed/missing/duplicate results and incomplete coverage make the batch
+ERROR. The final document is limited to 1 MiB.
 
-`was ist phase` needs no LLM and must not rerun any check. Make an absent, corrupt, outdated-schema report an explicit comprehensible state.
+Available token counters are saved once per shared invocation, including when the
+verdict is rejected. Total is input plus output; cached input, reasoning output
+and cache writes are subsets. Missing/invalid telemetry remains unavailable,
+never fabricated as zero. No monetary estimate or total token budget is enforced.
 
-## 8. Error handling and UX
+## INP-001: Snapshots and stability
 
-- Errors fail closed. Invalid configuration never silently skips a rule. Missing Codex binary, CLI auth error, malformed output, timeout or token exhaustion are `ERROR`, not `FAIL`; both prevent green overall PASS.
-- Define a stable exit code policy, e.g. `0` success; `1` verification FAILED; `2` configuration, provider, or execution ERROR; `3` no report (for status), with tests.
-- Keep CLI output concise. Help uses cyan accents and bold headings; successful informational messages are green, warnings amber. Respect `NO_COLOR`, `--no-color`, and non-TTY output for stdout and stderr independently. Invalid CLI arguments exit with code 2 and execute no rules.
-- Check stdout/stderr should not dump secrets by default; bounded output; consider redaction and avoid writing sensitive raw Codex trace to reports.
+Input is Git HEAD plus a sorted manifest of current tracked and nonignored
+untracked files, with SHA-256 hashes, sizes and executable flags. Include `.hannes`
+even when ignored, but exclude `.git` and `.hannes/reports`. No temporary commits,
+index mutations, content backups, external diff helpers or optional Git locks.
 
-## 9. Git integration: explicitly future-friendly, not auto-installed
+Bound snapshots to 8 MiB/file, 128 MiB total, 100,000 paths, 64 KiB of Git file-list
+capture and 16 levels of configuration nesting. Unsupported symlinks, submodules,
+special/non-UTF-8 paths, unreadable files or exceeded limits make coverage
+incomplete. Incomplete input blocks execution and PASS. Compare input before an
+active provider call and after execution; changed or unverifiable input blocks
+PASS. Snapshots are not filesystem transactions and cannot detect edits reverted
+entirely between captures.
 
-For first release, provide an **example** `scripts/pre-push` and docs for manual installation to `.git/hooks/pre-push` (or `core.hooksPath`). It runs `hannes mach was` and blocks a push on nonzero exit. Do not edit an existing hook without confirmation; do not make hooks part of `fang an` implicitly. A local pre-push hook is bypassable (`git push --no-verify`) and checks a working tree that might not match pushed commits. State this prominently. A future CI adapter should run the same `hannes mach was` command over a clean checked-out commit. Authentication of Codex on GitHub-hosted runners is **out of scope**, and CI must not store personal ChatGPT tokens. GitHub Actions for Hannes' own release builds must not require LLM/API keys.
+Status is CURRENT for matching complete snapshots, STALE for differences, UNKNOWN
+for incomplete/unavailable comparison. Staging alone does not change content;
+HEAD changes do. Show bounded changed paths and exact totals only when coverage
+allows. Do not invent line deltas: the baseline stores hashes, not prior content.
+A working-tree PASS does not certify staged/pushed commits or deployed artifacts.
 
-## 10. GitHub workflow and release
+## RPT-001: Reporting and CLI outcomes
 
-- Set up a standalone, new Hannes Git repository; include README, LICENSE (Unlicense), `.gitignore`, Rust source, tests, examples, docs, and workflows.
-- GitHub Actions CI on push/PR: `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` on supported host(s); no real Codex calls.
-- GitHub Actions release is manually dispatched on main. Semantic Release determines the version from conventional commits, updates Cargo.toml/Cargo.lock and CHANGELOG.md, and publishes tested native macOS ARM64/x64 and Linux x64 archives with checksums, LICENSE and README. Windows is excluded from hosted CI/releases. The same reusable quality workflow gates CI and releases; release versions and source identities must match the tested artifacts.
-- Only release planning/publishing jobs have `contents: write`; normal CI/builds remain read-only. Actions are pinned to full commit SHAs. No manual tag push is needed; starting the release workflow is the explicit publication action. See docs/releasing.md for failure recovery and branch-rule limitations.
-- Prefer conventional stable functionality over heavy release orchestration. If a target cannot build, explain and keep remaining targets working rather than claiming a full matrix works.
+Reports are written atomically to `.hannes/reports/last.json`, including FAIL/ERROR
+when initialized input allows it. Invalid configuration preserves the prior
+report. Save UTC timestamp, repository/project, provider, input identity, rule
+results, durations, findings, output and available usage. ERROR takes precedence
+over FAIL; NOT_RUN blocks success without replacing an existing FAIL with ERROR.
+Disabled rules stay out of results; failed checks leave selected reviews NOT_RUN.
 
-## 11. Tests and acceptance
+Schema 2 records the plan/profile and omissions. Schema 1 remains readable as
+unprofiled legacy evidence and cannot certify a gate. Reject corrupt/inconsistent
+reports and mismatched repositories. Reports are local, unsigned evidence, not
+tamper-proof attestations. Status uses saved selection, not the current default.
 
-- CLI parser tests for every funny command path and canonical `--help`.
-- Init test in temp Git repository: exact paths, idempotence, no overwrite; `pass auf` succeeds.
-- Validation fixtures: unknown field, bad provider, duplicate IDs, missing instructions, invalid timeout/path/command, disabled check included in validation but not run.
-- `mach was` with sample always-pass succeeds without Codex; failing enabled check fails, blocks LLM call, writes report; mock provider tests for valid PASS/FAIL, malformed JSON, missing IDs, process failure and timeout. Provider must be injectable/mockable in test without real credentials.
-- `was ist phase` before first verification and after, with unchanged, modified tracked, staged and new untracked file; ensure report file changes do not self-invalidate. Test displayed file limit and truthful count labeling.
-- Report JSON round-trip, nonzero exit behavior and NO_COLOR display.
-- CI tests without network or Codex should be green (dependency fetching during build excepted).
+Flush progress to stderr before each rule starts and after it finishes. Announce
+the shared AI call; do not claim real-time per-review model completion or sum
+shared durations. Final compact output goes to stdout, with each review's short
+summary. Details are opt-in. No rules defined prints
+`Du hast noch keine Regeln definiert, du Vogel!`; disabled definitions do not
+trigger that message. Empty successful runs establish no rule PASS.
 
-## 12. Out of scope
+Respect `NO_COLOR`, `--no-color` and each stream's terminal state. Status colors
+are green PASS/CURRENT, red FAIL and amber ERROR/STALE/UNKNOWN; help uses cyan
+accents and bold headings. Sanitize untrusted terminal content.
 
-No local daemon, server, database, autonomous coding, AI task planner, automated commits, automatic fixes, web dashboard, organization policy distribution, billing, plugin marketplace, production operations monitoring, hosted service, privileged GitHub Actions with copied ChatGPT auth, or speculative provider implementations. No automatic review grouping, cache or complex selective routing until measurement motivates it. Keep architecture extensible without implementing imaginary use cases.
+Exit codes: 0 success; 1 failed verification or STALE; 2 configuration, execution,
+provider/report error, UNKNOWN or invalid arguments; 3 absent report for status.
+An executable plan exits 0; a blocked/invalid plan exits 2.
 
-## 13. Definition of done
+## REL-001: Distribution and integrations
 
-A newcomer can clone Hannes, `cargo build --release`, put `hannes` on PATH, use each exact German command in a fresh Git repository, edit TOML and markdown, trigger successful and deliberately failing deterministic checks, run an optional real Codex review with their own existing Codex CLI login, inspect a faithful local report, see meaningful `CURRENT/STALE` status and change summary, and publish a versioned native GitHub Release by explicitly dispatching its workflow. Every behavior is documented, test-covered where practical, and project initialization creates no unexpected Git commits/hooks/auth secrets.
+Supported hosted CI/release targets are macOS Apple Silicon, macOS Intel and
+Linux x64 (GNU/glibc); Windows builds/releases are excluded. Build with stable
+Rust/Cargo (declared minimum 1.85) into a native executable. Git and configured
+external tools remain runtime dependencies; no Python/Node runtime is bundled.
+
+CI runs formatting, Clippy, offline unit/acceptance tests, native smoke tests,
+minimum-Rust checks, dependency audits and release-tooling/workflow checks.
+Releases are manually dispatched on main, reuse the quality workflow, and use
+Semantic Release for versions, changelog, version commits, tags and native
+archives with README, Unlicense and checksums. Artifacts must match the tested
+version/source. Normal CI is read-only; only release planning/publishing may
+request write permission. Actions are pinned. See [release policy](docs/releasing.md).
+
+Git hooks are explicit opt-in examples, never automatically installed. A bypassable
+local hook verifies working files, not necessarily the pushed commit. Hosted
+Codex authentication is not provisioned and personal tokens are not copied to CI.
+No hosted service, database, autonomous development, universal policy engine,
+result cache or additional input/provider implementation is in current scope.
+
+## Acceptance coverage and change process
+
+Each essential requirement has a stable ID and representative acceptance tests.
+The table is a navigation aid, not a claim that one test proves every clause.
+Add or update the contract and acceptance cases before implementing behavior;
+update the README/examples and relevant design decisions in the same coherent
+change. Preserve versioned compatibility, run applicable checks, then commit/push.
+Public documentation explains supported behavior; proposals remain in the roadmap.
+
+| Requirement | Representative acceptance test |
+| --- | --- |
+| CLI-001 | `tests/acceptance.rs::all_command_paths_and_standard_help` |
+| CFG-001 | `tests/acceptance.rs::validation_rejects_invalid_including_disabled` |
+| SEL-001 | `tests/profiles.rs::checks_only_explains_omissions_and_cannot_shrink_a_gate` |
+| CHK-001 | `tests/acceptance.rs::failing_check_runs_remaining_and_blocks_provider` |
+| REV-001 | `tests/acceptance.rs::lean_review_transport_disables_unlisted_mcp_and_honors_model_profile_and_allowlist` |
+| OUT-001 | `tests/acceptance.rs::malformed_missing_extra_duplicate_ungrounded_provider_outputs_fail_closed` |
+| INP-001 | `tests/acceptance.rs::changing_files_during_checks_blocks_pass` |
+| RPT-001 | `tests/profiles.rs::saved_reports_reject_missing_gate_coverage_and_plan_metadata` |
+| REL-001 | `scripts/test-release.py::test_ci_policy_checks_new_messages_without_rejecting_legacy_history` |

@@ -1,5 +1,21 @@
 # Working on Hannes
 
+## Core principles
+
+Consistency and no AI slop are the highest quality priorities for every change.
+
+- Follow the user's decisions and established project terminology. Keep code,
+  CLI behavior, configuration, examples and documentation consistent; update all
+  affected places when a convention changes.
+- Implement the requested behavior precisely. Do not invent names, aliases,
+  features, requirements or abstractions without a concrete need. When intent
+  is unclear, inspect existing decisions and ask rather than fabricate.
+- Write clear, concise and complete documentation. Avoid filler, buzzwords,
+  boilerplate and unsupported claims. Examples must be usable, generic and
+  consistent with the actual implementation.
+- Before finishing, check the whole change for contradictions, stale references
+  and unnecessary additions. Prefer the smallest coherent solution.
+
 ## Contract and scope
 
 - Read SPECIFICATION.md before changing behavior. Explicit user instructions take

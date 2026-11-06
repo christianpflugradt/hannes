@@ -88,6 +88,7 @@ impl Plan {
 pub struct PreparedPlan {
     pub plan: Plan,
     pub snapshot: Snapshot,
+    pub review_input: Option<crate::review_input::PreparedReviewInput>,
 }
 
 fn metadata_path(path: &str) -> bool {
@@ -230,12 +231,13 @@ pub fn build(
     context
         .selections
         .dedup_by(|a, b| a.path == b.path && a.headings == b.headings);
-    let mut excerpts = Vec::new();
+    let mut review_input = None;
     if !active.is_empty() {
-        match review_context::collect(&project.root, &active) {
-            Ok(found) => {
-                context.selected_bytes = found.iter().map(|e| e.text.len()).sum();
-                context.sections = found
+        match crate::review_input::PreparedReviewInput::prepare(project, &active, &snapshot) {
+            Ok(input) => {
+                context.selected_bytes = input.excerpts.iter().map(|e| e.text.len()).sum();
+                context.sections = input
+                    .excerpts
                     .iter()
                     .map(|e| ContextSection {
                         path: e.path.clone(),
@@ -244,41 +246,11 @@ pub fn build(
                         bytes: e.text.len(),
                     })
                     .collect();
-                excerpts = found;
+                context.orientation_diff_bytes = input.diff.len();
+                context.orientation_diff_truncated = input.diff_truncated;
+                review_input = Some(input);
             }
-            Err(error) => {
-                blocking_reasons.push(format!("Cannot prepare review context: {error:#}"))
-            }
-        }
-        for path in active
-            .iter()
-            .flat_map(|r| r.files.iter().chain(r.context.iter().map(|c| &c.path)))
-        {
-            if !snapshot.files.contains_key(path) {
-                blocking_reasons.push(format!("Review evidence not in verified manifest: {path}"));
-            }
-        }
-        let focused = active.iter().all(|r| !r.files.is_empty()).then(|| {
-            active
-                .iter()
-                .flat_map(|r| r.files.iter().chain(r.context.iter().map(|c| &c.path)))
-                .cloned()
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect::<Vec<_>>()
-        });
-        match git_snapshot::bounded_diff_for_paths(
-            &project.root,
-            snapshot.head.is_some(),
-            focused.as_deref(),
-        ) {
-            Ok((diff, truncated)) => {
-                context.orientation_diff_bytes = diff.len();
-                context.orientation_diff_truncated = truncated;
-            }
-            Err(error) => {
-                blocking_reasons.push(format!("Cannot prepare orientation diff: {error:#}"))
-            }
+            Err(error) => blocking_reasons.push(format!("Cannot prepare review input: {error:#}")),
         }
     }
     let mut provider = project.provider.clone();
@@ -355,6 +327,9 @@ pub fn build(
         .iter()
         .filter(|(p, _)| !metadata_path(p))
         .collect();
+    let excerpts = review_input
+        .as_ref()
+        .map_or(&[][..], |input| input.excerpts.as_slice());
     let identity = serde_json::json!({
         "plan_schema_version": 1, "verifier_version": env!("CARGO_PKG_VERSION"),
         "config_version": project.config.version, "project": project.config.project,
@@ -363,7 +338,11 @@ pub fn build(
         "complete": snapshot.complete,
     });
     plan.plan_id = format!("{:x}", Sha256::digest(serde_json::to_vec(&identity)?));
-    Ok(PreparedPlan { plan, snapshot })
+    Ok(PreparedPlan {
+        plan,
+        snapshot,
+        review_input,
+    })
 }
 
 pub fn apply(project: &mut Project, plan: &Plan) {

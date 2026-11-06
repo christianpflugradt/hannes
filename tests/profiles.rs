@@ -544,3 +544,44 @@ fn saved_reports_reject_missing_gate_coverage_and_plan_metadata() {
         assert!(report::read(f.root.path()).is_err(), "{mutation}");
     }
 }
+
+#[test]
+fn prepared_input_is_shared_with_the_provider_without_rereading_context() {
+    let f = Fixture::new();
+    fs::write(
+        f.root.path().join("Policy.md"),
+        "# Policy\nOriginal requirement.\n",
+    )
+    .unwrap();
+    f.write("reviews/product-consistency.toml", "id='product-consistency'\ndescription='Review'\nenabled=true\ninstructions='product-consistency.md'\nfiles=['Policy.md']\n[[context]]\npath='Policy.md'\n");
+    let project = config::load(f.root.path()).unwrap();
+    let prepared = planner::build(&project, None, false).unwrap();
+    let input = prepared.review_input.as_ref().unwrap();
+    assert_eq!(
+        prepared.plan.context.selected_bytes,
+        input.excerpts.iter().map(|e| e.text.len()).sum::<usize>()
+    );
+    assert_eq!(
+        prepared.plan.context.orientation_diff_bytes,
+        input.diff.len()
+    );
+    let active = [&project.reviews[0]];
+    let request = Request {
+        project: &project,
+        reviews: &active,
+        snapshot: &prepared.snapshot,
+        input,
+    };
+    let original = hannes::provider::prompt(&request).unwrap();
+    fs::remove_file(f.root.path().join("Policy.md")).unwrap();
+    assert_eq!(hannes::provider::prompt(&request).unwrap(), original);
+    assert!(original.contains("Original requirement."));
+    // Reusing preparation does not weaken the separate source-stability requirement.
+    let current = hannes::git_snapshot::capture(f.root.path()).unwrap();
+    assert_eq!(
+        hannes::git_snapshot::compare(&prepared.snapshot, &current, 5).state,
+        "STALE"
+    );
+    let checks_only = planner::build(&project, None, true).unwrap();
+    assert!(checks_only.review_input.is_none());
+}

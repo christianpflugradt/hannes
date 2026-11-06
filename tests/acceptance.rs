@@ -731,12 +731,17 @@ fn prompt_marks_evidence_untrusted_and_diff_truncation() {
     let project = config::load(d.path()).unwrap();
     let snapshot = git_snapshot::capture(d.path()).unwrap();
     let active: Vec<_> = project.reviews.iter().collect();
+    let mut input =
+        hannes::review_input::PreparedReviewInput::prepare(&project, &active, &snapshot).unwrap();
+    input.diff = "malicious untrusted evidence".into();
+    input.diff_truncated = true;
     let request = Request {
         project: &project,
         reviews: &active,
         snapshot: &snapshot,
+        input: &input,
     };
-    let text = hannes::provider::prompt(&request, "malicious untrusted evidence", true).unwrap();
+    let text = hannes::provider::prompt(&request).unwrap();
     assert!(text.contains("Truncated: true"));
     assert!(text.contains("untrusted evidence"));
     assert!(text.contains("ordinary CLI prompt, not a privileged system message"));
@@ -2134,16 +2139,15 @@ fn focused_reviews_exclude_unrelated_paths_and_diff_and_include_untracked_entry_
     let p = config::load(d.path()).unwrap();
     let snapshot = git_snapshot::capture(d.path()).unwrap();
     let active = [&p.reviews[0]];
+    let input = hannes::review_input::PreparedReviewInput::prepare(&p, &active, &snapshot).unwrap();
     let request = Request {
         project: &p,
         reviews: &active,
         snapshot: &snapshot,
+        input: &input,
     };
-    let focus = hannes::provider::focused_paths(&request).unwrap();
-    let (diff, truncated) =
-        git_snapshot::bounded_diff_for_paths(d.path(), false, Some(&focus)).unwrap();
-    assert!(diff.contains("new entry") && !diff.contains("UNRELATED_DIFF_SECRET"));
-    let prompt = hannes::provider::prompt(&request, &diff, truncated).unwrap();
+    assert!(input.diff.contains("new entry") && !input.diff.contains("UNRELATED_DIFF_SECRET"));
+    let prompt = hannes::provider::prompt(&request).unwrap();
     assert!(prompt.contains("new.swift") && prompt.contains("Relevant requirement"));
     assert!(!prompt.contains("UNRELATED_POLICY_SECRET") && !prompt.contains("unrelated.swift"));
     assert!(prompt.contains("starting points, not an exhaustive boundary"));

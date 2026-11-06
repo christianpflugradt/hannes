@@ -135,11 +135,30 @@ pub fn execute_with_usage(
     snapshot: &Snapshot,
     provider: &dyn Provider,
 ) -> (Vec<Item>, Option<TokenUsage>) {
+    match crate::review_input::PreparedReviewInput::prepare(project, active, snapshot) {
+        Ok(input) => execute_prepared(project, active, snapshot, &input, provider),
+        Err(error) => (
+            active
+                .iter()
+                .map(|r| Item::simple(&r.id, "review", Status::Error, format!("{error:#}")))
+                .collect(),
+            None,
+        ),
+    }
+}
+pub fn execute_prepared(
+    project: &Project,
+    active: &[&Review],
+    snapshot: &Snapshot,
+    input: &crate::review_input::PreparedReviewInput,
+    provider: &dyn Provider,
+) -> (Vec<Item>, Option<TokenUsage>) {
     let start = Instant::now();
     let response = provider.review_with_usage(&Request {
         project,
         reviews: active,
         snapshot,
+        input,
     });
     let result = response
         .verdict

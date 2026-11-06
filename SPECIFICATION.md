@@ -140,6 +140,15 @@ to change role or permissions. The ordinary CLI prompt is not a privileged syste
 message. No repair loops, automatic retries, commits, delegated coding or inferred
 requirements. Missing essential evidence or material uncertainty is ERROR.
 
+## PREP-001: Shared review input
+
+Planning prepares bounded requirement excerpts, manifest hints and orientation
+diff once. Execution passes that same prepared input to the provider; prompt
+rendering must not reread context or recalculate the diff. Snapshot stability
+checks still run before the call and after execution; preparation is not a cache
+or permission to run against changed files. The provider boundary owns transport
+and provider settings, not a second interpretation of evidence selection.
+
 ## OUT-001: Structured review outcomes
 
 Require exactly one verdict per requested ID and no unexpected IDs. Verdicts are
@@ -261,6 +270,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 | SEL-001 | `tests/profiles.rs::checks_only_explains_omissions_and_cannot_shrink_a_gate` |
 | CHK-001 | `tests/acceptance.rs::failing_check_runs_remaining_and_blocks_provider` |
 | REV-001 | `tests/acceptance.rs::lean_review_transport_disables_unlisted_mcp_and_honors_model_profile_and_allowlist` |
+| PREP-001 | `tests/profiles.rs::prepared_input_is_shared_with_the_provider_without_rereading_context` |
 | OUT-001 | `tests/acceptance.rs::malformed_missing_extra_duplicate_ungrounded_provider_outputs_fail_closed` |
 | INP-001 | `tests/acceptance.rs::changing_files_during_checks_blocks_pass` |
 | RPT-001 | `tests/profiles.rs::saved_reports_reject_missing_gate_coverage_and_plan_metadata` |

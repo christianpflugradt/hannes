@@ -10,6 +10,7 @@ pub mod provider;
 pub mod quotes;
 pub mod report;
 pub mod review_context;
+pub mod review_input;
 pub mod reviews;
 pub mod terminal;
 pub mod uninstall;
@@ -88,7 +89,11 @@ pub fn verify_project_with_profile(
     progress(Progress::Phase(
         "Ausführungsplan und Arbeitsdateien vorbereiten …",
     ));
-    let planner::PreparedPlan { plan, snapshot } = planner::build(&project, profile, checks_only)?;
+    let planner::PreparedPlan {
+        plan,
+        snapshot,
+        review_input,
+    } = planner::build(&project, profile, checks_only)?;
     anyhow::ensure!(
         !plan.gate || plan.selection_complete,
         "Gate requires reviews; --geiz-ist-geil cannot omit required rules"
@@ -180,8 +185,15 @@ pub fn verify_project_with_profile(
                     description: &review.description,
                 });
             }
-            let (results, usage) =
-                reviews::execute_with_usage(&project, &active, &snapshot, provider);
+            let (results, usage) = reviews::execute_prepared(
+                &project,
+                &active,
+                &snapshot,
+                review_input.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("executable review plan has no prepared input")
+                })?,
+                provider,
+            );
             provider_usage = usage;
             for (offset, item) in results.iter().enumerate() {
                 progress(Progress::RuleFinished {

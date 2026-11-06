@@ -74,6 +74,11 @@ leave a prior report untouched; status then sees changed configuration as STALE.
 
 ## Provider boundaries
 
+The planner prepares provider-neutral review input once (`review_input`): selected
+requirement excerpts, manifest hints and the bounded orientation diff. Execution
+passes that exact preparation to the provider. Prompt rendering does no filesystem
+reads or Git work; independent snapshot stability checks still guard execution.
+
 One fresh Codex call receives configured criteria, deduplicated requirement excerpts
 with original line numbers, and bounded orientation data. Exact per-review entry
 files focus the initial manifest/diff when every active review is focused; otherwise

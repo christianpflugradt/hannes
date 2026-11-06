@@ -250,6 +250,14 @@ maintaining independent TOML templates. README defaults, limits and scaffold
 examples are checked against those values. Validation, planning and execution
 reuse the same bounds; this does not add configurable fields or change defaults.
 
+## COMPAT-001: Versioned compatibility evidence
+
+Keep immutable configuration/report fixtures from historical source versions.
+Current code must read every supported version without silently changing its
+meaning. Tests may substitute repository installation identity, not synthesize
+old field sets by serializing current structs. Preserve old fixtures when adding
+a new version; deliberate breaking changes require an explicit specification.
+
 ## DOC-001: Documentation contract
 
 Every editable configuration field, required/optional marker and default must
@@ -270,6 +278,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 | Requirement | Representative acceptance test |
 | --- | --- |
 | ARC-001 | `tests/documentation.rs::documented_bounds_and_provider_scaffold_match_the_implementation` |
+| COMPAT-001 | `tests/compatibility.rs::historical_configurations_and_reports_remain_readable` |
 | DOC-001 | `tests/documentation.rs::every_configuration_field_required_marker_and_default_is_documented` |
 | CLI-001 | `tests/acceptance.rs::all_command_paths_and_standard_help` |
 | CFG-001 | `tests/acceptance.rs::validation_rejects_invalid_including_disabled` |

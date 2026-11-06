@@ -16,6 +16,11 @@ Configuration defaults and bounds are shared through `limits` and typed scaffold
 serialization in `config`. Documentation tests check public fields, defaults,
 bounds and examples against those types and constants.
 
+Compatibility is checked with frozen configuration/report fixtures captured from
+pinned historical source. Tests substitute only the repository identity and do
+not generate old schemas from current structs; fixture provenance is recorded in
+[tests/fixtures/compat](../tests/fixtures/compat/README.md).
+
 ## Snapshot definition
 
 A snapshot is Git HEAD plus a sorted manifest of SHA-256 hashes, byte sizes and

@@ -1,0 +1,6 @@
+id = "always-ok"
+description = "Example deterministic pass"
+enabled = true
+command = ["git", "--version"]
+working_directory = "."
+timeout_seconds = 30

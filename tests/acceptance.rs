@@ -1,3 +1,4 @@
+mod support;
 use anyhow::{Result, bail};
 use clap::{CommandFactory, Parser};
 #[cfg(unix)]
@@ -1528,10 +1529,8 @@ fn usage_is_recorded_once_for_bundled_reviews_and_old_reports_still_load() {
         report::read(d.path()).unwrap().provider_usage,
         r.provider_usage
     );
-    // Schema 1 reports from earlier Hannes versions have no detailed counters.
-    let mut legacy = serde_json::to_value(&r).unwrap();
-    legacy.as_object_mut().unwrap().remove("provider_usage");
-    legacy["token_usage"] = serde_json::Value::Null;
+    // Read a frozen older field set rather than recreating it from today's report.
+    let legacy = support::historical_report(d.path(), "v1/report-review.json");
     fs::write(path(d.path(), "reports/last.json"), legacy.to_string()).unwrap();
     let legacy = report::read(d.path()).unwrap();
     assert_eq!(legacy.provider_usage, None);
@@ -1968,9 +1967,7 @@ fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
 #[test]
 fn old_reports_default_to_all_rules_and_inconsistent_scope_is_rejected() {
     let d = project();
-    let original = hannes::verify(d.path(), &Never).unwrap();
-    let mut old = serde_json::to_value(&original).unwrap();
-    old.as_object_mut().unwrap().remove("checks_only");
+    let mut old = support::historical_report(d.path(), "v1/report-minimal.json");
     fs::write(path(d.path(), "reports/last.json"), old.to_string()).unwrap();
     assert!(!report::read(d.path()).unwrap().checks_only);
     old["checks_only"] = true.into();

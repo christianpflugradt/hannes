@@ -1,0 +1,140 @@
+{
+  "schema_version": 2,
+  "timestamp": "2026-01-01T00:00:00Z",
+  "repository": "__REPOSITORY__",
+  "project": "My_App",
+  "provider": "codex-cli",
+  "overall": "PASS",
+  "snapshot": {
+    "head": null,
+    "fingerprint": "a4d19c8ede4325c39a5325810e533ddac87edf12c79387962ddf63ee7309e97b",
+    "files": {
+      ".Hannes/README.md": {
+        "sha256": "02084660368b43cd83597d58390f9ec8357d6884d82cda54835fa34476699a8d",
+        "bytes": 8972,
+        "executable": false
+      },
+      ".Hannes/checks/always-ok.toml": {
+        "sha256": "81b3912a03a73d050e3509cd712204c34e5361626eb9f8eb6412d315b30f32ce",
+        "bytes": 151,
+        "executable": false
+      },
+      ".Hannes/checks/deliberately-failing.toml": {
+        "sha256": "53dc5c7386d21d95a84616514d5f016a3eb563eb9eddda7b751c882ce83a07c6",
+        "bytes": 169,
+        "executable": false
+      },
+      ".Hannes/config.toml": {
+        "sha256": "d764d67d8a62e500713b3a112eff6441e65cf6e682a5873f5e692c2bc25cef01",
+        "bytes": 79,
+        "executable": false
+      },
+      ".Hannes/profiles/local.toml": {
+        "sha256": "c967d87da137fcab46942ca50e9c1af1e270bf01df1e630497524aba0bab2018",
+        "bytes": 66,
+        "executable": false
+      },
+      ".Hannes/provider.toml": {
+        "sha256": "0c4577277f33540906ae1440a6ed5541d1af7389a293a5bc880e54bc10098492",
+        "bytes": 161,
+        "executable": false
+      },
+      ".Hannes/reviews/product-consistency.md": {
+        "sha256": "c704c89dda7be509b5c0212e2036f4d8a99032e7cf03bcec6d4781634a16b93e",
+        "bytes": 398,
+        "executable": false
+      },
+      ".Hannes/reviews/product-consistency.toml": {
+        "sha256": "ad479badc83766316bc5eca70f67febbc173451b7cd8d3df30303156f49f3a41",
+        "bytes": 149,
+        "executable": false
+      }
+    },
+    "complete": true,
+    "limitations": []
+  },
+  "results": [
+    {
+      "id": "always-ok",
+      "kind": "check",
+      "status": "PASS",
+      "duration_ms": 1,
+      "reason": "Command exited: exit status: 0",
+      "findings": [],
+      "exit_code": 0,
+      "stdout": {
+        "text": "git version 2.50.0\n",
+        "total_bytes": 19,
+        "truncated": false
+      },
+      "stderr": {
+        "text": "",
+        "total_bytes": 0,
+        "truncated": false
+      }
+    }
+  ],
+  "git_summary": "8 working files fingerprinted; HEAD unborn; Git status: 0 staged, 0 unstaged, 8 untracked paths (categories may overlap; not changes since verification)",
+  "max_display_files": 5,
+  "token_usage": null,
+  "provider_usage": null,
+  "checks_only": false,
+  "plan": {
+    "plan_schema_version": 1,
+    "config_version": 2,
+    "plan_id": "c9b11fa728cdf62eb1f1d1b7e93b1fc67bc402f2bae97a6de510e9b75324d81e",
+    "status": "planned",
+    "blocking_reasons": [],
+    "profile": "local",
+    "profile_source": "default",
+    "gate": true,
+    "input": {
+      "kind": "worktree",
+      "head": null,
+      "fingerprint": "a4d19c8ede4325c39a5325810e533ddac87edf12c79387962ddf63ee7309e97b",
+      "complete": true,
+      "limitations": []
+    },
+    "checks_only": false,
+    "selection_complete": true,
+    "scheduled": [
+      {
+        "id": "always-ok",
+        "kind": "check",
+        "description": "Example deterministic pass",
+        "tags": [],
+        "selected_by": [
+          "id:always-ok"
+        ]
+      }
+    ],
+    "omitted": [],
+    "required_ids": [
+      "always-ok"
+    ],
+    "provider": {
+      "provider": "codex-cli",
+      "timeout_seconds": 180,
+      "model": "gpt-6.1-sol",
+      "mcp_servers": [],
+      "review_profile": {
+        "reasoning_effort": "medium",
+        "tool_output_token_limit": 2000
+      }
+    },
+    "provider_availability_checked": false,
+    "planned_model_calls": 0,
+    "context": {
+      "entry_files": [],
+      "selections": [],
+      "sections": [],
+      "selected_bytes": 0,
+      "byte_limit": 65536,
+      "instruction_bytes": 0,
+      "instruction_byte_limit": 262144,
+      "manifest_hint_limit": 200,
+      "orientation_diff_bytes": 0,
+      "orientation_diff_truncated": false
+    }
+  }
+}

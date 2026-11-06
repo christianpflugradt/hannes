@@ -1,0 +1,4 @@
+version = 2
+project = "My_App"
+max_display_files = 5
+default_profile = "local"

@@ -1,3 +1,4 @@
+mod support;
 use anyhow::Result;
 use hannes::{
     VerificationMode, config, planner,
@@ -491,7 +492,7 @@ fn empty_profiles_are_explicit_and_incomplete_snapshots_never_start_checks() {
 fn status_keeps_historical_scope_and_legacy_reports_cannot_claim_a_gate() {
     let f = Fixture::new();
     f.profile("local", "rules=['always-ok']");
-    let report = f.run("local", false, &Never).unwrap();
+    f.run("local", false, &Never).unwrap();
     f.profile("different", "");
     f.write(
         "config.toml",
@@ -499,9 +500,7 @@ fn status_keeps_historical_scope_and_legacy_reports_cannot_claim_a_gate() {
     );
     let output = f.cli(&["was", "ist", "phase"]);
     assert!(String::from_utf8_lossy(&output.stdout).contains("Profil: local"));
-    let mut legacy = serde_json::to_value(report).unwrap();
-    legacy["schema_version"] = 1.into();
-    legacy.as_object_mut().unwrap().remove("plan");
+    let legacy = support::historical_report(f.root.path(), "v1/report.json");
     f.write("reports/last.json", &legacy.to_string());
     assert!(report::read(f.root.path()).unwrap().plan.is_none());
     assert!(

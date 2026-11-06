@@ -1,0 +1,4 @@
+id = "local"
+rules = ["always-ok"]
+gate = true
+input = "worktree"

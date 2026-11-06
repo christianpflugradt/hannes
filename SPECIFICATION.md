@@ -2,6 +2,10 @@
 
 Status: implementation-ready specification, v0.1. Language: English for source, configuration, documentation and directories. German conversational command names and restrained German CLI copy are intentional.
 
+The [product vision and architectural direction](docs/product-vision.md) guides
+development. This specification defines the supported behavior; possibilities in
+the vision do not imply implemented capabilities or expand the current scope.
+
 Implemented extension: [rule profiles and execution plans](docs/profiles-and-plans.md)
 defines opt-in version-2 configuration, offline plans and report schema 2.
 Version-1 configurations remain supported; initialization still creates version 1.

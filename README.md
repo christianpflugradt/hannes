@@ -9,13 +9,19 @@
 ------ Der Harness ohne 'r' ------
 ```
 
-*Hannes schaut nach dem Rechten.* Hannes runs the quality checks and AI reviews
-you define for a Git project and saves their results in one report.
+*Hannes schaut nach dem Rechten.* Hannes is an open-source, agent-agnostic
+governance framework for software development: you define the expectations that
+development results must satisfy as version-controlled rules alongside your code.
+The same rules apply whether a person or a coding agent writes the code.
+Today, its native CLI evaluates these rules in Git projects through deterministic
+checks and AI reviews, recording verdicts and supporting evidence.
 
 Use it when a successful build is only part of your definition of “ready”: tests
 and linters can verify concrete conditions, while an AI review can compare your
-implementation with written requirements. Hannes gives both a repeatable command
-and a recorded outcome. It does not change or repair your application.
+implementation with written requirements and architectural decisions. Developers
+and coding agents choose how to implement changes; Hannes evaluates whether the
+results meet the configured expectations. See the [product vision](docs/product-vision.md)
+for its principles and long-term direction.
 
 ## Contents
 
@@ -47,8 +53,9 @@ and a recorded outcome. It does not change or repair your application.
 
 ## How Hannes works
 
-You describe what should be verified in `.hannes/` inside your project. Run
-`hannes mach was` whenever you want to check the current working files.
+Your project's governance rules live in `.hannes/` alongside the source code,
+where they can be reviewed and versioned together. Run `hannes mach was` to
+evaluate the current working files against those expectations.
 
 Hannes validates the configuration, runs the selected checks, and then asks the
 AI to perform the selected reviews. If a check fails, reviews are skipped to avoid

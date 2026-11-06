@@ -21,8 +21,15 @@ Consistency and no AI slop are the highest quality priorities for every change.
 
 ## Contract and scope
 
-- Read SPECIFICATION.md before changing behavior. Explicit user instructions take
-  precedence; the project license is Unlicense.
+- Read docs/product-vision.md and SPECIFICATION.md before changing behavior or
+  architecture. The vision defines product direction and architectural boundaries;
+  the specification defines the supported behavior. Evaluate proposed changes
+  against the vision's guiding question. Future possibilities are not permission
+  to implement speculative features. Explicit user instructions take precedence;
+  the project license is Unlicense.
+- Develop from the specification: define behavior and acceptance criteria before
+  implementation, and keep the specification, tests and README aligned in the same
+  coherent change. Resolve contradictions rather than choosing a convenient reading.
 - Keep the CLI small and agent-agnostic. Do not add repair loops, services or
   speculative provider infrastructure.
 - Preserve the exact nested German command paths and lowercase `.hannes/` directory.

@@ -82,7 +82,7 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
 3. Packaging verifies `hannes --version` matches the proposed version. It archives
    the tested executable, README and Unlicense, and records hashes, target and
    source commit as internal artifact metadata.
-4. Only after every quality job passes, publish downloads the three archives,
+4. Only after every quality job passes, publish downloads the four archives,
    calculates `SHA256SUMS`, and verifies completeness, hashes, permissions,
    documentation, source commit and the planned version before creating a tag.
 5. Semantic Release updates Cargo.toml/Cargo.lock and CHANGELOG.md, commits them as
@@ -105,8 +105,10 @@ Pull main after a successful release to obtain its generated version commit.
 | macOS Apple Silicon | `aarch64-apple-darwin` | `hannes-vVERSION-aarch64-apple-darwin.tar.gz` |
 | macOS Intel | `x86_64-apple-darwin` | `hannes-vVERSION-x86_64-apple-darwin.tar.gz` |
 | Linux x64 (GNU/glibc) | `x86_64-unknown-linux-gnu` | `hannes-vVERSION-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux ARM64 (GNU/glibc) | `aarch64-unknown-linux-gnu` | `hannes-vVERSION-aarch64-unknown-linux-gnu.tar.gz` |
 
-Runners are `macos-15`, `macos-15-intel` and `ubuntu-24.04` respectively. Windows
+Runners are `macos-15`, `macos-15-intel`, `ubuntu-24.04` and
+`ubuntu-24.04-arm` respectively. Linux ARM64 is built and smoke-tested natively. Windows
 builds/releases are intentionally excluded. Linux is built on Ubuntu 24.04; this
 is not a static musl binary or a promise of compatibility with older glibc systems.
 Verify downloads with `shasum -a 256 -c SHA256SUMS` on macOS or
@@ -117,7 +119,7 @@ Native downloads still need Git and, for enabled reviews, Codex CLI/login.
 
 ## Quality gates
 
-- All three native hosts: rustfmt, Clippy with warnings denied, unit/acceptance
+- All four native hosts: rustfmt, Clippy with warnings denied, unit/acceptance
   tests, optimized native build and real CLI smoke test. Tests use fake providers,
   never real Codex, credentials or paid APIs.
 - Linux: compile-check all Rust targets in the package with the declared minimum

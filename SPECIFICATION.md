@@ -224,7 +224,9 @@ An executable plan exits 0; a blocked/invalid plan exits 2.
 ## REL-001: Distribution and integrations
 
 Supported hosted CI/release targets are macOS Apple Silicon, macOS Intel and
-Linux x64 (GNU/glibc); Windows builds/releases are excluded. Build with stable
+Linux x64 and ARM64 (GNU/glibc); Windows builds/releases are excluded. Linux ARM64
+uses the native `ubuntu-24.04-arm` runner and `aarch64-unknown-linux-gnu` target,
+with the same formatting, lint, tests, build and executable smoke gates. Build with stable
 Rust/Cargo (declared minimum 1.85) into a native executable. Git and configured
 external tools remain runtime dependencies; no Python/Node runtime is bundled.
 

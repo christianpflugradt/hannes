@@ -53,7 +53,7 @@ async function testLifecycle() {
 import hashlib, io, json, os, pathlib, tarfile
 root=pathlib.Path('.')
 dist=root/'dist'; (dist/'metadata').mkdir(parents=True)
-targets=['aarch64-apple-darwin','x86_64-apple-darwin','x86_64-unknown-linux-gnu']
+targets=['aarch64-apple-darwin','x86_64-apple-darwin','x86_64-unknown-linux-gnu','aarch64-unknown-linux-gnu']
 for target in targets:
     name=f'hannes-v1.0.0-{target}'
     binary=f'fixture executable for {target}'.encode()

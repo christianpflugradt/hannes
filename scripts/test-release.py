@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -115,6 +116,13 @@ class ReleaseTests(unittest.TestCase):
             next(dist.glob("*.tar.gz")).write_bytes(b"tampered")
             with self.assertRaises(ValueError):
                 verification.verify("1.2.3", "a" * 40, dist)
+
+    def test_native_matrix_and_archive_contract_cover_the_same_platforms(self):
+        workflow = (SCRIPTS.parent / ".github/workflows/quality.yml").read_text()
+        targets = re.findall(r"^\s+target: (\S+)$", workflow, re.M)
+        self.assertEqual(set(targets), set(verification.TARGETS))
+        self.assertEqual(len(targets), len(verification.TARGETS))
+        self.assertIn("os: ubuntu-24.04-arm\n            target: aarch64-unknown-linux-gnu", workflow)
 
     def test_missing_or_extra_archives_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

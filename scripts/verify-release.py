@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 import tarfile
 
-TARGETS = ("aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu")
+TARGETS = ("aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu")
 
 
 def digest(data):
@@ -18,7 +18,7 @@ def verify(version, source_sha, dist=Path("dist")):
     expected = {f"hannes-v{version}-{target}.tar.gz" for target in TARGETS}
     actual = {p.name for p in dist.iterdir() if p.is_file() and p.name != "SHA256SUMS"}
     if actual != expected:
-        raise ValueError(f"Expected exactly three native archives: {sorted(expected)}, got {sorted(actual)}")
+        raise ValueError(f"Expected exactly {len(TARGETS)} native archives: {sorted(expected)}, got {sorted(actual)}")
     lines = []
     for target in TARGETS:
         name = f"hannes-v{version}-{target}"
@@ -44,7 +44,7 @@ def verify(version, source_sha, dist=Path("dist")):
     expected_sums = "".join(sorted(lines, key=lambda line: line.split("  ")[1]))
     if (dist / "SHA256SUMS").read_text() != expected_sums:
         raise ValueError("Release checksums do not match the complete archive set")
-    print(f"Verified three archives for v{version} from {source_sha}")
+    print(f"Verified {len(TARGETS)} archives for v{version} from {source_sha}")
 
 
 if __name__ == "__main__":

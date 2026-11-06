@@ -106,6 +106,7 @@ Download the matching archive and `SHA256SUMS` from
 | macOS Apple Silicon | `aarch64-apple-darwin` |
 | macOS Intel | `x86_64-apple-darwin` |
 | Linux x64 | `x86_64-unknown-linux-gnu` |
+| Linux ARM64 | `aarch64-unknown-linux-gnu` |
 
 Verify the archive against its checksum, then extract and install it. Replace
 `VERSION` and `TARGET` below with the downloaded archive's values:

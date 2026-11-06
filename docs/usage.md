@@ -80,7 +80,7 @@ short summary. Disabled rules are excluded from the total. Skipped reviews get
 NOT_RUN without a running message. Preparation and report-writing phases are
 also shown so snapshot work is not mistaken for a hung check.
 
-All enabled reviews still share one Codex call. This is explicitly announced;
+All selected reviews share one Codex call. This is explicitly announced;
 the review start lines appear together and individual verdicts arrive when that
 shared call completes. The numbering is rule order, not a percentage or a claim
 that Codex reports per-review completion in real time. Raw check output and
@@ -106,10 +106,11 @@ hashes, not prior file content. HEAD-relative diffs are never mislabeled as chan
 since verification. See [snapshot design](design.md).
 
 PASS and CURRENT are green, FAIL red, ERROR/STALE/UNKNOWN amber.
-Face colors follow the patience level. Help banners, commands and flags use cyan; headings are bold and secondary
+Help banners, commands and flags use cyan; headings are bold and secondary
 metadata is muted. Piped streams, `NO_COLOR` (even empty) and `--no-color` disable
-ANSI styling; stdout and stderr detect their terminal independently. Raw command output is available only in
-local JSON, bounded to 64 KiB per stream with byte totals/truncation indicators.
+ANSI styling; stdout and stderr detect their terminal independently. Raw command
+output is saved in local JSON and shown with `--details`, bounded to 64 KiB per
+stream with byte totals/truncation indicators.
 It is not automatically redacted; configure commands to avoid printing secrets.
 
 ## Configure checks and reviews
@@ -176,75 +177,6 @@ line numbers are checked; Hannes cannot prove that reasoning is correct.
 
 The [My_App example](../examples/my-app/README.md) illustrates Xcode checks
 and a project review without coupling Hannes to that application.
-
-Unsupported or incomplete commands print an ASCII face with one randomly chosen
-dialect saying from the bundled list of 41, followed by a hint to run
-`hannes so hilf mir doch`. This goes to stderr with exit code 2 and executes
-no project rules.
-
-### Patience
-
-The first invalid command shows the friendly green face (0). Consecutive invalid
-commands show 1, 2, 3, 4, then stay at 4. Every recognized command improves the
-reaction by one step; the next invalid command shows that improved face before
-subsequent errors escalate again. For example: invalid → 0, invalid → 1,
-help → recovery, invalid → 0.
-
-The 41 sayings are shared by all mood levels. Hannes stores the indices of the
-last 20 sayings in the global `patience` state and randomly chooses from the
-remaining entries: at least 20 other sayings must appear before one can repeat.
-Valid commands preserve this history; the face-free farewell does not add an entry.
-Selection and reservation share the existing state lock, including concurrent CLI
-calls. Old state files start with an empty quote history without resetting mood.
-The bounded list is removed with the external state during self-uninstall.
-If state storage fails, the existing warning still allows an unrecorded random
-fallback, without a repeat-avoidance guarantee for that invocation.
-At level 4 the entire saying is
-uppercased. Friendly is green, irritated/annoyed amber, angry/furious red,
-respecting the usual color controls. Faces and sayings appear only for invalid
-commands. Help contains no face, mood label, or numeric debug information. Before an
-invalid-command response (including the farewell), Hannes clears the visible
-terminal screen and returns the cursor to the top left. Existing scrollback is
-preserved. This happens only when stderr is a terminal and `TERM` is not `dumb`;
-redirected output has no clear sequences. Valid commands and help leave the screen
-alone. `NO_COLOR` and `--no-color` disable colors, not this interactive screen control.
-
-Recognized commands calm Hannes even if their checks or configuration fail.
-Explicit help/version requests count as recognized; no arguments show help without
-changing patience. Mood never blocks a command or changes verification results.
-
-After three consecutive unknown-command reactions at the screaming level (4),
-Hannes removes its own running executable and prints one red farewell line with
-one blank line above and below, without a face or help hint. Any recognized command
-(including help/version) improves the mood and resets this streak. No arguments
-leave both unchanged. On Windows the installed name is removed immediately and a
-hidden PowerShell helper deletes the renamed image after exit. A removal failure
-prints an error, never a false success. Project files, reports and other binaries
-are preserved. The external `patience` and `patience.lock` files are removed before
-the executable; the state directory is removed only if empty. Foreign files are
-preserved and directories are never deleted recursively. Repository paths and
-`.hannes` paths are rejected as state locations, including symlinked overrides.
-If cleanup fails, the executable is kept and an error is reported.
-
-From the Hannes source checkout, reinstall with `mise deploy`. Its forced
-Cargo installation also works when the deleted executable still has an installation
-receipt. The first invalid command after reinstall shows the green friendly face.
-`mise install` alone installs the development toolchain, not the Hannes executable.
-
-
-State is user-wide across repositories, stored in a small JSON file named `patience`:
-
-- macOS: `~/Library/Application Support/Hannes/`
-- Linux: `$XDG_STATE_HOME/hannes/`, or `~/.local/state/hannes/`
-- Windows: `%LOCALAPPDATA%/Hannes/`
-
-`HANNES_STATE_DIR` can override the directory with an absolute path, for example
-for isolated tests. Keep it outside the project so it does not invalidate snapshots.
-Deleting `patience` resets to the friendly first reaction; invalid contents also
-reset. Existing integer state files are migrated automatically. A small OS file
-lock serializes simultaneous updates, and writes use an atomic rename. Storage errors produce a warning, but the requested command still
-runs; an invalid command then uses a temporary friendly face without persistence.
-No database or additional dependencies are used.
 
 ## Exit codes
 

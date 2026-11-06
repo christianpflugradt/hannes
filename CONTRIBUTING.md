@@ -6,7 +6,7 @@ it fits the small CLI described in [SPECIFICATION.md](SPECIFICATION.md).
 
 ## Development
 
-See the [README](README.md#install-or-build) for tooling. With mise:
+See the [README](README.md#build-locally) for tooling. With mise:
 
 ```sh
 mise trust
@@ -64,7 +64,7 @@ for combined changes and reverts.
 | Scopes | Use for |
 | --- | --- |
 | `checks`, `reviews`, `profiles` | Rules and rule selection |
-| `cli`, `mood` | Commands, terminal output and Hannes' patience |
+| `cli`, `mood` | Commands, terminal output and CLI internals |
 | `config`, `provider` | Configuration and provider integration |
 | `report`, `snapshot` | Results and review input |
 | `deps`, `release` | Dependency updates and release tooling |

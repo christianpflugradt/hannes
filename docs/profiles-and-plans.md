@@ -105,8 +105,7 @@ hannes mach was --profil verify
 `--plan` validates configuration, resolves selection and prepares bounded local
 context and input identity. It executes no check, provider CLI, model request or
 MCP connection, and performs no network access. It does not overwrite reports,
-install hooks, write project files or mutate Git state. Existing global CLI mood
-handling is independent of this restriction. Provider availability and credentials
+install hooks, write project files or mutate Git state. Provider availability and credentials
 are explicitly **not checked**. `--json` initially requires `--plan`.
 
 The human-readable plan shows:

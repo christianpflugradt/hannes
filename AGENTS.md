@@ -15,6 +15,9 @@ Consistency and no AI slop are the highest quality priorities for every change.
   consistent with the actual implementation.
 - Before finishing, check the whole change for contradictions, stale references
   and unnecessary additions. Prefer the smallest coherent solution.
+- Explain user-facing concepts before using them. Give readers a clear path from
+  purpose and setup to everyday use and the complete configuration reference.
+  Keep hidden behavior out of public documentation.
 
 ## Contract and scope
 

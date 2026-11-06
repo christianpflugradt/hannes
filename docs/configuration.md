@@ -103,7 +103,8 @@ are errors, including in disabled items. `enabled` is the only activation key.
 Metadata is limited to 64 KiB per file, 256 items per directory; instructions are
 32 KiB per file and 256 KiB combined. Stdout/stderr retain the first 64 KiB each,
 while draining the complete streams; byte totals and truncation are recorded.
-Raw output lives only in the local JSON report; the terminal never dumps it.
+Raw output is saved in the local JSON report and shown only with `--details`,
+not in the default terminal output.
 It is not automatically redacted: commands should avoid printing secrets.
 
 Reports are local and ignored. Do not commit them. There is no cache or repair loop.
@@ -154,4 +155,4 @@ Provider-wide MCP settings/shared review batching are unchanged; per-review MCP
 permissions, index/commit inputs, budgets and caching remain future work.
 
 The complete reference is maintained in the
-[Hannes README](https://github.com/christianpflugradt/hannes#configuration-hannes).
+[Hannes README](https://github.com/christianpflugradt/hannes#configuration).

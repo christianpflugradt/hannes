@@ -136,7 +136,7 @@ pub fn read(root: &Path) -> Result<Report> {
         serde_json::from_str(&crate::config::read_bounded(&path, 128 * 1024 * 1024)?)?;
     ensure!(
         matches!(report.schema_version, 1 | 2),
-        "unsupported report schema {}; rerun hannes mach mal",
+        "unsupported report schema {}; rerun hannes mach was",
         report.schema_version
     );
     if report.schema_version == 2 {
@@ -218,7 +218,7 @@ pub fn read(root: &Path) -> Result<Report> {
     }
     ensure!(
         report.repository == root.canonicalize()?.to_string_lossy(),
-        "report belongs to a different repository; rerun hannes mach mal"
+        "report belongs to a different repository; rerun hannes mach was"
     );
     ensure!(
         report.overall == overall(&report.results),

@@ -99,7 +99,7 @@ fn all_command_paths_and_standard_help() {
     for words in [
         "fang an",
         "pass auf",
-        "mach mal",
+        "mach was",
         "was ist phase",
         "so hilf mir doch",
     ] {
@@ -293,7 +293,7 @@ fn failing_check_runs_remaining_and_blocks_provider() {
     assert_eq!(r.results[1].status, Status::Pass);
     assert_eq!(r.results[2].status, Status::NotRun);
     assert!(path(d.path(), "reports/last.json").is_file());
-    assert_eq!(cli(d.path(), &["mach", "mal"]).status.code(), Some(1));
+    assert_eq!(cli(d.path(), &["mach", "was"]).status.code(), Some(1));
 }
 #[test]
 fn spawn_error_writes_blocking_error_report() {
@@ -307,7 +307,7 @@ fn spawn_error_writes_blocking_error_report() {
     let r = hannes::verify(d.path(), &Never).unwrap();
     assert_eq!(r.overall, Status::Error);
     assert_eq!(r.results[0].status, Status::Error);
-    assert_eq!(cli(d.path(), &["mach", "mal"]).status.code(), Some(2));
+    assert_eq!(cli(d.path(), &["mach", "was"]).status.code(), Some(2));
     assert_eq!(report::read(d.path()).unwrap().overall, Status::Error);
 }
 #[test]
@@ -484,7 +484,7 @@ fn no_report_corrupt_report_schema_and_no_color() {
         cli(d.path(), &["was", "ist", "phase"]).status.code(),
         Some(2)
     );
-    let out = cli(d.path(), &["--no-color", "mach", "mal"]);
+    let out = cli(d.path(), &["--no-color", "mach", "was"]);
     assert!(out.status.success());
     assert!(!out.stdout.contains(&0x1b));
 }
@@ -750,7 +750,7 @@ fn no_rules_message_requires_both_checks_and_reviews_to_be_undefined() {
         if !keep_review {
             fs::remove_file(path(d.path(), "reviews/product-consistency.toml")).unwrap();
         }
-        let output = cli(d.path(), &["mach", "mal"]);
+        let output = cli(d.path(), &["mach", "was"]);
         assert!(
             output.status.success(),
             "{}",
@@ -793,7 +793,7 @@ fn help_lists_only_complete_command_phrases_without_redundant_examples() {
         let phrases = [
             "fang an",
             "pass auf",
-            "mach mal",
+            "mach was",
             "was ist phase",
             "so hilf mir doch",
         ];
@@ -819,6 +819,8 @@ fn unsupported_commands_show_one_supplied_quote_and_face_without_execution() {
         vec!["quatsch"],
         vec!["mach"],
         vec!["mach", "falsch"],
+        vec!["mach", "mal"],
+        vec!["mach", "mal", "--geiz-ist-geil"],
         vec!["was", "ist"],
         vec!["fang", "an", "extra"],
         vec!["--unknown"],
@@ -973,7 +975,7 @@ fn every_valid_command_works_and_calms_hannes_from_maximum_anger() {
     for args in [
         vec!["fang", "an"],
         vec!["pass", "auf"],
-        vec!["mach", "mal"],
+        vec!["mach", "was"],
         vec!["was", "ist", "phase"],
         vec!["so", "hilf", "mir", "doch"],
     ] {
@@ -1395,7 +1397,7 @@ timeout_seconds = 5
 "#).unwrap();
     let marker = external.path().join("release");
     let mut child = Command::new(env!("CARGO_BIN_EXE_hannes"))
-        .args(["mach", "mal"])
+        .args(["mach", "was"])
         .current_dir(d.path())
         .env("HANNES_STATE_DIR", external.path().join("state"))
         .env("HANNES_TEST_RELEASE", &marker)
@@ -1871,19 +1873,18 @@ fn checks_only_never_calls_provider_and_counts_only_checks_even_on_failure() {
 }
 
 #[test]
-fn mach_was_alias_and_geiz_flag_are_scoped_to_verification() {
+fn mach_was_and_geiz_flag_are_scoped_to_verification() {
     use hannes::cli::{Mach, Words};
-    for verb in ["mal", "was"] {
-        for enabled in [false, true] {
-            let mut args = vec!["hannes", "mach", verb];
-            if enabled {
-                args.push("--geiz-ist-geil");
-            }
-            let parsed = Cli::try_parse_from(args).unwrap();
-            assert!(
-                matches!(parsed.command, Words::Mach { command: Mach::Mal { geiz_ist_geil, .. } } if geiz_ist_geil == enabled)
-            );
+    assert!(Cli::try_parse_from(["hannes", "mach", "mal"]).is_err());
+    for enabled in [false, true] {
+        let mut args = vec!["hannes", "mach", "was"];
+        if enabled {
+            args.push("--geiz-ist-geil");
         }
+        let parsed = Cli::try_parse_from(args).unwrap();
+        assert!(
+            matches!(parsed.command, Words::Mach { command: Mach::Was { geiz_ist_geil, .. } } if geiz_ist_geil == enabled)
+        );
     }
     assert!(Cli::try_parse_from(["hannes", "fang", "an", "--geiz-ist-geil"]).is_err());
     assert!(
@@ -1924,33 +1925,31 @@ fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
             .output()
             .unwrap()
     };
-    for verb in ["was", "mal"] {
-        let output = run(&["mach", verb, "--geiz-ist-geil"]);
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
+    let output = run(&["mach", "was", "--geiz-ist-geil"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!marker.exists());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Nur Checks"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("Codex:"));
+    let saved = fs::read(path(d.path(), "reports/last.json")).unwrap();
+    for args in [
+        vec!["was", "ist", "phase"],
+        vec!["was", "ist", "phase", "--details"],
+    ] {
+        let status = run(&args);
+        assert!(status.status.success());
+        assert!(String::from_utf8_lossy(&status.stdout).contains("Nur Checks"));
+        assert_eq!(
+            fs::read(path(d.path(), "reports/last.json")).unwrap(),
+            saved
         );
         assert!(!marker.exists());
-        assert!(String::from_utf8_lossy(&output.stdout).contains("Nur Checks"));
-        assert!(!String::from_utf8_lossy(&output.stderr).contains("Codex:"));
-        let saved = fs::read(path(d.path(), "reports/last.json")).unwrap();
-        for args in [
-            vec!["was", "ist", "phase"],
-            vec!["was", "ist", "phase", "--details"],
-        ] {
-            let status = run(&args);
-            assert!(status.status.success());
-            assert!(String::from_utf8_lossy(&status.stdout).contains("Nur Checks"));
-            assert_eq!(
-                fs::read(path(d.path(), "reports/last.json")).unwrap(),
-                saved
-            );
-            assert!(!marker.exists());
-        }
     }
     // The flag is per invocation; the next ordinary run still invokes enabled reviews.
-    let full = run(&["mach", "mal"]);
+    let full = run(&["mach", "was"]);
     assert_eq!(full.status.code(), Some(2));
     assert!(marker.exists());
     assert!(!report::read(d.path()).unwrap().checks_only);

@@ -72,13 +72,13 @@ Run from the Git working-tree root:
 ```sh
 hannes fang an                # Create missing .hannes files; preserve existing ones
 hannes pass auf               # Validate configuration; execute no rules/provider
-hannes mach mal               # Execute selected rules and save a report
+hannes mach was               # Execute selected rules and save a report
 hannes was ist phase          # Show saved results and freshness
 hannes so hilf mir doch        # Help; --help and --version also work
 ```
 
-`mach was` is an alias of `mach mal`. Initialization creates a passing check and
-a disabled review, so the first run needs no Codex. Selected checks run first in
+Initialization creates a passing check and a disabled review, so the first run
+needs no Codex. Selected checks run first in
 ID order; selected reviews follow in one shared model call only if checks pass.
 Failed checks leave reviews NOT_RUN. Progress goes to stderr; compact results and
 short AI summaries go to stdout. Raw output stays in the report/`--details` view.
@@ -87,10 +87,10 @@ With no check or review definitions, Hannes also prints
 
 | Option | Applies to | Effect |
 | --- | --- | --- |
-| `--profil NAME` | `mach mal` / `mach was` | Override the configured rule-selection profile. |
-| `--plan` | `mach mal` / `mach was` | Preview selection and preparation without executing rules or provider calls. |
+| `--profil NAME` | `mach was` | Override the configured rule-selection profile. |
+| `--plan` | `mach was` | Preview selection and preparation without executing rules or provider calls. |
 | `--json` | With `--plan` | Machine-readable plan or structured error. |
-| `--geiz-ist-geil` | `mach mal` / `mach was` | Checks only; no provider discovery, MCP connection or review-token usage. |
+| `--geiz-ist-geil` | `mach was` | Checks only; no provider discovery, MCP connection or review-token usage. |
 | `--details` | `was ist phase` | Show saved findings and captured output without rerunning anything. |
 | `--no-color` | Global | Disable colors; `NO_COLOR` and redirected output also disable them. |
 
@@ -279,7 +279,7 @@ exclusions, implicit hooks or provider permissions are attached to profiles.
 ```sh
 hannes mach was --profil local --plan
 hannes mach was --profil local --plan --json
-hannes mach mal --profil local
+hannes mach was --profil local
 hannes mach was --profil local --geiz-ist-geil
 ```
 

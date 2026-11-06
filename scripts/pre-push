@@ -3,4 +3,4 @@
 set -eu
 root=$(git rev-parse --show-toplevel)
 cd "$root"
-exec hannes mach mal
+exec hannes mach was

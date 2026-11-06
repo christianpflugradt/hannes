@@ -154,7 +154,7 @@ fn cli_execution_honors_defaults_and_overrides_without_starting_unselected_revie
     for (args, profile, id) in [
         (vec!["mach", "was"], "other", "always-ok"),
         (
-            vec!["mach", "mal", "--profil", "local"],
+            vec!["mach", "was", "--profil", "local"],
             "local",
             "local-check",
         ),
@@ -278,13 +278,11 @@ fn invalid_unused_profiles_and_tags_are_rejected_before_execution() {
 #[test]
 fn unknown_profile_and_invalid_configuration_have_structured_json_errors() {
     let f = Fixture::new();
-    for verb in ["mal", "was"] {
-        let output = f.cli(&["mach", verb, "--profil", "missing", "--plan", "--json"]);
-        assert_eq!(output.status.code(), Some(2));
-        let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(value["status"], "blocked");
-        assert!(value["errors"][0].as_str().unwrap().contains("missing"));
-    }
+    let output = f.cli(&["mach", "was", "--profil", "missing", "--plan", "--json"]);
+    assert_eq!(output.status.code(), Some(2));
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["status"], "blocked");
+    assert!(value["errors"][0].as_str().unwrap().contains("missing"));
     f.write("config.toml", "invalid");
     let output = f.cli(&["mach", "was", "--plan", "--json"]);
     assert_eq!(output.status.code(), Some(2));
@@ -320,7 +318,7 @@ fn preview_is_offline_and_preserves_report_and_git_state() {
     );
     assert!(!f.root.path().join(".git/index").exists());
     assert!(!f.state.path().join("provider-called").exists());
-    let text = f.cli(&["mach", "mal", "--plan"]);
+    let text = f.cli(&["mach", "was", "--plan"]);
     assert!(text.status.success());
     assert!(String::from_utf8_lossy(&text.stdout).contains(value["plan_id"].as_str().unwrap()));
 }

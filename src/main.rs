@@ -40,7 +40,7 @@ fn execute(cli: Cli) -> Result<i32> {
         }
         Words::Mach {
             command:
-                Mach::Mal {
+                Mach::Was {
                     geiz_ist_geil,
                     profil,
                     plan,
@@ -123,7 +123,7 @@ fn execute(cli: Cli) -> Result<i32> {
                 eprintln!(
                     "{}",
                     terminal::paint(
-                        "Noch kein Report. Run: hannes mach mal",
+                        "Noch kein Report. Run: hannes mach was",
                         Tone::Warning,
                         terminal::error_color(cli.no_color)
                     )
@@ -131,7 +131,7 @@ fn execute(cli: Cli) -> Result<i32> {
                 return Ok(3);
             }
             let report =
-                report::read(&root).context("cannot read last report; rerun hannes mach mal")?;
+                report::read(&root).context("cannot read last report; rerun hannes mach was")?;
             print!(
                 "{}",
                 if details {

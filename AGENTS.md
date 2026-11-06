@@ -7,6 +7,7 @@
 - Keep the CLI small and agent-agnostic. Do not add repair loops, services or
   speculative provider infrastructure.
 - Preserve the exact nested German command paths and lowercase `.hannes/` directory.
+  The execution command is `hannes mach was`; do not add alternative phrases.
   Source, configuration, file names and documentation stay in English.
 - Deterministic checks run first. Provider failures, invalid JSON and incomplete
   snapshot coverage must never become PASS. Disabled items stay out of results.

@@ -48,8 +48,7 @@ pub enum Pass {
 }
 #[derive(Debug, Subcommand)]
 pub enum Mach {
-    #[command(alias = "was")]
-    Mal {
+    Was {
         #[arg(long, help = "Nur deterministische Checks ausführen, ohne LLM-Aufruf")]
         geiz_ist_geil: bool,
         #[arg(long, help = "Regeln aus diesem Profil auswählen")]

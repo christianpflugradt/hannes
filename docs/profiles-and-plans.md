@@ -93,13 +93,12 @@ with no rule definitions at all.
 
 ## CLI and offline planning
 
-The existing command phrases stay unchanged. These flags are supported for both
-`mach mal` and its alias `mach was`:
+These flags are supported by `hannes mach was`:
 
 ```sh
 hannes mach was --profil local --plan
 hannes mach was --profil local --plan --json
-hannes mach mal --profil local --geiz-ist-geil
+hannes mach was --profil local --geiz-ist-geil
 hannes mach was --profil verify
 ```
 

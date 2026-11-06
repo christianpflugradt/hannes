@@ -4,7 +4,7 @@
 Commands:
   fang an           .hannes/ initialisieren
   pass auf          Konfiguration prüfen, ohne Regeln auszuführen
-  mach mal          Regeln ausführen (--profil, --plan; --geiz-ist-geil: nur Checks)
+  mach was          Regeln ausführen (--profil, --plan; --geiz-ist-geil: nur Checks)
   was ist phase     Letzten Report anzeigen (--details für vollständige Befunde)
   so hilf mir doch  Diese Hilfe anzeigen
 

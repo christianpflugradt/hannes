@@ -125,7 +125,7 @@ pub fn render_help(text: &str, color: bool) -> String {
     for phrase in [
         "fang an",
         "pass auf",
-        "mach mal",
+        "mach was",
         "was ist phase",
         "so hilf mir doch",
     ] {

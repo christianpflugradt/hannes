@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="hannes-smoke-") as temporary:
     assert (root / ".hannes/config.toml").read_bytes() == initial
     run("pass auf")
     run("was ist phase", 3)
-    run("mach mal")
+    run("mach was")
     report_path = root / ".hannes/reports/last.json"
     report = json.loads(report_path.read_text())
     assert report["overall"] == "PASS"
@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="hannes-smoke-") as temporary:
     assert "CURRENT" in run("was ist phase")
     (root / "tracked.txt").write_text("initial\n")
     subprocess.run(["git", "add", "tracked.txt"], cwd=root, check=True)
-    run("mach mal")
+    run("mach was")
     (root / "tracked.txt").write_text("modified\n")
     for index in range(7):
         (root / f"untracked-{index}.txt").write_text("new\n")
@@ -53,13 +53,13 @@ with tempfile.TemporaryDirectory(prefix="hannes-smoke-") as temporary:
     review_path = root / ".hannes/reviews/product-consistency.toml"
     review_path.write_text(review_path.read_text().replace("enabled = false", "enabled = true"))
     # The failed check must skip the enabled review. Any provider call would fail this assertion.
-    run("mach mal", 1)
+    run("mach was", 1)
     report = json.loads(report_path.read_text())
     assert report["overall"] == "FAIL"
     assert report["results"][-1]["status"] == "NOT_RUN"
     check_path.write_text(check_path.read_text().replace("enabled = true", "enabled = false"))
     review_path.write_text(review_path.read_text().replace("enabled = true", "enabled = false"))
-    run("mach mal")
+    run("mach was")
     assert "CURRENT" in run("was ist phase")
     assert not (root / ".git/index.lock").exists()
     commits = subprocess.run(["git", "rev-parse", "--verify", "HEAD"], cwd=root, capture_output=True)

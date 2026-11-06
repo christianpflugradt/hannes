@@ -7,7 +7,7 @@ From the root of a Git repository (an unborn repository from `git init` works):
 ```sh
 hannes fang an
 hannes pass auf
-hannes mach mal
+hannes mach was
 hannes was ist phase
 hannes was ist phase --details
 hannes so hilf mir doch
@@ -19,20 +19,19 @@ hannes --version
 installs hooks, stages files or commits. The enabled example uses `git --version`
 and passes without Codex. The deliberately failing check and example review are
 disabled. To demonstrate failure, change `enabled = false` to `enabled = true`
-in `.hannes/checks/deliberately-failing.toml` and run `hannes mach mal`.
+in `.hannes/checks/deliberately-failing.toml` and run `hannes mach was`.
 
 Checks and reviews are collectively called **rules**. If neither is defined,
-`mach mal` prints `Du hast noch keine Regeln definiert, du Vogel!` alongside the
+`mach was` prints `Du hast noch keine Regeln definiert, du Vogel!` alongside the
 report. Defined but disabled rules do not trigger this message.
 
 `pass auf` validates all files, even disabled entries, and runs nothing.
-`mach mal` validates first, executes selected enabled checks in ID order, then
+`mach was` validates first, executes selected enabled checks in ID order, then
 selected active reviews in one call if checks passed. Without a profile it selects
 all enabled rules. Disabled items never enter results.
 Any failed check prevents spending review tokens; those reviews are `NOT_RUN`.
 
-Use `hannes mach was --geiz-ist-geil` (also `hannes mach mal --geiz-ist-geil`)
-to run only enabled deterministic checks. `mach was` is an alias for `mach mal`.
+Use `hannes mach was --geiz-ist-geil` to run only enabled deterministic checks.
 The full configuration is still validated, but no review or LLM provider is called;
 Hannes incurs no review-token usage. Progress counts only checks. Reviews are
 excluded from results, and both the JSON (`checks_only: true`) and saved status
@@ -50,7 +49,7 @@ their selection of all enabled rules. Initialization still creates version 1.
 ```sh
 hannes mach was --profil local --plan
 hannes mach was --profil local --plan --json
-hannes mach mal --profil local
+hannes mach was --profil local
 ```
 
 `--profil` overrides `default_profile`; otherwise the implicit profile is `all`.
@@ -75,7 +74,7 @@ Errors and failures block success. A valid run writes `.hannes/reports/last.json
 atomically, including on FAIL/ERROR. Invalid configuration leaves the previous
 report untouched. Reports are ignored and remain local.
 
-During `mach mal`, progress appears immediately on stderr: each enabled rule has
+During `mach was`, progress appears immediately on stderr: each enabled rule has
 an `[i/n] LÄUFT` line with its description, followed by its result, duration and
 short summary. Disabled rules are excluded from the total. Skipped reviews get
 NOT_RUN without a running message. Preparation and report-writing phases are
@@ -86,7 +85,7 @@ the review start lines appear together and individual verdicts arrive when that
 shared call completes. The numbering is rule order, not a percentage or a claim
 that Codex reports per-review completion in real time. Raw check output and
 provider traces are not streamed. The final compact report stays on stdout,
-so `hannes mach mal > report.txt` keeps progress visible in the terminal.
+so `hannes mach was > report.txt` keeps progress visible in the terminal.
 Both streams respect `NO_COLOR`, `--no-color` and their own TTY state.
 
 Every result row includes a short summary. Review summaries come from the actual
@@ -98,7 +97,7 @@ summaries are shortened only for display; their complete content stays saved.
 
 Use `hannes was ist phase --details` to inspect full saved findings and captured
 command output separately. It does not run Codex or any check again. Old reports
-remain readable; only `mach mal` obtains new provider results.
+remain readable; only `mach was` obtains new provider results.
 
 `was ist phase` reads that report without executing checks or Codex. It reports
 CURRENT, STALE or UNKNOWN, with up to five paths and exact changed-file counts
@@ -137,7 +136,7 @@ For an optional Codex review:
 1. Install a compatible Codex CLI and authenticate using `codex login`.
 2. Customize `.hannes/reviews/product-consistency.md` for your project's criteria.
 3. Set `enabled = true` in `.hannes/reviews/product-consistency.toml`.
-4. Run `hannes pass auf`, then `hannes mach mal`.
+4. Run `hannes pass auf`, then `hannes mach was`.
 
 New provider configuration uses `codex-cli`, a 180-second timeout, `gpt-6.1-sol`,
 medium reasoning and no MCP servers. Model and MCP allow list are configurable in
@@ -276,6 +275,6 @@ chmod +x "$hook_dir/pre-push"
 
 The script respects Git's selected hook directory (including `core.hooksPath`).
 Inspect existing hook management before installing. A future CI gate can run the
-same `hannes mach mal` against a clean checked-out commit. Personal ChatGPT tokens
+same `hannes mach was` against a clean checked-out commit. Personal ChatGPT tokens
 and Codex authentication on hosted CI are out of scope. Hannes' own CI uses mocks
 and never calls AI services.

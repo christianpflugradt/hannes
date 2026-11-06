@@ -92,7 +92,7 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
 2. The quality workflow installs the published governor pinned in `.hannes-version`.
    Each native runner stamps Cargo.toml/Cargo.lock before its `ci-native` Hannes
    gate runs formatting, Clippy, tests, candidate build and executable smoke test.
-   The tooling, MSRV and audit profiles run once on Linux.
+   The tooling, MSRV and audit execution points run once on Linux.
 3. Packaging verifies `hannes --version` matches the proposed version. It archives
    the tested executable, README and Unlicense, and records hashes, target and
    source commit as internal artifact metadata.
@@ -165,7 +165,7 @@ This setup does not create an App or change repository rules automatically.
 
 Run `mise check` before committing workflow/tooling changes, after preparing the
 published governor and dependencies. The [quality-gate catalogue](self-governance.md)
-documents every profile, installation, the Renovate-managed pin and report artifacts.
+documents every execution point, installation, the Renovate-managed pin and report artifacts.
 
 The pipeline also runs actionlint, dependency audits and the minimum-Rust check.
 Do not run `npm run release` locally as a test: it is a publishing command. Local

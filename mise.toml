@@ -53,4 +53,4 @@ run = ["python3 scripts/test-docs.py", "python3 scripts/check-docs.py", "cargo t
 
 [tasks.check]
 description = "Run the local quality gate with installed published Hannes"
-run = "python3 scripts/run-gate.py pre-push"
+run = "python3 scripts/run-execution-point.py pre-push"

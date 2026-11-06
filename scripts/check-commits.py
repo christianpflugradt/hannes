@@ -7,9 +7,11 @@ import tempfile
 
 checker = Path(__file__).with_name("check-commit-message.sh").resolve()
 if sys.argv[1:] == ["--message"]:
-    message = os.environ.get("HANNES_COMMIT_MESSAGE")
+    if os.environ.get("HANNES_GIT_HOOK") != "commit-msg" or os.environ.get("HANNES_GIT_HOOK_ARG_COUNT") != "1":
+        sys.exit("Expected one message-file argument from the managed commit-msg hook.")
+    message = os.environ.get("HANNES_GIT_HOOK_ARG_1")
     if not message:
-        sys.exit("Missing HANNES_COMMIT_MESSAGE from the commit-msg hook.")
+        sys.exit("Missing message-file argument from the managed commit-msg hook.")
     sys.exit(subprocess.run(["sh", str(checker), message]).returncode)
 head = os.environ.get("COMMIT_HEAD") or "HEAD"
 base = os.environ.get("COMMIT_BASE", "")

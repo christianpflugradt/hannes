@@ -74,7 +74,7 @@ jobs:
       - name: Verify collected release artifacts through Hannes
         env:
           EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
-        run: python3 scripts/run-gate.py release-artifacts
+        run: python3 scripts/run-execution-point.py release-artifacts
       - name: Upload release verification evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -84,6 +84,8 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
+      - name: Prepare managed release commit hooks
+        run: rustup toolchain install stable --profile minimal --component rustfmt
       - name: Publish versioned CLI archives and release notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

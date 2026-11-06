@@ -1,5 +1,6 @@
+[[checks]]
 id = "03-docs-tests"
 description = "Test the documentation checker"
 enabled = true
-command = "python3 scripts/test-docs.py"
+command = "python3 scripts/run-check.py python3 scripts/test-docs.py"
 timeout_seconds = 60

@@ -20,7 +20,7 @@ mise run check
 
 The governor must be a published release; building the source is a check, never
 how the governor is obtained. See [repository quality gates](docs/self-governance.md)
-for profiles, tool prerequisites, CI pinning and Renovate updates. Local hooks
+for execution points, tool prerequisites, CI pinning and Renovate updates. Local hooks
 use offline dependency mode; prepare dependencies explicitly before running them.
 
 Tests must remain offline and credential-free; mock Codex instead of calling it.
@@ -63,7 +63,7 @@ for combined changes and reverts.
 
 | Scopes | Use for |
 | --- | --- |
-| `checks`, `reviews`, `profiles` | Rules and rule selection |
+| `checks`, `reviews`, `profiles` | Rules and rule selection; `profiles` remains an accepted historical commit scope. |
 | `cli`, `mood` | Commands, terminal output and CLI internals |
 | `config`, `provider` | Configuration and provider integration |
 | `report`, `snapshot` | Results and review input |
@@ -76,11 +76,12 @@ sh scripts/setup-git-hooks.sh
 # Or: mise run hooks:install
 ```
 
-The three versioned hooks delegate to published Hannes profiles. Pre-commit checks
+Hannes manages the three hooks through pass auf and corresponding execution points. Pre-commit checks
 formatting and documentation; commit-msg checks the final message before Git
 creates or amends a commit; pre-push runs the complete local suite. The shared
-message checker reads `.githooks/commit-policy` and never calls a hook. Setup changes only this checkout's `core.hooksPath`
-and refuses to replace existing custom hooks/configuration. Each clone needs setup;
+message checker reads `.githooks/commit-policy` and never calls a hook. The setup shim retires only the obsolete local `.githooks` setting when its
+event files are absent, then delegates to `hannes pass auf`. Other custom hook
+paths remain configured; Hannes preserves compatible unmanaged hook content. Each clone needs setup;
 Git's `--no-verify` can bypass a local hook. Run `mise run hooks:test` to test the
 policy without committing anything in this repository. Work on `main`.
 
@@ -93,9 +94,8 @@ Contributions use the project's [Unlicense](LICENSE). See
 
 Native reconciliation tests use temporary repositories and real Git commits/pushes;
 run `cargo test --locked --test reconciliation`. Keep tests offline and never
-change developer/global Git configuration. The versioned repository hook setup
-continues using the published governor; do not adopt unreleased hook configuration
-in `.hannes` before its pinned governor supports it.
+change developer/global Git configuration. The repository integration uses published Hannes v0.5.0 with `--auto-approve`.
+Do not substitute a candidate built from this checkout.
 
 For release tooling changes, use the Node version in `mise.toml`, prepare npm
 dependencies with `npm ci --ignore-scripts` and run `mise check`. CI also validates all proposed

@@ -1,5 +1,7 @@
+[[checks]]
 id = "22-workflows"
 description = "Validate GitHub workflow syntax and expressions"
 enabled = true
-command = "actionlint -color"
+command = "python3 scripts/run-check.py actionlint -color"
 timeout_seconds = 120
+run_at = ["ci-tooling"]

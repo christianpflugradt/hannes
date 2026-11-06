@@ -22,7 +22,7 @@ specification alone does not complete an implementation.
   must be a subset of the provider allow list. An explicit all-provider selection
   will be supported; it never includes unrelated servers from the user's Codex setup.
 - Reviews default to snapshot scope. Change reviews require an explicit diff
-  base in the selected profile, including whether to compare directly or against
+  base in the selected execution context, including whether to compare directly or against
   a merge-base. No inferred standard branch or silent HEAD fallback.
 - Worktree, index and commit are different inputs. A PASS applies only to the
   selected rules, scope and recorded input; it does not prove arbitrary commits
@@ -43,6 +43,6 @@ For item 5, a documented decision to defer caching is a valid completion; writin
 an unmeasured cache implementation is not required.
 
 The [configuration reference](../configuration.md) describes current
-behavior. The [profile specification](../profiles-and-plans.md) contains the
+behavior. The [execution-point specification](../profiles-and-plans.md) contains the
 detailed contract for item 1; later TODOs extend it without pretending those
 extensions already exist.

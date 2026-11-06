@@ -168,7 +168,7 @@ class ReleaseTests(unittest.TestCase):
                 shutil.copytree(SCRIPTS.parent / ".hannes", root / ".hannes", ignore=shutil.ignore_patterns("reports"))
                 shutil.copy2(SCRIPTS.parent / ".hannes-version", root / ".hannes-version")
                 (root / "scripts").mkdir()
-                for name in ("verify-release.py", "check-release-artifacts.py", "run-gate.py"):
+                for name in ("verify-release.py", "check-release-artifacts.py", "run-execution-point.py", "run-check.py"):
                     shutil.copy2(SCRIPTS / name, root / "scripts" / name)
                 (root / ".gitignore").write_text("dist/\n.hannes/reports/\n")
                 dist = root / "dist"
@@ -197,7 +197,9 @@ class ReleaseTests(unittest.TestCase):
                 env = dict(os.environ, HANNES_EXECUTABLE=governor,
                            EXPECTED_RELEASE_VERSION="9.9.9" if failure == "version" else "1.2.3",
                            GITHUB_SHA=("b" if failure == "source" else "a") * 40)
-                result = subprocess.run([sys.executable, "scripts/run-gate.py", "release-artifacts"], cwd=root,
+                setup = subprocess.run([governor, "pass", "auf", "--auto-approve"], cwd=root, env=env, capture_output=True, text=True)
+                self.assertEqual(setup.returncode, 0, setup.stderr)
+                result = subprocess.run([sys.executable, "scripts/run-execution-point.py", "release-artifacts"], cwd=root,
                                         env=env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 1, result.stderr or result.stdout)
                 report = json.loads((root / ".hannes/reports/last.json").read_text())

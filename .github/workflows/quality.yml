@@ -43,7 +43,7 @@ jobs:
           COMMIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: python3 scripts/run-gate.py ci-tooling
+        run: python3 scripts/run-execution-point.py ci-tooling
       - name: Upload Hannes evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -74,7 +74,7 @@ jobs:
       - run: rustup toolchain install stable --profile minimal
       - run: cargo +stable install cargo-audit --version 0.22.2 --locked
       - name: Run dependency audit gate
-        run: python3 scripts/run-gate.py ci-audit
+        run: python3 scripts/run-execution-point.py ci-audit
       - name: Upload Hannes evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -100,7 +100,7 @@ jobs:
       - run: rustup toolchain install 1.85.0 --profile minimal
       - run: cargo +1.85.0 fetch --locked
       - name: Run minimum Rust gate
-        run: python3 scripts/run-gate.py ci-msrv
+        run: python3 scripts/run-execution-point.py ci-msrv
       - name: Upload Hannes evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -146,7 +146,7 @@ jobs:
           rustup target add --toolchain stable ${{ matrix.target }}
           cargo +stable fetch --locked
       - name: Run native quality gate
-        run: python3 scripts/run-gate.py ci-native
+        run: python3 scripts/run-execution-point.py ci-native
       - name: Upload Hannes evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

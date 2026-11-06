@@ -1,5 +1,6 @@
+[[checks]]
 id = "24-rust-audit"
 description = "Audit Rust dependencies"
 enabled = true
-command = "cargo +stable audit"
+command = "python3 scripts/run-check.py cargo +stable audit"
 timeout_seconds = 300

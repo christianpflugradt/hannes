@@ -168,8 +168,9 @@ external definitions after enforcing same-source references, exactly one set per
 repository, and immutable consumer assignments. Source identity and Git reference
 handling belong to that loader; no speculative provider framework is introduced.
 
-Phase 3 coordinates migration of pinned self-governance configuration, versioned
-hooks, GitHub Actions and historical roadmap/release documentation. These continue
-using the published governor until a compatible release is available. No hooks,
+The self-governance migration replaces active profile configuration and checked-in
+hook wrappers with rules, rule sets, execution points and declarative hook
+management. CI reconciles hooks once with pass auf --auto-approve. The exact governor pin is v0.5.0; source builds never replace the published
+governor. No hooks,
 remote services, releases or governed project files are automatically installed or
 repaired by phase 1.

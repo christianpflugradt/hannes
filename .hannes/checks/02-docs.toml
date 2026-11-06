@@ -1,5 +1,7 @@
+[[checks]]
 id = "02-docs"
 description = "Validate documentation links and specification references"
 enabled = true
-command = "python3 scripts/check-docs.py"
+command = "python3 scripts/run-check.py python3 scripts/check-docs.py"
 timeout_seconds = 60
+run_at = ["ci-tooling", "pre-commit", "pre-push"]

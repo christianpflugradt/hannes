@@ -1,5 +1,6 @@
+[[checks]]
 id = "08-release-rules"
 description = "Test semantic release rules and lifecycle"
 enabled = true
-command = "npm test"
+command = "python3 scripts/run-check.py npm test"
 timeout_seconds = 180

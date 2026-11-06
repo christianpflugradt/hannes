@@ -1,5 +1,6 @@
+[[checks]]
 id = "12-native-build"
 description = "Build the candidate native release executable"
 enabled = true
-command = "python3 scripts/native-build.py"
+command = "python3 scripts/run-check.py python3 scripts/native-build.py"
 timeout_seconds = 600

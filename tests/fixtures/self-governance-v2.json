@@ -1,0 +1,188 @@
+{
+  "checks": {
+    "01-format": {
+      "id": "01-format",
+      "description": "Verify Rust formatting",
+      "enabled": true,
+      "command": "cargo +stable fmt --all -- --check",
+      "timeout_seconds": 120
+    },
+    "02-docs": {
+      "id": "02-docs",
+      "description": "Validate documentation links and specification references",
+      "enabled": true,
+      "command": "python3 scripts/check-docs.py",
+      "timeout_seconds": 60
+    },
+    "03-docs-tests": {
+      "id": "03-docs-tests",
+      "description": "Test the documentation checker",
+      "enabled": true,
+      "command": "python3 scripts/test-docs.py",
+      "timeout_seconds": 60
+    },
+    "04-governance-tests": {
+      "id": "04-governance-tests",
+      "description": "Test repository gates and Renovate declaration",
+      "enabled": true,
+      "command": "python3 scripts/test-governance.py",
+      "timeout_seconds": 180
+    },
+    "05-hooks-tests": {
+      "id": "05-hooks-tests",
+      "description": "Test message policy and real Git hook failures",
+      "enabled": true,
+      "command": "python3 scripts/test-commit-hook.py",
+      "timeout_seconds": 180
+    },
+    "06-deploy-tests": {
+      "id": "06-deploy-tests",
+      "description": "Test published release installation",
+      "enabled": true,
+      "command": "python3 scripts/test-deploy.py",
+      "timeout_seconds": 60
+    },
+    "07-release-tests": {
+      "id": "07-release-tests",
+      "description": "Test release integrity and version stamping",
+      "enabled": true,
+      "command": "python3 scripts/test-release.py",
+      "timeout_seconds": 120
+    },
+    "08-release-rules": {
+      "id": "08-release-rules",
+      "description": "Test semantic release rules and lifecycle",
+      "enabled": true,
+      "command": "npm test",
+      "timeout_seconds": 180
+    },
+    "10-clippy": {
+      "id": "10-clippy",
+      "description": "Lint Rust with warnings denied",
+      "enabled": true,
+      "command": "cargo +stable clippy --all-targets --locked -- -D warnings",
+      "timeout_seconds": 600
+    },
+    "11-rust-tests": {
+      "id": "11-rust-tests",
+      "description": "Run unit acceptance documentation and compatibility tests",
+      "enabled": true,
+      "command": "cargo +stable test --locked",
+      "timeout_seconds": 600
+    },
+    "12-native-build": {
+      "id": "12-native-build",
+      "description": "Build the candidate native release executable",
+      "enabled": true,
+      "command": "python3 scripts/native-build.py",
+      "timeout_seconds": 600
+    },
+    "13-native-smoke": {
+      "id": "13-native-smoke",
+      "description": "Smoke-test the candidate executable",
+      "enabled": true,
+      "command": "python3 scripts/native-smoke.py",
+      "timeout_seconds": 120
+    },
+    "20-commit-message": {
+      "id": "20-commit-message",
+      "description": "Validate the final Git commit message",
+      "enabled": true,
+      "command": "python3 scripts/check-commits.py --message",
+      "timeout_seconds": 30
+    },
+    "21-commit-range": {
+      "id": "21-commit-range",
+      "description": "Validate CI commits and pull request title",
+      "enabled": true,
+      "command": "python3 scripts/check-commits.py",
+      "timeout_seconds": 60
+    },
+    "22-workflows": {
+      "id": "22-workflows",
+      "description": "Validate GitHub workflow syntax and expressions",
+      "enabled": true,
+      "command": "actionlint -color",
+      "timeout_seconds": 120
+    },
+    "23-msrv": {
+      "id": "23-msrv",
+      "description": "Check minimum supported Rust 1.85",
+      "enabled": true,
+      "command": "cargo +1.85.0 check --all-targets --locked",
+      "timeout_seconds": 600
+    },
+    "24-rust-audit": {
+      "id": "24-rust-audit",
+      "description": "Audit Rust dependencies",
+      "enabled": true,
+      "command": "cargo +stable audit",
+      "timeout_seconds": 300
+    },
+    "25-npm-audit": {
+      "id": "25-npm-audit",
+      "description": "Audit npm high and critical advisories",
+      "enabled": true,
+      "command": "npm audit --audit-level=high",
+      "timeout_seconds": 180
+    },
+    "30-release-artifacts": {
+      "id": "30-release-artifacts",
+      "description": "Verify the complete tested release artifact set",
+      "enabled": true,
+      "command": "python3 scripts/check-release-artifacts.py",
+      "timeout_seconds": 180
+    }
+  },
+  "profiles": {
+    "ci-audit": [
+      "24-rust-audit",
+      "25-npm-audit"
+    ],
+    "ci-msrv": [
+      "23-msrv"
+    ],
+    "ci-native": [
+      "01-format",
+      "10-clippy",
+      "11-rust-tests",
+      "12-native-build",
+      "13-native-smoke"
+    ],
+    "ci-tooling": [
+      "02-docs",
+      "03-docs-tests",
+      "04-governance-tests",
+      "05-hooks-tests",
+      "06-deploy-tests",
+      "07-release-tests",
+      "08-release-rules",
+      "21-commit-range",
+      "22-workflows"
+    ],
+    "commit-msg": [
+      "20-commit-message"
+    ],
+    "pre-commit": [
+      "01-format",
+      "02-docs"
+    ],
+    "pre-push": [
+      "01-format",
+      "02-docs",
+      "03-docs-tests",
+      "04-governance-tests",
+      "05-hooks-tests",
+      "06-deploy-tests",
+      "07-release-tests",
+      "08-release-rules",
+      "10-clippy",
+      "11-rust-tests",
+      "12-native-build",
+      "13-native-smoke"
+    ],
+    "release-artifacts": [
+      "30-release-artifacts"
+    ]
+  }
+}

@@ -1,6 +1,0 @@
-id = "release-artifacts"
-rules = [
-  "30-release-artifacts",
-]
-gate = true
-input = "worktree"

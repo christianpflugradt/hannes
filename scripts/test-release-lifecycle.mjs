@@ -40,7 +40,30 @@ async function testLifecycle() {
     mkdirSync(join(cwd, "scripts"));
     for (const file of ["verify-release.py", "set-release-version.py"]) copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
     execFileSync("python3", ["scripts/set-release-version.py", "0.1.0"], { cwd, env });
-    writeFileSync(join(cwd, ".gitignore"), "dist/\n");
+    // The publisher reconciles hooks too: release commits must keep working with
+    // the real formatting/message hooks, without recursively invoking this suite.
+    mkdirSync(join(cwd, ".hannes", "reports"), { recursive: true });
+    mkdirSync(join(cwd, ".githooks"));
+    mkdirSync(join(cwd, "src"));
+    writeFileSync(join(cwd, "src", "main.rs"), "fn main() {}\n");
+    copyFileSync(join(source, ".hannes", "provider.toml"), join(cwd, ".hannes", "provider.toml"));
+    copyFileSync(join(source, ".githooks", "commit-policy"), join(cwd, ".githooks", "commit-policy"));
+    for (const file of ["check-commits.py", "check-commit-message.sh", "run-check.py"]) {
+      copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
+    }
+    writeFileSync(join(cwd, ".hannes", "config.toml"),
+      'version=3\nproject="Release fixture"\nmax_display_files=5\n[hooks.git]\npre-commit="pre-commit"\ncommit-msg="commit-msg"\npre-push="pre-push"\n');
+    const hookRules = [
+      ["format", "pre-commit", "cargo +stable fmt --all -- --check"],
+      ["message", "commit-msg", "python3 scripts/check-commits.py --message"],
+      ["git", "pre-push", "git --version"],
+    ];
+    writeFileSync(join(cwd, ".hannes", "rules.toml"), hookRules.map(([id, point, command]) =>
+      `[[checks]]\nid=${JSON.stringify(id)}\ndescription="Release hook fixture"\nenabled=true\ncommand=${JSON.stringify("python3 scripts/run-check.py " + command)}\ntimeout_seconds=30\nrun_at=[${JSON.stringify(point)}]\n`
+    ).join("\n"));
+    const governor = env.HANNES_EXECUTABLE || "hannes";
+    execFileSync(governor, ["pass", "auf", "--auto-approve"], { cwd, env, stdio: "pipe" });
+    writeFileSync(join(cwd, ".gitignore"), "dist/\n.hannes/reports/\n");
     git("add", "."); git("commit", "-m", "feat: initialize fixture"); git("push", "--set-upstream", "origin", "main");
     env.GITHUB_SHA = git("rev-parse", "HEAD");
     function archives(version) {

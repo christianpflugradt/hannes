@@ -27,8 +27,6 @@ resolution so later loaders can supply rules with source provenance. No provider
 framework, imports or download behavior exists yet. External source restrictions
 must be enforced by the phase-2 loader before using the shared resolver.
 
-The repository's own pinned published-governor hooks and CI still use their
-published profile configuration. Their coordinated migration is phase 3. They
-must not execute the candidate binary against that old configuration. The
-candidate's managed hook reconciliation already passes --at and retains its
-existing ownership, confirmation and argument-forwarding behavior.
+The repository's self-integration uses version-3 configuration and declarative
+hooks. Its CI setup calls pass auf --auto-approve before executing the configured
+point. Published v0.5.0 provides that option and is the exact governor pin. See [repository self-integration](self-governance.md).

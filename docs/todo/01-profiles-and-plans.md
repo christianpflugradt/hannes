@@ -1,5 +1,9 @@
 # TODO 1: Profiles and execution plans
 
+Historical record: profiles were replaced by rules, rule sets and execution points
+in configuration version 3. The implementation details below describe the earlier
+version-2 design, not current configuration.
+
 Status: DONE; implementation, documentation and validation completed and pushed.
 Depends on: none. Next: [TODO 2](02-review-mcp-and-sessions.md).
 

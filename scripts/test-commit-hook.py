@@ -47,22 +47,27 @@ with tempfile.TemporaryDirectory(prefix="hannes-commit-hook-") as directory:
     shutil.copytree(ROOT / ".githooks", hooks)
     scripts = repository / "scripts"
     scripts.mkdir()
-    for name in ("run-gate.py", "check-commits.py", "check-commit-message.sh", "setup-git-hooks.sh"):
+    for name in ("run-execution-point.py", "run-check.py", "check-commits.py", "check-commit-message.sh", "setup-git-hooks.sh"):
         shutil.copy2(ROOT / "scripts" / name, scripts / name)
     shutil.copy2(ROOT / ".hannes-version", repository / ".hannes-version")
     config = repository / ".hannes"
     (config / "checks").mkdir(parents=True)
-    (config / "profiles").mkdir()
     (config / "reviews").mkdir()
-    (config / "config.toml").write_text('version = 2\nproject = "Hook fixture"\nmax_display_files = 5\n')
+    (config / "reports").mkdir()
+    (config / "config.toml").write_text('version = 3\nproject = "Hook fixture"\nmax_display_files = 5\n[hooks.git]\npre-commit="pre-commit"\ncommit-msg="commit-msg"\npre-push="pre-push"\n')
     shutil.copy2(ROOT / ".hannes/provider.toml", config / "provider.toml")
     (repository / ".gitignore").write_text(".hannes/reports/\n__pycache__/\n")
     (scripts / "fixture-check.py").write_text("from pathlib import Path; import sys; sys.exit(1 if Path(sys.argv[1]).exists() else 0)\n")
-    for profile in ("pre-commit", "commit-msg", "pre-push"):
-        command = "python3 scripts/check-commits.py --message" if profile == "commit-msg" else f"python3 scripts/fixture-check.py fail-{profile}"
-        (config / f"checks/{profile}.toml").write_text(f'id = "{profile}"\ndescription = "Fixture gate"\nenabled = true\ncommand = {json.dumps(command)}\ntimeout_seconds = 30\n')
-        (config / f"profiles/{profile}.toml").write_text(f'id = "{profile}"\nrules = ["{profile}"]\ngate = true\n')
-    git(repository, "config", "core.hooksPath", ".githooks")
+    for point in ("pre-commit", "commit-msg", "pre-push"):
+        command = "python3 scripts/run-check.py python3 scripts/check-commits.py --message" if point == "commit-msg" else f"python3 scripts/run-check.py python3 scripts/fixture-check.py fail-{point}"
+        (config / f"checks/{point}.toml").write_text(f'[[checks]]\nrun_at = ["{point}"]\nid = "{point}"\ndescription = "Fixture gate"\nenabled = true\ncommand = {json.dumps(command)}\ntimeout_seconds = 30\n')
+    executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
+    assert executable, "Install the compatible published Hannes governor first"
+    # Exercise configured paths while retaining the separate versioned message policy.
+    git(repository, "config", "core.hooksPath", "custom-hooks")
+    setup = subprocess.run([executable, "pass", "auf", "--auto-approve"], cwd=repository, capture_output=True, text=True)
+    assert setup.returncode == 0, setup.stderr
+    assert git(repository, "config", "--get", "core.hooksPath") == "custom-hooks"
     (repository / "tracked").write_text("unchanged source\n")
     git(repository, "add", ".")
     index = git(repository, "ls-files", "--stage")
@@ -71,13 +76,13 @@ with tempfile.TemporaryDirectory(prefix="hannes-commit-hook-") as directory:
     assert git(repository, "ls-files", "--stage") == index
     assert (repository / "tracked").read_text() == "unchanged source\n"
     (repository / "fail-pre-commit").unlink()
-    governor = os.environ.get("HANNES_EXECUTABLE")
-    os.environ["HANNES_EXECUTABLE"] = "/nonexistent/hannes"
-    git(repository, "commit", "-m", "feat: missing governor", success=False)
-    if governor is None:
-        del os.environ["HANNES_EXECUTABLE"]
-    else:
-        os.environ["HANNES_EXECUTABLE"] = governor
+    # Wrapper execution must fail closed when Hannes is missing from PATH.
+    binaries = root / "git-only"
+    binaries.mkdir()
+    (binaries / "git").symlink_to(shutil.which("git"))
+    missing = subprocess.run([str(binaries / "git"), "commit", "-m", "feat: missing governor"], cwd=repository,
+                             env=dict(os.environ, PATH=str(binaries)), capture_output=True)
+    assert missing.returncode != 0
     assert git(repository, "ls-files", "--stage") == index
     git(repository, "commit", "--allow-empty", "-m", "unknown: reject this commit", success=False)
     git(repository, "rev-parse", "--verify", "HEAD", success=False)
@@ -109,14 +114,11 @@ with tempfile.TemporaryDirectory(prefix="hannes-commit-hook-") as directory:
     (repository / "fail-pre-push").unlink()
     git(repository, "push", "origin", "main")
     assert git(root, "--git-dir", str(remote), "rev-parse", "main") == head
-    # Explicit setup is idempotent and preserves custom hooks.
-    git(repository, "config", "--unset", "core.hooksPath")
-    subprocess.run(["sh", str(scripts / "setup-git-hooks.sh")], cwd=repository, check=True, capture_output=True)
-    assert git(repository, "config", "--get", "core.hooksPath") == ".githooks"
-    # Setup must preserve an existing custom hook configuration.
-    git(repository, "config", "core.hooksPath", "custom-hooks")
-    result = subprocess.run(["sh", str(ROOT / "scripts/setup-git-hooks.sh")], cwd=repository, capture_output=True)
-    assert result.returncode != 0
+    # Setup delegates to the manager and retains a custom effective path.
+    before = (repository / "custom-hooks/pre-commit").read_bytes()
+    result = subprocess.run(["sh", str(scripts / "setup-git-hooks.sh"), "--auto-approve"], cwd=repository, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
     assert git(repository, "config", "--get", "core.hooksPath") == "custom-hooks"
+    assert (repository / "custom-hooks/pre-commit").read_bytes() == before
 
-print(f"Commit hook passed: {len(accepted)} accepted, {len(rejected)} rejected; real commit/amend/push gates and index preservation passed.")
+print(f"Commit hook passed: {len(accepted)} accepted, {len(rejected)} rejected; managed commit/amend/push enforcement and index preservation passed.")

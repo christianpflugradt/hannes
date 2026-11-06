@@ -6,3 +6,6 @@ runs:
     - name: Install checksum-verified governor
       shell: bash
       run: python3 scripts/install-governor.py
+    - name: Reconcile declared Git hooks
+      shell: bash
+      run: '"$HANNES_EXECUTABLE" pass auf --auto-approve'

@@ -1,7 +1,0 @@
-id = "ci-audit"
-rules = [
-  "24-rust-audit",
-  "25-npm-audit",
-]
-gate = true
-input = "worktree"

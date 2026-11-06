@@ -63,8 +63,8 @@ Validation never executes rules or creates governed project files.
 
 Loading local documents is separate from domain resolution. Phase 2 may load
 external repositories into the same resolver but no downloads, imports or remote
-overrides exist in phase 1. Published-governor self-governance migration remains
-phase 3; generated managed hooks use --at with the existing reconciliation flow.
+overrides exist in phase 1. Self-governance uses this model with the existing reconciliation flow and the
+pinned published governor.
 
 Acceptance: `tests/execution_points.rs` covers pure resolution, discovery,
 validation, selection, CLI and existing execution engines.
@@ -292,23 +292,35 @@ Unlicense and checksums. Artifacts must match the tested
 version/source. Normal CI is read-only; only release planning/publishing may
 request write permission. Actions are pinned. See [release policy](docs/releasing.md).
 
-Pending phase-3 integration migration: this repository governs its quality gates
-through a published Hannes executable,
-never a binary built from the checked source. `.hannes` defines explicit version-2
-gate profiles, with `pre-push` as default and no reviews. Its command representation
-must match the pinned published governor and CHK-001.
-`.hannes-version` is the sole CI/release pin, updated through Renovate GitHub-release
-PRs without automerge. New gate configuration features require published support.
+Repository self-integration uses version-3 rules, rule sets and execution points.
+The governor is an installed, previously published binary outside the checkout;
+local candidate builds never govern the source being checked. `.hannes-version`
+is the sole exact release pin, consumed by the shared CI setup action and updated
+by Renovate GitHub-release PRs without automerge. CI never resolves latest.
+The governor is pinned to published v0.5.0, which supports pass auf --auto-approve.
 
-Local hooks never install tools or access the network. They verify working files,
-not exact staged/pushed trees. The commit-msg gate uses the same standalone policy
-checker as CI. CI runs named profiles and preserves reports on failure, with a
-companion execution record for governor version/digest and checked commit; report
-schema 2 is unchanged. Missing tools, incomplete selection and check errors block
-success. Environment setup and release operations remain outside gate selection.
-See [repository quality gates](docs/self-governance.md) for stage coverage.
+The three built-in points serve Git hooks. Explicit custom points ci-native,
+ci-tooling, ci-msrv, ci-audit and release-artifacts preserve their former required
+check selections. Shared native validation, tooling regression and dependency
+audit rules use rule sets; remaining rules have their own run_at. The frozen
+self-governance-v2 fixture records pre-migration commands/settings and selections.
+Checks remain mandatory and no reviews are enabled. Missing tools and errors
+block success. Setup, dependency installation and release publication remain
+outside rule execution.
 
-Candidate Git hooks are declared in version-3 configuration and reconciled only after explicit confirmation. A bypassable
+Hooks are managed by pass auf at Git's effective hook path, including forwarding
+commit-message arguments and preserving compatible unmanaged content. A setup
+shim only retires this checkout's obsolete .githooks setting when its old event
+files are absent, then delegates to pass auf; custom hook paths are preserved.
+Check subprocesses retain the inherited environment and recursion guard. A small
+command launcher sets Cargo/npm offline mode and disables Rustup auto-install
+when invoked by a managed Git hook; it then executes the original check command.
+CI invokes pass auf --auto-approve once before execution. Execution never repairs
+hooks noninteractively. Reports use schema 3 and a companion execution record
+stores governor version/digest, execution point, checked commit and exit code.
+See [repository self-integration](docs/self-governance.md) for coverage and setup.
+
+Git hooks are declared in version-3 configuration and reconciled only after explicit confirmation. A bypassable
 local hook verifies working files, not necessarily the pushed commit. Hosted
 Codex authentication is not provisioned and personal tokens are not copied to CI.
 No hosted service, database, autonomous development, universal policy engine,

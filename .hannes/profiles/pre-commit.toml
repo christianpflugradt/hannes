@@ -1,7 +1,0 @@
-id = "pre-commit"
-rules = [
-  "01-format",
-  "02-docs",
-]
-gate = true
-input = "worktree"

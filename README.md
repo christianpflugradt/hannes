@@ -736,12 +736,15 @@ is listed in the [TODOs](docs/todo/README.md).
 
 ## Development
 
-Pending phase 3, this repository's deterministic quality gates run through an installed published
+The governor is pinned to published Hannes v0.5.0. See
+[repository self-integration](docs/self-governance.md) for setup and coverage.
+
+This repository's deterministic quality checks run through an installed published
 Hannes release. Install development tools with `mise install`, dependencies with
 `npm ci --ignore-scripts` and `cargo +stable fetch --locked`, then the governor
 with `mise deploy`. Ensure its `bin/` directory is on PATH.
 
-`mise check` uses the pinned published governor and its `pre-push` profile:
+`mise check` uses the pinned published governor at the `pre-push` execution point:
 formatting, documentation validation, Clippy, Rust tests, release/deployment/hook
 regression tests, an optimized candidate build and smoke test. No reviews or real
 provider calls run. The governor never comes from the candidate build.
@@ -752,7 +755,7 @@ executable documentation examples. Individual tasks remain available: `format`,
 pre-commit, commit-msg and pre-push hooks explicitly with `mise hooks:install`.
 Local hooks verify working files; CI checks clean checkouts.
 
-See [repository quality gates](docs/self-governance.md) for setup, every profile,
+See [repository quality gates](docs/self-governance.md) for setup, every execution point,
 the Renovate-managed CI version pin, reports and hook limitations. Accepted commit
 types, scopes and release effects are in [Contributing](CONTRIBUTING.md#commits).
 `mise run TASK` works for every task; `mise format` formats Rust, whereas the

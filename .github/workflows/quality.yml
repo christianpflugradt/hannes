@@ -30,6 +30,10 @@ jobs:
           COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: python3 scripts/check-commits.py
+      - name: Check documentation links and acceptance references
+        run: |
+          python3 scripts/test-docs.py
+          python3 scripts/check-docs.py
       - name: Test commit-message policy
         run: python3 scripts/test-commit-hook.py
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7

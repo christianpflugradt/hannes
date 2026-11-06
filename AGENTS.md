@@ -65,6 +65,7 @@ CONTRIBUTING.md. Tests must not call Codex, the network or a paid API; Cargo may
 fetch build dependencies. For documentation/config-only changes, validate affected
 formats, links and commands. Keep README approachable, concise and complete for
 supported CLI commands and every user-editable `.hannes` field, default and limit.
+Run `mise docs:check` when documentation or configuration changes.
 Update it alongside behavior/configuration changes, clearly separating current
 features from planned work. Implementation details belong in docs/.
 Keep LICENSE and Cargo.toml license metadata aligned. Do not add machine-specific

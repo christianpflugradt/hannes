@@ -47,10 +47,16 @@ depends = ["build"]
 run = "python3 scripts/smoke.py target/release/hannes"
 run_windows = "python scripts/smoke.py target/release/hannes.exe"
 
+[tasks."docs:check"]
+description = "Check documentation links, configuration reference and executable examples"
+run = ["python3 scripts/test-docs.py", "python3 scripts/check-docs.py", "cargo test --locked --test documentation"]
+
 [tasks.check]
 description = "Run formatting, Clippy, tests, release build and smoke test"
 run = [
   { task = "hooks:test" },
+  "python3 scripts/test-docs.py",
+  "python3 scripts/check-docs.py",
   { task = "format:check" },
   { task = "lint" },
   { task = "test" },

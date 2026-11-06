@@ -648,6 +648,10 @@ tests, an optimized build and a CLI smoke test. Tests use fake providers, not
 real Codex calls. The toolchain includes Rust with rustfmt/Clippy, Python 3.13
 for scripts and Node 24 for release tooling.
 
+`mise docs:check` checks documentation links, specification test references, all
+configuration fields/defaults and executable README examples without AI calls.
+These checks also run in `mise check` and CI.
+
 Other tasks: `format`, `format:check`, `lint`, `test`, `smoke`, `hooks:install`,
 `hooks:test`. `mise format` formats Rust; built-in `mise fmt` formats `mise.toml`.
 `mise run TASK` works for every project task. Install this repository's optional

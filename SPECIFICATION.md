@@ -227,6 +227,14 @@ Codex authentication is not provisioned and personal tokens are not copied to CI
 No hosted service, database, autonomous development, universal policy engine,
 result cache or additional input/provider implementation is in current scope.
 
+## DOC-001: Documentation contract
+
+Every editable configuration field, required/optional marker and default must
+match the README reference. README configuration examples must validate and plan
+offline. Local links/anchors and specification acceptance references must resolve.
+Run these checks through `mise docs:check`, `mise check` and CI. Automated checks
+complement editorial review; they do not prove prose understandable.
+
 ## Acceptance coverage and change process
 
 Each essential requirement has a stable ID and representative acceptance tests.
@@ -238,6 +246,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
+| DOC-001 | `tests/documentation.rs::every_configuration_field_required_marker_and_default_is_documented` |
 | CLI-001 | `tests/acceptance.rs::all_command_paths_and_standard_help` |
 | CFG-001 | `tests/acceptance.rs::validation_rejects_invalid_including_disabled` |
 | SEL-001 | `tests/profiles.rs::checks_only_explains_omissions_and_cannot_shrink_a_gate` |

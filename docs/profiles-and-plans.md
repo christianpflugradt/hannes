@@ -160,8 +160,9 @@ Only `worktree` input is specified for the first implementation. It retains the
 current full-working-tree stability checks. Future `index` and `commit` inputs
 must be rejected until implemented; never substitute a worktree. In particular,
 a local worktree gate is not proof about staged or pushed commits. Hooks choose
-a profile explicitly once suitable input support exists; profiles install no
-hooks. CI authentication and deployment integration remain separate work.
+a profile explicitly through version-2 `hooks.git` mappings; see
+[Git reconciliation](usage.md#optional-git-hook). Profiles select rules;
+reconciliation maintains hooks. CI authentication and deployment integration remain separate work.
 
 Provider-wide MCP permissions and the existing shared review call are unchanged.
 Per-review MCP subsets and separate sessions, true diff/snapshot review scopes,

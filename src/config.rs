@@ -2,7 +2,7 @@ use crate::limits::*;
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, OpenOptions},
     io::{Read, Write},
     path::{Component, Path, PathBuf},
@@ -43,6 +43,13 @@ pub struct Config {
     pub project: String,
     pub max_display_files: usize,
     pub default_profile: Option<String>,
+    pub hooks: Option<Hooks>,
+}
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Hooks {
+    #[serde(default)]
+    pub git: BTreeMap<String, String>,
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -301,6 +308,10 @@ pub fn load(root: &Path) -> Result<Project> {
         config.version == 2 || config.default_profile.is_none(),
         "default_profile requires configuration version 2"
     );
+    ensure!(
+        config.version == 2 || config.hooks.is_none(),
+        "hooks require configuration version 2"
+    );
     nonempty(&config.project, "project")?;
     ensure!(
         (1..=MAX_DISPLAY_FILES).contains(&config.max_display_files),
@@ -519,6 +530,19 @@ pub fn load(root: &Path) -> Result<Project> {
             "unknown default profile: {default}"
         );
     }
+    if let Some(hooks) = &config.hooks {
+        for (event, profile) in &hooks.git {
+            ensure!(
+                crate::reconciliation::GIT_EVENTS.contains(&event.as_str()),
+                "unsupported Git hook: {event}"
+            );
+            tag(profile)?;
+            ensure!(
+                profile == "all" || profiles.iter().any(|p| &p.id == profile),
+                "unknown Git hook profile: {profile}"
+            );
+        }
+    }
     Ok(Project {
         root,
         config,
@@ -554,6 +578,7 @@ pub fn init(root: &Path) -> Result<usize> {
         project,
         max_display_files: MAX_DISPLAY_FILES,
         default_profile: None,
+        hooks: None,
     };
     let check = |id: &str, description: &str, enabled: bool, argument: &str| Check {
         id: id.into(),

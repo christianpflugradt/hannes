@@ -64,6 +64,12 @@ pub enum Mach {
             help = "Plan oder Planfehler als JSON ausgeben"
         )]
         json: bool,
+        #[arg(long, hide = true, requires = "git_hook_path", conflicts_with = "plan")]
+        git_hook: Option<String>,
+        #[arg(long, hide = true, requires = "git_hook")]
+        git_hook_path: Option<std::path::PathBuf>,
+        #[arg(last = true, hide = true, requires = "git_hook")]
+        hook_arguments: Vec<std::ffi::OsString>,
     },
 }
 #[derive(Debug, Subcommand)]

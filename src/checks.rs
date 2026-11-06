@@ -8,6 +8,14 @@ use std::{
     time::{Duration, Instant},
 };
 pub fn execute(project: &Project, check: &Check) -> Item {
+    execute_with_context(project, check, None)
+}
+
+pub fn execute_with_context(
+    project: &Project,
+    check: &Check,
+    hook: Option<&crate::reconciliation::HookContext>,
+) -> Item {
     let start = Instant::now();
     let mut item = Item::simple(&check.id, "check", Status::Error, String::new());
     let arguments = match crate::check_command::parse(&check.command) {
@@ -30,6 +38,9 @@ pub fn execute(project: &Project, check: &Check) -> Item {
         .args(&arguments[1..])
         .current_dir(project.root.join(&check.working_directory))
         .stdin(Stdio::null());
+    if let Some(hook) = hook {
+        hook.configure(&mut command);
+    }
     match process::run(&mut command, Duration::from_secs(check.timeout_seconds)) {
         Ok(output) => {
             item.status = if output.timed_out {

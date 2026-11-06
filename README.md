@@ -175,7 +175,8 @@ hannes was ist phase
 a disabled example review. Running it again only creates missing files; it
 preserves your edits. It does not install hooks or make a Git commit.
 
-`pass auf` checks the configuration without executing anything. The first
+`pass auf` validates configuration and reconciles declared external state after
+confirmation. It runs no checks or reviews. The first
 `mach was` should pass without Codex because the example review is disabled.
 This confirms that Hannes works; it does not yet verify your application's quality.
 
@@ -193,8 +194,8 @@ The command phrases are German and must be entered as shown, without quotes:
 | Command | What it does |
 | --- | --- |
 | `hannes fang an` | Create missing configuration files, preserving existing files. |
-| `hannes pass auf` | Validate every configuration file and referenced path; run no checks or reviews. |
-| `hannes mach was` | Run the selected rules and save their results. |
+| `hannes pass auf` | Validate configuration and reconcile declared state after confirmation; run no checks or reviews. |
+| `hannes mach was` | Validate and reconcile first, then run selected rules and save results. |
 | `hannes was ist phase` | Show the last saved report and whether it still matches the working files. |
 | `hannes so hilf mir doch` | Show help. |
 
@@ -266,15 +267,15 @@ calculate money, remaining account quota or enforce a total token budget.
 | --- | --- |
 | `0` | Command succeeded, verification passed, or saved results passed and are current. An executable plan also exits 0. |
 | `1` | Verification failed, or saved results are stale. |
-| `2` | Configuration, execution, provider or report error; unknown freshness; invalid arguments; blocked/invalid plan. |
+| `2` | Configuration, execution, provider or report error; unknown freshness; invalid arguments; blocked/invalid plan; declined, unavailable or failed reconciliation. |
 | `3` | No saved report exists for the status command. |
 
 ### Choose rules and preview a run
 
 A **profile** is a named selection of rules, such as a quick local selection and
 a stricter release selection. Profiles and rule **tags** (labels used for selection)
-require configuration version 2. They do not install Git hooks or change provider
-permissions. See [profile configuration](#group-rules-into-profiles).
+require configuration version 2. Profiles select checks and reviews; hook mappings
+choose when a profile runs. Provider permissions remain separate. See [profile configuration](#group-rules-into-profiles).
 
 ```sh
 hannes mach was --profil local --plan
@@ -292,11 +293,32 @@ nor proof that a later working tree is unchanged.
 
 ### Use a Git hook or CI
 
-The optional [pre-push example](scripts/pre-push) runs `hannes mach was` and blocks
-a push on failure. Install it manually, preserving any existing hook; initialization
-never installs it. Local hooks are bypassable and verify the working files, which
-may differ from the pushed commit. See [Git integration](docs/usage.md#optional-git-hook).
+Declare Git events and the profiles they execute in version-2 configuration:
 
+```toml
+[hooks.git]
+pre-commit = "pre-commit"
+commit-msg = "commit-msg"
+pre-push = "pre-push"
+```
+
+Create the referenced profiles first. These are the three supported events;
+`commit-msg` receives the final message file, while `pre-commit` runs before it is
+available. Hannes delegates message validation to your configured checker.
+
+`hannes pass auf` validates configuration, inspects actual state, plans changes,
+asks for confirmation, applies the approved plan and verifies it. `mach was` does
+the same before executing its profile. Synchronized repositories need no prompt
+or writes. Declining, conflicts, failed reconciliation or a required confirmation
+without a terminal exit 2 before checks; run `hannes pass auf` interactively.
+`mach was --plan` remains a read-only execution preview and does not synchronize.
+
+Hannes marks its sections explicitly, preserves unmanaged commands, and refuses
+ambiguous ownership or unsafe composition. Removed mappings remove only managed
+content. Generated hooks verify synchronization read-only and direct you to
+`hannes pass auf` on drift. Local hooks are bypassable and verify working files,
+which may differ from staged or pushed commits. See
+[Git integration and recovery](docs/usage.md#optional-git-hook).
 A CI job can run the same command against a clean checkout. Checks-only runs need
 no AI credentials. Hannes does not provision Codex login on hosted runners, and
 personal login credentials should not be copied into CI.
@@ -336,7 +358,7 @@ outside it cannot serve as evidence.
 
 After editing, run `hannes pass auf`. This validates settings, files and selected
 Markdown headings without executing rules. Provider availability is checked only
-when reviews execute.
+when reviews execute. Declared external state is then reconciled after confirmation.
 
 For existing projects using `.Hannes`, rename it to `.hannes` and update path
 references in scripts, criteria and ignore rules. On case-insensitive filesystems,
@@ -355,10 +377,12 @@ max_display_files = 5
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `version` | Required | `1` for ordinary checks/reviews, or `2` to enable tags/profiles. No automatic migration. |
+| `version` | Required | `1` for ordinary checks/reviews, or `2` to enable tags/profiles and Git hook mappings. No automatic migration. |
 | `project` | Required | Nonblank display name. Initialization uses the project directory name. |
 | `max_display_files` | Required | Integer `1..5`: maximum changed paths shown in status, not a verification limit. |
 | `default_profile` | Optional; `"all"` | Version 2 only: profile selected unless `--profil` overrides it. |
+| `hooks` | Optional; `null` (omitted in TOML) | Version 2 only: desired external integrations. No mappings by default. |
+| `hooks.git` | Optional; `{}` | Git event-to-profile table; only `pre-commit`, `commit-msg`, `pre-push`. Values are existing profile IDs, including `all`. |
 
 ### Fields shared by checks and reviews
 
@@ -616,7 +640,7 @@ add `tags = ["local"]` to the relevant version-2 rule definitions, then use
 errors, even in unused profiles.
 
 `--profil NAME` overrides `default_profile`. With neither, built-in `all` selects
-all enabled rules. Version 1 rejects profile TOML files, `default_profile` and
+all enabled rules. Version 1 rejects profile TOML files, `default_profile`, `hooks` and
 rule tags. Profiles have no inheritance, exclusions or implicit Git-hook behavior.
 
 A **gate** makes omissions an error: it cannot select disabled rules, be empty,

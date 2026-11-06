@@ -21,6 +21,29 @@ pinned historical source. Tests substitute only the repository identity and do
 not generate old schemas from current structs; fixture provenance is recorded in
 [tests/fixtures/compat](../tests/fixtures/compat/README.md).
 
+## Desired-state reconciliation
+
+Configuration validation describes valid desired state; `reconciliation` compares
+it with external state and builds an ordered plan. The CLI owns confirmation;
+both `pass auf` and executing `mach was` share inspection/application/verification.
+The rule engine starts only after that prerequisite. Offline execution previews
+remain read-only and do not synchronize. No generic domain registry is needed:
+Git hooks are the sole current reconciliation domain.
+
+The plan records before/after hook bytes and modes. Application rechecks the
+plan, stages replacements and uses per-file atomic renames with best-effort rollback.
+It does not promise multi-file atomicity or protection from hostile concurrent
+filesystem replacement. Ownership markers bind managed sections to the common
+Git directory, allowing default hooks to serve linked worktrees of one repository.
+Safe composition inserts a section before existing POSIX sh commands; no shell
+parser or arbitrary rewriting is used. Repository-local custom paths are supported;
+external paths, links and ambiguous ownership fail before mutation.
+
+Explicit hook context is checked against the configured event/profile and effective
+wrapper path. Hook invocations inspect the same plan read-only; checker subprocesses
+receive arguments as indexed environment values plus a repository recursion guard.
+No provider or network participates. See [usage and recovery](usage.md#optional-git-hook).
+
 ## Snapshot definition
 
 A snapshot is Git HEAD plus a sorted manifest of SHA-256 hashes, byte sizes and

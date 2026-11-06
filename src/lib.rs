@@ -9,6 +9,7 @@ pub mod planner;
 pub mod process;
 pub mod provider;
 pub mod quotes;
+pub mod reconciliation;
 pub mod report;
 pub mod review_context;
 pub mod review_contract;
@@ -81,10 +82,22 @@ pub fn verify_project_with_mode(
 }
 
 pub fn verify_project_with_profile(
+    project: config::Project,
+    provider: &dyn provider::Provider,
+    mode: VerificationMode,
+    profile: Option<&str>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Report> {
+    verify_project_with_context(project, provider, mode, profile, None, progress)
+}
+
+/// Execute rules after the command lifecycle has validated and reconciled the project.
+pub fn verify_project_with_context(
     mut project: config::Project,
     provider: &dyn provider::Provider,
     mode: VerificationMode,
     profile: Option<&str>,
+    hook: Option<&reconciliation::HookContext>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Report> {
     let checks_only = mode == VerificationMode::ChecksOnly;
@@ -140,7 +153,7 @@ pub fn verify_project_with_profile(
             });
         }
         let item = if plan.executable() {
-            checks::execute(&project, check)
+            checks::execute_with_context(&project, check, hook)
         } else {
             Item::simple(
                 &check.id,

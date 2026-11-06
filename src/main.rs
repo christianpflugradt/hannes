@@ -27,11 +27,12 @@ fn execute(cli: Cli) -> Result<i32> {
             Ok(0)
         }
         Words::Pass { .. } => {
-            config::load(&root)?;
+            let project = config::load(&root)?;
+            hannes::reconciliation::prepare(&project, None, None)?;
             println!(
                 "{}",
                 terminal::paint(
-                    "Passt: configuration valid. Nothing executed.",
+                    "Passt: configuration valid; declared state synchronized. No checks executed.",
                     Tone::Success,
                     color
                 )
@@ -45,6 +46,9 @@ fn execute(cli: Cli) -> Result<i32> {
                     profil,
                     plan,
                     json,
+                    git_hook,
+                    git_hook_path,
+                    hook_arguments,
                 },
         } => {
             if plan {
@@ -81,8 +85,17 @@ fn execute(cli: Cli) -> Result<i32> {
             );
             let _ = stderr.flush();
             let project = config::load(&root)?;
+            let invocation = git_hook.zip(git_hook_path).map(|(event, path)| {
+                hannes::reconciliation::HookInvocation {
+                    event,
+                    path,
+                    arguments: hook_arguments,
+                }
+            });
+            let hook_context =
+                hannes::reconciliation::prepare(&project, invocation, profil.as_deref())?;
             let no_rules = project.checks.is_empty() && project.reviews.is_empty();
-            let report = hannes::verify_project_with_profile(
+            let report = hannes::verify_project_with_context(
                 project,
                 &Codex::default(),
                 if geiz_ist_geil {
@@ -91,6 +104,7 @@ fn execute(cli: Cli) -> Result<i32> {
                     hannes::VerificationMode::AllRules
                 },
                 profil.as_deref(),
+                hook_context.as_ref(),
                 &mut |event| {
                     // Progress must be visible before a slow command or Codex call finishes.
                     // Losing the progress stream must not prevent writing the report.

@@ -25,8 +25,8 @@ and documentation are English; the intentional German command phrases are:
 | Command | Contract |
 | --- | --- |
 | `hannes fang an` | Create missing `.hannes/` files, preserve edits, install no hooks and make no commits. |
-| `hannes pass auf` | Validate all configuration and referenced files, without checks or provider calls. |
-| `hannes mach was` | Validate, select rules, execute checks before reviews and save results. |
+| `hannes pass auf` | Validate configuration and reconcile declared external state after confirmation, without checks or provider calls. |
+| `hannes mach was` | Validate, reconcile, select rules, execute checks before reviews and save results. |
 | `hannes was ist phase` | Read saved results and compare input freshness, without rerunning rules. `--details` shows full findings and captured output. |
 | `hannes so hilf mir doch` | Show help listing exactly the five complete command phrases. |
 
@@ -278,11 +278,52 @@ schema 2 is unchanged. Missing tools, incomplete selection and check errors bloc
 success. Environment setup and release operations remain outside gate selection.
 See [repository quality gates](docs/self-governance.md) for stage coverage.
 
-Git hooks are explicit opt-in examples, never automatically installed. A bypassable
+Git hooks are declared in version-2 configuration and reconciled only after explicit confirmation. A bypassable
 local hook verifies working files, not necessarily the pushed commit. Hosted
 Codex authentication is not provisioned and personal tokens are not copied to CI.
 No hosted service, database, autonomous development, universal policy engine,
 result cache or additional input/provider implementation is in current scope.
+
+## REC-001: Declarative reconciliation and Git hooks
+
+Configuration validation, desired-state reconciliation and quality-check execution
+are separate responsibilities. Both `pass auf` and execution through `mach was`
+use Validate -> Inspect -> Plan -> Confirm -> Apply -> Verify before any checks.
+No discrepancy means no prompt or write. Rejection, unavailable terminal, conflict
+or failure exits 2 and preserves the previous report. `--plan` remains read-only
+and does not reconcile. No provider is called by reconciliation.
+
+Version 2 optionally maps `hooks.git` keys `pre-commit`, `commit-msg`, `pre-push`
+to existing valid profile IDs (including built-in `all`). Version 1 rejects the
+hooks field even when empty. Unknown events, duplicate mappings, invalid values
+and missing profiles fail during full configuration validation.
+
+Git resolves the effective hook path, including worktrees and `core.hooksPath`.
+Default common-repository hooks are shared by its worktrees; custom paths must
+remain within this working tree. Symlink components, nonregular files, malformed
+or duplicate ownership markers and foreign repository ownership are conflicts.
+No Git configuration is changed. Only the three supported event files are inspected.
+
+Managed sections have explicit markers and repository ownership. New hooks use
+POSIX sh. Existing executable POSIX sh hooks can be composed by inserting a
+managed section immediately after the shebang, preserving the remaining bytes
+and checking Hannes failure before existing commands. Other layouts require manual
+integration. Removal preserves unmanaged bytes and permissions; whole-file deletion
+requires exact ownership of the wrapper. Plans are deterministic and revalidated
+before writes. Files are staged, synced and replaced individually, with best-effort
+rollback on failure; a multi-file operation is not an atomic transaction. An
+interrupted process may leave drift; rerun `pass auf` and inspect the reported paths.
+
+Generated wrappers pass explicit event, wrapper path and original arguments to
+`mach was`. Hannes validates this context against the repository, mapping and hook
+state, verifies reconciliation read-only and never prompts or edits hooks. Drift
+instructs the user to run `hannes pass auf` manually. Nested execution from checks
+is rejected using a repository-scoped guard. Checks receive `HANNES_GIT_HOOK`,
+`HANNES_GIT_HOOK_ARG_COUNT` and one-based `HANNES_GIT_HOOK_ARG_1`, etc.; a dedicated
+checker script reads these without shell expansion by Hannes. `commit-msg` supplies
+the message file in argument 1, unlike pre-commit; no commit policy is hardcoded.
+Pre-push stdin is not forwarded to checks. All profiles still verify working files,
+not the exact staged index or pushed commit.
 
 ## ARC-001: Shared configuration contract
 
@@ -322,6 +363,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
+| REC-001 | `tests/reconciliation.rs::approval_updates_removals_and_idempotency` |
 | ARC-001 | `tests/documentation.rs::documented_bounds_and_provider_scaffold_match_the_implementation` |
 | COMPAT-001 | `tests/compatibility.rs::historical_array_commands_are_rejected_but_reports_remain_readable` |
 | DOC-001 | `tests/documentation.rs::every_configuration_field_required_marker_and_default_is_documented` |

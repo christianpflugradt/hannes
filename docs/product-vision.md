@@ -160,7 +160,7 @@ Its primary capabilities are:
 - Deterministic checks.
 - LLM-based reviews.
 - A Codex CLI provider.
-- Configuration validation.
+- Configuration validation and confirmed reconciliation of declared external state.
 - Rule selection through profiles.
 - Structured verification reports.
 - Git working-tree change detection.

@@ -1,7 +1,7 @@
 # Hannes configuration, versions 1 and 2
 
 Initialization creates version 1. Existing configurations are never automatically
-migrated. To enable profiles/tags, explicitly set `version = 2` in config.toml.
+migrated. To enable profiles/tags or declarative Git hooks, explicitly set `version = 2` in config.toml.
 
 Run Hannes from the Git working-tree root. `.hannes` is lowercase.
 `config.toml` requires `version = 1` or `2`, a nonempty `project` and
@@ -135,6 +135,27 @@ necessary evidence or provider problems. Codex must supply a `reason` summary on
 one line (at most 120 characters), plus grounded `findings`. The summary is shown
 for every review, including PASS. Inspect full findings and captured command
 output with `hannes was ist phase --details`; this reads the saved report only.
+
+## Declarative state (version 2)
+
+Optional `[hooks.git]` maps `pre-commit`, `commit-msg`, `pre-push` to existing
+profile IDs (including built-in `all`); omission or an empty table declares no
+hooks. Version 1 rejects `hooks`, including an empty table. Unknown events,
+invalid IDs, missing profiles, wrong types and duplicate keys fail validation.
+
+```toml
+[hooks.git]
+pre-commit = "local"
+commit-msg = "message"
+pre-push = "verify"
+```
+
+Create the referenced profiles first. `pass auf` validates, inspects, plans,
+confirms, applies and verifies declared state. `mach was` shares this prerequisite
+before checks. Synchronized state requires no prompt/write; declined/unavailable
+confirmation, conflicts or failure exit 2. No provider calls are made. Hook
+invocations verify synchronization read-only. `--plan` never reconciles.
+See [Git hook ownership, arguments and recovery](https://github.com/christianpflugradt/hannes/blob/main/docs/usage.md#optional-git-hook).
 
 ## Profiles and tags (version 2)
 

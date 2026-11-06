@@ -31,7 +31,7 @@ specification alone does not complete an implementation.
   discovery, a model or MCP servers. No paid calls in automated tests.
 - Compact output keeps verdicts and short AI summaries; full evidence belongs in
   saved details. Usage is measured per actual model call, never per duplicated row.
-- No automatic repairs, retries, hook installation or credential copying. Each
+- No automatic repairs, retries, unconfirmed hook installation or credential copying. Each
   implementation updates its TODO status, documentation and acceptance tests,
   then is committed and pushed under the repository's Git policy.
 

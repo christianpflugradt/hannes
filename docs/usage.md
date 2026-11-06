@@ -25,8 +25,9 @@ Checks and reviews are collectively called **rules**. If neither is defined,
 `mach was` prints `Du hast noch keine Regeln definiert, du Vogel!` alongside the
 report. Defined but disabled rules do not trigger this message.
 
-`pass auf` validates all files, even disabled entries, and runs nothing.
-`mach was` validates first, executes selected enabled checks in ID order, then
+`pass auf` validates all files, even disabled entries, and reconciles declared
+external state after confirmation, without running checks or reviews.
+`mach was` validates and reconciles first, then executes selected enabled checks in ID order, then
 selected active reviews in one call if checks passed. Without a profile it selects
 all enabled rules. Disabled items never enter results.
 Any failed check prevents spending review tokens; those reviews are `NOT_RUN`.
@@ -188,7 +189,7 @@ and a project review without coupling Hannes to that application.
 | --- | --- |
 | 0 | Initialization/validation/help succeeded, or all required results PASS and status CURRENT |
 | 1 | Verification FAIL, or status STALE |
-| 2 | Configuration/execution/provider/report ERROR, status UNKNOWN, or invalid CLI arguments |
+| 2 | Configuration/reconciliation/execution/provider/report ERROR, declined or unavailable confirmation, status UNKNOWN, or invalid CLI arguments |
 | 3 | Status requested before any report exists |
 
 Status preserves a CURRENT report's original FAIL/ERROR exit code. UNKNOWN takes
@@ -196,21 +197,95 @@ precedence if snapshot coverage is incomplete, even when some differences are kn
 
 ## Optional Git hook
 
-**Local hooks are bypassable (`git push --no-verify`). This hook checks the working
-tree, which may differ from the commits being pushed. It is not a commit guarantee.**
-The example is never installed automatically. From a project's root, after copying
-`scripts/pre-push` from this repository to that project's scripts directory:
+Git hooks are the first desired-state reconciliation domain. Declare their
+profile mappings in version-2 `.hannes/config.toml`, then run `hannes pass auf`:
 
-```sh
-hook_dir="$(git rev-parse --git-path hooks)"
-mkdir -p "$hook_dir"
-# Refuse to overwrite an existing hook; integrate it manually if one exists.
-(set -C; cat scripts/pre-push > "$hook_dir/pre-push")
-chmod +x "$hook_dir/pre-push"
+```toml
+[hooks.git]
+pre-commit = "local"
+commit-msg = "message"
+pre-push = "verify"
 ```
 
-The script respects Git's selected hook directory (including `core.hooksPath`).
-Inspect existing hook management before installing. A future CI gate can run the
-same `hannes mach was` against a clean checked-out commit. Personal ChatGPT tokens
-and Codex authentication on hosted CI are out of scope. Hannes' own CI uses mocks
-and never calls AI services.
+Define these profiles in `.hannes/profiles/` first. Hook names determine timing;
+profiles select rules; check scripts implement validation. Pre-commit runs before
+the message is finalized. Commit-msg receives the final message file. Pre-push
+runs before references are transferred. All failures block Git with nonzero status,
+including a missing `hannes` on PATH. Conventional Commits validation belongs in
+a standalone checker, which must not invoke the hook again.
+
+The lifecycle is **Validate -> Inspect -> Plan -> Confirm -> Apply -> Verify**.
+`pass auf` performs validation and reconciliation without checks or provider calls.
+`mach was` performs the same prerequisite, then executes its selected profile.
+Synchronized state succeeds without prompting or writing. Changes are displayed
+as creation, managed-section update or removal and require `y`/`yes` in a terminal.
+Declining, missing a terminal, conflicts or failures exit 2 and preserve the
+previous report. Invalid configuration always fails before hook modification.
+`--plan` previews rule execution only and never synchronizes hooks.
+
+Generated wrappers supply explicit event and wrapper-path arguments validated by
+Hannes against Git's effective directory and the declared profile. Within hooks,
+reconciliation is read-only: drift fails with instructions to run `hannes pass auf`
+manually. No prompt or hook write occurs. A repository-scoped execution guard
+blocks nested Hannes execution from checker processes.
+
+Deterministic checks receive `HANNES_GIT_HOOK`, `HANNES_GIT_HOOK_ARG_COUNT` and
+one-based `HANNES_GIT_HOOK_ARG_1`, `HANNES_GIT_HOOK_ARG_2`, etc. Values preserve
+Git's arguments; relative paths are relative to the repository root, so checkers
+using another working directory must resolve them accordingly. For a commit-msg
+profile, configure a dedicated script such as `command = "sh scripts/check-message.sh"`:
+
+```sh
+#!/bin/sh
+set -eu
+test "$HANNES_GIT_HOOK" = commit-msg
+test "$HANNES_GIT_HOOK_ARG_COUNT" = 1
+exec my-message-checker "$HANNES_GIT_HOOK_ARG_1"
+```
+
+Hannes does not expand environment variables in command strings. Checks retain
+null stdin; pre-push reference data from stdin is not forwarded. Original Git
+arguments still reach any unmanaged hook commands.
+
+### Ownership and recovery
+
+New hooks use `#!/bin/sh`, executable permissions, explicit
+`# BEGIN HANNES MANAGED` / `# END HANNES MANAGED` markers and an ownership line
+bound to the common Git repository. Existing executable `#!/bin/sh` hooks receive
+a section immediately after the shebang; their remaining bytes and permissions
+are preserved. Hannes runs first and propagates failure before custom commands.
+Other shebangs, nonexecutable custom hooks, misplaced/malformed/duplicate markers
+or foreign ownership are conflicts. Hannes reports the file and stops before
+confirmation or writes. Inspect and correct the conflict manually, preserving
+custom behavior, then rerun `hannes pass auf`. Do not copy managed wrappers between
+repositories; declare mappings and let each clone generate its own wrappers.
+
+Changing mappings updates managed sections. Removing mappings removes those
+sections, preserving unmanaged content; whole-file deletion requires the exact
+owned wrapper with no other content. Repeated synchronized runs preserve file
+timestamps. A moved clone needs manual review of old ownership markers.
+
+Git resolves the effective directory, including `core.hooksPath` and worktrees;
+Hannes never changes Git configuration. Custom directories must be inside the
+working-tree root, with no parent traversal or symlink components. External/shared
+custom paths require manual integration or a repository-local `core.hooksPath`.
+The default common-repository hooks directory is shared by linked worktrees;
+all such worktrees must agree on mappings. Divergent worktree configurations cause
+drift and must be reconciled deliberately. Symlinks and nonregular hooks fail
+safely. Switching hook directories leaves the previous directory untouched;
+remove its managed mappings before switching if you want Hannes to clean it up.
+
+The complete plan is rechecked before application. Replacements are staged and
+synced, then atomically replaced one file at a time. Multiple files are not one
+atomic transaction. Failures report the affected operation/path, earlier operations
+and rollback result. Rollback preserves concurrent edits and reports any paths it
+cannot restore. After interruption, inspect the hooks and rerun `hannes pass auf`;
+leftover `.hannes-hook-*` temporary files can be removed after ensuring no other
+reconciliation is running. Missing directories are created after approval.
+
+Local hooks are bypassable (`git commit --no-verify`, `git push --no-verify`).
+They verify the working tree, not the exact staged index or pushed commit.
+Exact-index verification is separate future work. CI can execute the same profiles
+against a clean checkout; hosted authentication and deployment remain separate.
+The repository's own versioned hook setup remains compatible with its pinned
+published governor until native reconciliation is available in a published release.

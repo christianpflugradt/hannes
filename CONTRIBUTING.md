@@ -91,6 +91,12 @@ In your PR, describe the problem, resulting behavior and actual validation.
 Contributions use the project's [Unlicense](LICENSE). See
 [release instructions](docs/releasing.md) for packaging and publishing.
 
+Native reconciliation tests use temporary repositories and real Git commits/pushes;
+run `cargo test --locked --test reconciliation`. Keep tests offline and never
+change developer/global Git configuration. The versioned repository hook setup
+continues using the published governor; do not adopt unreleased hook configuration
+in `.hannes` before its pinned governor supports it.
+
 For release tooling changes, use the Node version in `mise.toml`, prepare npm
 dependencies with `npm ci --ignore-scripts` and run `mise check`. CI also validates all proposed
 commit messages and the PR's squash title. Releases are manually started on main;

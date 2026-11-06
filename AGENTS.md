@@ -42,7 +42,9 @@ supported CLI commands and every user-editable `.hannes` field, default and limi
 Update it alongside behavior/configuration changes, clearly separating current
 features from planned work. Implementation details belong in docs/.
 Keep LICENSE and Cargo.toml license metadata aligned. Do not add machine-specific
-paths, credentials or per-developer reports to versioned files.
+paths, credentials or per-developer reports to versioned files. Use generic
+placeholders such as `My_App` in public documentation and examples; do not name
+private projects.
 
 ## Git conventions
 

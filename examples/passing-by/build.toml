@@ -1,6 +1,0 @@
-id = "macos-build"
-description = "Build the macOS application without signing"
-enabled = false
-command = ["xcodebuild", "-project", "Passing By.xcodeproj", "-scheme", "Passing By", "-destination", "platform=macOS", "CODE_SIGNING_ALLOWED=NO", "build"]
-working_directory = "."
-timeout_seconds = 600

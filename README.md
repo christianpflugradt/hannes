@@ -141,7 +141,7 @@ checks or Codex. Model availability and MCP discovery are checked during executi
 
 ```toml
 version = 1
-project = "Passing By"
+project = "My_App"
 max_display_files = 5
 ```
 
@@ -406,7 +406,7 @@ index/commit inputs, configurable run-wide budgets and result caching. See the
 ## More
 
 [Usage and Git hook](docs/usage.md) · [Configuration](docs/configuration.md) ·
-[Design and limits](docs/design.md) · [Passing By example](examples/passing-by/README.md) ·
+[Design and limits](docs/design.md) · [My_App example](examples/my-app/README.md) ·
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Releasing](docs/releasing.md)
 
 Install the local Conventional Commit type/optional-scope check with `mise hooks:install`;

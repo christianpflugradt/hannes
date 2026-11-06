@@ -53,7 +53,7 @@ disabled rules and unused profiles, are validated before execution.
 ```toml
 # .hannes/config.toml
 version = 2
-project = "Passing By"
+project = "My_App"
 max_display_files = 5
 default_profile = "local"
 ```

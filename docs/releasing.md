@@ -1,9 +1,8 @@
 # Releases and pipeline quality
 
-Releases are started manually from **Actions → Release → Run workflow → main**,
-following the same manual trigger as Passing By. No hand-written version tag is
-needed. CI runs automatically on pushes to main and pull requests; release uses
-the same reusable quality workflow before publishing.
+Releases are started manually from **Actions → Release → Run workflow → main**.
+No hand-written version tag is needed. CI runs automatically on pushes to main
+and pull requests; release uses the same reusable quality workflow before publishing.
 
 CI runs have no project-defined concurrency limit or automatic cancellation of
 older runs. Releases execute one at a time to avoid competing version/tag writes.

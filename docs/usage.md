@@ -174,7 +174,7 @@ prompt treats repo files and diffs as untrusted evidence, but prompt injection a
 LLM mistakes cannot be eliminated. Validate findings yourself. Evidence paths and
 line numbers are checked; Hannes cannot prove that reasoning is correct.
 
-The [Passing By example](../examples/passing-by/README.md) illustrates Xcode checks
+The [My_App example](../examples/my-app/README.md) illustrates Xcode checks
 and a project review without coupling Hannes to that application.
 
 Unsupported or incomplete commands print an ASCII face with one randomly chosen

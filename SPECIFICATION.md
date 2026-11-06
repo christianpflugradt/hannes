@@ -11,7 +11,7 @@ The [ordered TODO roadmap](docs/todo/README.md) tracks implementation and next s
 
 Hannes is a small, self-contained, agent-agnostic **meta-harness** for governance of agentic software development. It does not implement code, manage an agent's task loop, prescribe a development methodology, or run production infrastructure. It verifies that an evolving codebase satisfies project-specific expectations at a chosen moment. A hobby developer can install it in a repository, define cheap deterministic **checks** and fallible LLM-based **reviews**, and obtain an auditable, human-readable PASS/FAIL report. Future ambitions include enterprise governance, other AI providers, CI-enforced policy, policy packs, and broader software lifecycle controls; do not implement them in this prototype.
 
-The immediate validation target is an unrelated macOS hobby application, Passing By. Do not couple Hannes to that application. Favor transparent behavior, no unnecessary complexity, no separate LLM API billing for the local Codex proof of concept, and modest LLM token consumption.
+Examples use the placeholder My_App. Do not couple Hannes to a specific application. Favor transparent behavior, no unnecessary complexity, no separate LLM API billing for the local Codex proof of concept, and modest LLM token consumption.
 
 ## 2. Technology and packaging
 
@@ -58,7 +58,7 @@ Prefer one TOML metadata file per check/review to support easy addition and prec
 ```toml
 # .hannes/config.toml
 version = 1
-project = "Passing By" # initialized default should be derived from repository or folder name
+project = "My_App" # initialized default should be derived from repository or folder name
 max_display_files = 5
 
 # .hannes/provider.toml

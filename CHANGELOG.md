@@ -1,3 +1,13 @@
+## [0.3.0](https://github.com/christianpflugradt/hannes/compare/v0.2.0...v0.3.0) (2026-11-06)
+
+### Features
+
+* **git:** reconcile declared state and manage Git hooks ([95e8e1c](https://github.com/christianpflugradt/hannes/commit/95e8e1cc4fdf3e6efa41559d3ab236b6b0cb65c7))
+
+### Build System
+
+* **ci:** govern quality gates with published Hannes ([44a1d65](https://github.com/christianpflugradt/hannes/commit/44a1d6527a8a55b04123839cae0964523ca4c98e))
+
 ## [0.2.0](https://github.com/christianpflugradt/hannes/compare/v0.1.0...v0.2.0) (2026-11-06)
 
 ### ⚠ BREAKING CHANGES

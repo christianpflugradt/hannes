@@ -122,12 +122,16 @@ See the [configuration reference](configuration.md). To add a check, create
 id = "test"
 description = "Run project tests"
 enabled = true
-command = ["cargo", "test", "--locked"]
+command = "cargo test --locked"
 working_directory = "."
 timeout_seconds = 300
 ```
 
-Commands are argv arrays; a shell is used only if explicitly configured.
+Commands are strings parsed into one executable and its arguments, without an
+implicit shell. Quotes and escaped spaces preserve single arguments. Validation
+rejects shell operators/expansions and malformed quoting before execution; missing
+executables fail at runtime. Use a task runner or dedicated script to combine
+commands. See the [command syntax reference](../README.md#add-a-check).
 Treat deterministic checks like scripts you trust to run yourself. They are not
 sandboxed. Check outputs or formatters that change relevant files cause an
 integrity ERROR: rerun on stable files.

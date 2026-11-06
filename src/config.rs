@@ -82,7 +82,7 @@ pub struct Check {
     pub id: String,
     pub description: String,
     pub enabled: bool,
-    pub command: Vec<String>,
+    pub command: String,
     #[serde(default = "default_directory")]
     pub working_directory: String,
     pub timeout_seconds: u64,
@@ -355,29 +355,26 @@ pub fn load(root: &Path) -> Result<Project> {
             identity(&check.id, &check.description, &mut ids)?;
             tags(&mut check.tags)?;
             timeout(check.timeout_seconds)?;
-            ensure!(
-                !check.command.is_empty() && check.command.len() <= MAX_COMMAND_ARGS,
-                "command must have 1..={MAX_COMMAND_ARGS} argv elements"
-            );
-            nonempty(&check.command[0], "command executable")?;
-            ensure!(
-                check
-                    .command
-                    .iter()
-                    .all(|s| !s.contains('\0') && s.len() <= MAX_ARGUMENT_BYTES),
-                "command arguments contain NUL or exceed {MAX_ARGUMENT_BYTES} bytes"
-            );
-            let exe = Path::new(&check.command[0]);
-            if exe.is_absolute()
-                || check.command[0].contains('/')
-                || check.command[0].contains('\\')
-            {
+            let arguments = crate::check_command::parse(&check.command)
+                .with_context(|| format!("Invalid command in check '{}'", check.id))?;
+            let exe = Path::new(&arguments[0]);
+            if exe.is_absolute() || arguments[0].contains('/') || arguments[0].contains('\\') {
                 relative(exe)?;
                 let base = Path::new(&check.working_directory).join(exe);
-                ensure!(
-                    inside(&root, &base)?.is_file(),
-                    "command executable must be a file"
-                );
+                // Validate containment of existing ancestors without requiring the
+                // executable (or its parent directories) to exist in this environment.
+                let mut ancestor = base.as_path();
+                while root
+                    .join(ancestor)
+                    .symlink_metadata()
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+                {
+                    ancestor = ancestor
+                        .parent()
+                        .filter(|path| !path.as_os_str().is_empty())
+                        .unwrap_or(Path::new("."));
+                }
+                inside(&root, ancestor)?;
             }
             ensure!(
                 inside(&root, Path::new(&check.working_directory))?.is_dir(),
@@ -385,7 +382,7 @@ pub fn load(root: &Path) -> Result<Project> {
             );
             Ok(())
         })()
-        .with_context(|| format!("invalid {}", path.display()))?;
+        .with_context(|| format!("invalid check '{}' ({})", check.id, path.display()))?;
         checks.push(check);
     }
     let mut reviews = Vec::new();
@@ -562,7 +559,7 @@ pub fn init(root: &Path) -> Result<usize> {
         id: id.into(),
         description: description.into(),
         enabled,
-        command: vec!["git".into(), argument.into()],
+        command: format!("git {argument}"),
         working_directory: default_directory(),
         timeout_seconds: 30,
         tags: vec![],

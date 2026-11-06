@@ -19,7 +19,9 @@ fn section<'a>(text: &'a str, title: &str) -> &'a str {
         .unwrap()
 }
 fn rows(text: &str) -> BTreeMap<String, String> {
-    text.lines()
+    text.split("\n\n")
+        .filter(|paragraph| paragraph.trim_start().starts_with("| Field |"))
+        .flat_map(str::lines)
         .filter_map(|line| {
             let cells: Vec<_> = line.split('|').map(str::trim).collect();
             let key = cells.get(1)?.strip_prefix('`')?.strip_suffix('`')?;

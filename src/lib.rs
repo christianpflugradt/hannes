@@ -1,3 +1,4 @@
+mod check_command;
 pub mod checks;
 pub mod cli;
 pub mod config;

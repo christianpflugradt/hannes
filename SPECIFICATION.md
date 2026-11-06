@@ -71,6 +71,8 @@ optional model/effort uses Codex defaults; omitting the MCP allow list disables
 all MCPs. Configuration versions 1 and 2 remain readable. Version 1 rejects tags,
 profiles and `default_profile`; new capabilities require an explicit supported
 version and compatibility tests rather than silently changing old semantics.
+The intentional pre-1.0 command-string format break in CHK-001 applies to both
+versions; old array-based commands are rejected, never silently migrated.
 
 ## SEL-001: Selection and offline plans
 
@@ -95,10 +97,23 @@ execution before any check starts. Empty ordinary selections prove no rule PASS.
 
 ## CHK-001: Deterministic checks
 
-Check commands are argument arrays, executed without an implicit shell or stdin.
+Check commands are strings parsed into one executable and its arguments, executed
+without an implicit shell or stdin. Arrays are rejected in both configuration
+versions. Support whitespace separation, single/double quotes, escaped whitespace
+and quotes, empty quoted arguments, and quoted/escaped literal special characters.
+Reject empty commands/missing executable names, unmatched quotes, trailing escapes, unquoted
+shell operators (`&&`, `||`, `;`, pipes, redirection, background execution),
+substitution, variable expansion and unquoted glob patterns during validation,
+including disabled checks. Single quotes protect all literal content; double
+quotes protect operators/globs but not unescaped shell expansions. Never expand
+variables, globs or substitutions. Errors identify the affected check and explain
+how to use a task runner or dedicated script for command composition.
 They inherit the environment; bare executables resolve through PATH. Relative
 executables resolve from the configured working directory and must remain inside
-the project. An explicit shell is permitted. Checks are trusted commands, not a
+the project. Validation does not require an executable to exist or be available;
+missing/non-executable programs fail at runtime. An explicit shell is permitted
+but task runners/dedicated scripts are the recommended composition model.
+Checks are trusted commands, not a
 security sandbox, and should not modify verified files.
 
 Checks run sequentially. Exit 0 is PASS; nonzero exit or signal is FAIL. Spawn,
@@ -258,8 +273,11 @@ reuse the same bounds; this does not add configurable fields or change defaults.
 ## COMPAT-001: Versioned compatibility evidence
 
 Keep immutable configuration/report fixtures from historical source versions.
-Current code must read every supported version without silently changing its
-meaning. Tests may substitute repository installation identity, not synthesize
+Current code must read supported reports and compatible configuration fields
+without silently changing their meaning. The command-string change intentionally
+rejects historical array commands in versions 1 and 2; keep frozen arrays as
+rejection evidence, while historical reports remain readable. Tests may substitute
+repository installation identity, not synthesize
 old field sets by serializing current structs. Preserve old fixtures when adding
 a new version; deliberate breaking changes require an explicit specification.
 
@@ -283,12 +301,12 @@ Public documentation explains supported behavior; proposals remain in the roadma
 | Requirement | Representative acceptance test |
 | --- | --- |
 | ARC-001 | `tests/documentation.rs::documented_bounds_and_provider_scaffold_match_the_implementation` |
-| COMPAT-001 | `tests/compatibility.rs::historical_configurations_and_reports_remain_readable` |
+| COMPAT-001 | `tests/compatibility.rs::historical_array_commands_are_rejected_but_reports_remain_readable` |
 | DOC-001 | `tests/documentation.rs::every_configuration_field_required_marker_and_default_is_documented` |
 | CLI-001 | `tests/acceptance.rs::all_command_paths_and_standard_help` |
 | CFG-001 | `tests/acceptance.rs::validation_rejects_invalid_including_disabled` |
 | SEL-001 | `tests/profiles.rs::checks_only_explains_omissions_and_cannot_shrink_a_gate` |
-| CHK-001 | `tests/acceptance.rs::failing_check_runs_remaining_and_blocks_provider` |
+| CHK-001 | `tests/check_commands.rs::pass_auf_rejects_invalid_commands_even_when_disabled_without_execution` |
 | REV-001 | `tests/acceptance.rs::lean_review_transport_disables_unlisted_mcp_and_honors_model_profile_and_allowlist` |
 | PREP-001 | `tests/profiles.rs::prepared_input_is_shared_with_the_provider_without_rereading_context` |
 | OUT-001 | `tests/review_contract.rs::review_contract_enforces_boundaries_and_semantic_evidence_locally` |

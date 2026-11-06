@@ -55,6 +55,14 @@ complete baselines. Binary files up to the same size budget are hashed normally.
 
 ## Execution and reporting
 
+`check_command` validates lexical shell constructs before `shell-words` removes
+quotes and splits arguments. Configuration validation and execution use the same
+parser; the original command string is serialized in configuration. Arrays are
+intentionally unsupported in both configuration versions. Quoted/escaped literals
+remain arguments; shell evaluation is never implicit. Executable availability is
+checked only by process creation, while configuration still validates containment
+of relative paths (including existing ancestors of missing executables).
+
 Commands run sequentially without an implicit shell. Both pipes are drained
 concurrently to EOF, retaining only the first 64 KiB each and their complete byte
 totals. Truncation is recorded. Timeouts are ERROR; signal termination/nonzero exit

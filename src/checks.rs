@@ -9,20 +9,27 @@ use std::{
 };
 pub fn execute(project: &Project, check: &Check) -> Item {
     let start = Instant::now();
-    let executable = if check.command[0].contains('/') || check.command[0].contains('\\') {
+    let mut item = Item::simple(&check.id, "check", Status::Error, String::new());
+    let arguments = match crate::check_command::parse(&check.command) {
+        Ok(arguments) => arguments,
+        Err(error) => {
+            item.reason = format!("Invalid command in check '{}': {error:#}", check.id);
+            return item;
+        }
+    };
+    let executable = if arguments[0].contains('/') || arguments[0].contains('\\') {
         project
             .root
             .join(&check.working_directory)
-            .join(&check.command[0])
+            .join(&arguments[0])
     } else {
-        std::path::PathBuf::from(&check.command[0])
+        std::path::PathBuf::from(&arguments[0])
     };
     let mut command = Command::new(executable);
     command
-        .args(&check.command[1..])
+        .args(&arguments[1..])
         .current_dir(project.root.join(&check.working_directory))
         .stdin(Stdio::null());
-    let mut item = Item::simple(&check.id, "check", Status::Error, String::new());
     match process::run(&mut command, Duration::from_secs(check.timeout_seconds)) {
         Ok(output) => {
             item.status = if output.timed_out {

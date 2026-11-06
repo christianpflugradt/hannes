@@ -304,6 +304,7 @@ pub fn build(
         .collect();
     for check in &mut checks {
         check.tags.sort();
+        check.command = shell_words::join(crate::check_command::parse(&check.command)?);
     }
     let mut reviews: Vec<_> = project
         .reviews

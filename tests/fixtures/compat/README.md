@@ -14,6 +14,9 @@ with all reviews disabled. For v2, explicitly select version 2 and a `local` gat
 requiring `always-ok` before verification. No model calls or credentials are used.
 
 The configuration files and review criterion are historical scaffold contents.
+The command-string format intentionally rejects their array-based check commands
+in both configuration versions. The test now asserts that rejection; reports
+remain readable. These historical inputs are not current configuration examples.
 Generated guidance is omitted. Test setup installs the configuration under the
 current `.hannes` directory: the directory rename is explicit, not an automatic
 configuration migration. Old paths inside saved snapshots remain historical and

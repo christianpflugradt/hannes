@@ -187,18 +187,18 @@ fn validation_rejects_invalid_including_disabled() {
         ),
         (
             "checks/deliberately-failing.toml",
-            "command = [\"git\", \"definitely-not-a-subcommand\"]",
+            "command = \"git definitely-not-a-subcommand\"",
             "command = []",
         ),
         (
             "checks/deliberately-failing.toml",
-            "command = [\"git\", \"definitely-not-a-subcommand\"]",
+            "command = \"git definitely-not-a-subcommand\"",
             "command = [1]",
         ),
         (
             "checks/deliberately-failing.toml",
-            "command = [\"git\", \"definitely-not-a-subcommand\"]",
-            "command = [\"../outside\"]",
+            "command = \"git definitely-not-a-subcommand\"",
+            "command = \"../outside\"",
         ),
         (
             "checks/deliberately-failing.toml",
@@ -249,8 +249,8 @@ fn validation_does_not_execute_checks_or_provider() {
     replace(
         d.path(),
         "checks/always-ok.toml",
-        "command = [\"git\", \"--version\"]",
-        "command = [\"nonexistent-command-hannes\"]",
+        "command = \"git --version\"",
+        "command = \"nonexistent-command-hannes\"",
     );
     assert!(config::load(d.path()).is_ok());
     assert_eq!(cli(d.path(), &["pass", "auf"]).status.code(), Some(0));
@@ -307,8 +307,8 @@ fn spawn_error_writes_blocking_error_report() {
     replace(
         d.path(),
         "checks/always-ok.toml",
-        "command = [\"git\", \"--version\"]",
-        "command = [\"nonexistent-command-hannes\"]",
+        "command = \"git --version\"",
+        "command = \"nonexistent-command-hannes\"",
     );
     let r = hannes::verify(d.path(), &Never).unwrap();
     assert_eq!(r.overall, Status::Error);
@@ -545,8 +545,8 @@ fn timeout_output_capture_and_shell_are_explicit() {
     replace(
         d.path(),
         "checks/always-ok.toml",
-        "command = [\"git\", \"--version\"]",
-        "command = [\"sh\", \"-c\", \"while :; do :; done\"]",
+        "command = \"git --version\"",
+        "command = \"sh -c 'while :; do :; done'\"",
     );
     replace(
         d.path(),
@@ -600,8 +600,8 @@ fn changing_files_during_checks_blocks_pass() {
     replace(
         d.path(),
         "checks/always-ok.toml",
-        "command = [\"git\", \"--version\"]",
-        "command = [\"sh\", \"-c\", \"printf changed > created.txt\"]",
+        "command = \"git --version\"",
+        "command = \"sh -c 'printf changed > created.txt'\"",
     );
     let r = hannes::verify(d.path(), &Never).unwrap();
     assert_eq!(r.overall, Status::Error);
@@ -1334,7 +1334,7 @@ fn progress_numbers_only_enabled_rules_and_announces_one_shared_provider_call() 
     }
     let d = project();
     enable(d.path());
-    fs::write(path(d.path(),"checks/second.toml"),"id = \"second-check\"\ndescription = \"Second deterministic check\"\nenabled = true\ncommand = [\"git\", \"--version\"]\ntimeout_seconds = 30\n").unwrap();
+    fs::write(path(d.path(),"checks/second.toml"),"id = \"second-check\"\ndescription = \"Second deterministic check\"\nenabled = true\ncommand = \"git --version\"\ntimeout_seconds = 30\n").unwrap();
     let original = fs::read_to_string(path(d.path(), "reviews/product-consistency.toml")).unwrap();
     fs::write(
         path(d.path(), "reviews/second.toml"),
@@ -1403,7 +1403,7 @@ fn cli_flushes_rule_start_while_the_check_is_still_running_and_keeps_raw_output_
     fs::write(path(d.path(),"checks/always-ok.toml"),r#"id = "always-ok"
 description = "Wait for the test release signal"
 enabled = true
-command = ["sh", "-c", "while [ ! -f \"$HANNES_TEST_RELEASE\" ]; do sleep 0.02; done; printf RAW_CHECK_OUTPUT"]
+command = "sh -c 'while [ ! -f \"$HANNES_TEST_RELEASE\" ]; do sleep 0.02; done; printf RAW_CHECK_OUTPUT'"
 timeout_seconds = 5
 "#).unwrap();
     let marker = external.path().join("release");

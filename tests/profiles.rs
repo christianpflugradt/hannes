@@ -44,7 +44,7 @@ impl Fixture {
         fs::write(full, text).unwrap();
     }
     fn check(&self, id: &str, tags: &[&str]) {
-        self.write(&format!("checks/{id}.toml"), &format!("id = '{id}'\ndescription = 'Check {id}'\nenabled = true\ncommand = ['git', '--version']\ntimeout_seconds = 30\ntags = {}\n", serde_json::to_string(tags).unwrap()));
+        self.write(&format!("checks/{id}.toml"), &format!("id = '{id}'\ndescription = 'Check {id}'\nenabled = true\ncommand = 'git --version'\ntimeout_seconds = 30\ntags = {}\n", serde_json::to_string(tags).unwrap()));
     }
     fn profile(&self, id: &str, selectors: &str) {
         self.write(
@@ -234,7 +234,7 @@ fn defaults_explicit_overrides_and_v1_activation_are_strict() {
     assert!(config::load(f.root.path()).is_err()); // new tags/profile files cannot silently work in v1
     fs::remove_file(f.root.path().join(".hannes/checks/local-test.toml")).unwrap();
     fs::remove_dir_all(f.root.path().join(".hannes/profiles")).unwrap();
-    f.write("checks/always-ok.toml", "id='always-ok'\ndescription='Test'\nenabled=true\ncommand=['git','--version']\ntimeout_seconds=30\ntags=[]\n");
+    f.write("checks/always-ok.toml", "id='always-ok'\ndescription='Test'\nenabled=true\ncommand='git --version'\ntimeout_seconds=30\ntags=[]\n");
     assert!(config::load(f.root.path()).is_err());
 }
 
@@ -297,7 +297,7 @@ fn unknown_profile_and_invalid_configuration_have_structured_json_errors() {
 fn preview_is_offline_and_preserves_report_and_git_state() {
     let f = Fixture::new();
     f.enable_review();
-    f.write("checks/always-ok.toml", "id='always-ok'\ndescription='Marker'\nenabled=true\ncommand=['git','config','--local','hannes.executed','yes']\ntimeout_seconds=30\n");
+    f.write("checks/always-ok.toml", "id='always-ok'\ndescription='Marker'\nenabled=true\ncommand='git config --local hannes.executed yes'\ntimeout_seconds=30\n");
     f.write("reports/last.json", "unchanged report bytes");
     let git_config = fs::read(f.root.path().join(".git/config")).unwrap();
     let output = f.cli(&["mach", "was", "--plan", "--json"]);
@@ -397,7 +397,7 @@ fn gates_execute_selected_rules_and_record_not_run_reviews_after_failed_checks()
     assert_eq!(provider.calls.get(), 1);
     assert!(report.plan.as_ref().unwrap().gate);
     report::read(f.root.path()).unwrap();
-    f.write("checks/always-ok.toml", "id='always-ok'\ndescription='Failure'\nenabled=true\ncommand=['git','definitely-not-a-command']\ntimeout_seconds=30\n");
+    f.write("checks/always-ok.toml", "id='always-ok'\ndescription='Failure'\nenabled=true\ncommand='git definitely-not-a-command'\ntimeout_seconds=30\n");
     let report = f.run("gate", false, &Never).unwrap();
     assert_eq!(report.overall, Status::Fail);
     assert_eq!(report.results[1].status, Status::NotRun);
@@ -421,6 +421,16 @@ fn plan_ids_ignore_selector_and_metadata_order_but_track_semantic_inputs() {
     fs::rename(
         f.root.path().join(".hannes/checks/alpha.toml"),
         f.root.path().join(".hannes/checks/renamed.toml"),
+    )
+    .unwrap();
+    assert_eq!(original.plan_id, f.plan(Some("local"), false).plan_id);
+    let check = f.root.path().join(".hannes/checks/renamed.toml");
+    fs::write(
+        &check,
+        fs::read_to_string(&check).unwrap().replace(
+            "command = 'git --version'",
+            "command = '\"git\"    --version'",
+        ),
     )
     .unwrap();
     assert_eq!(original.plan_id, f.plan(Some("local"), false).plan_id);

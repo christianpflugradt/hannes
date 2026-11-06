@@ -47,14 +47,35 @@ existing configurations without these additions remain readable. A configured
 unsupported model/effort fails rather than silently substituting another model.
 
 Each `checks/*.toml` requires unique `id`, nonempty `description`, boolean `enabled`,
-`command` (1..256 argv strings) and `timeout_seconds` (1..3600).
-`working_directory` defaults to `"."`. Commands execute directly, without shell expansion.
-An explicit shell such as `["sh", "-c", "cargo test && cargo clippy"]` is possible
-but platform dependent. Bare executables resolve through PATH; path executables must
-be relative to the working directory, exist, and resolve inside the project.
-Working directories and referenced files must resolve inside the root. Parent traversal
-and absolute configuration paths are rejected; this is configuration validation,
-not a sandbox for trusted deterministic commands. Checks can modify files or access secrets.
+`command` (a string) and `timeout_seconds` (1..3600):
+
+```toml
+command = "cargo test --locked"
+```
+
+Hannes executes one executable with arguments directly, without an implicit shell.
+Whitespace separates arguments; single/double quotes preserve spaces and escaped
+whitespace/quotes are supported. Single quotes preserve all literal characters;
+double quotes protect operators/globs but not unescaped `$HOME`, `$(...)` or backticks.
+TOML literal strings preserve backslashes; basic strings require TOML escaping too.
+For example, `command = 'my-tool --message "Hello; world"'` passes one message argument.
+Empty quoted arguments are allowed. Commands have 1..256 executable/argument elements,
+each at most 32768 bytes without NUL; the executable must be nonblank. Arrays are rejected.
+
+`hannes pass auf` rejects malformed quoting, trailing escapes, empty executables,
+unquoted `&&`, `||`, `;`, pipes, redirection, background execution, variable/command
+expansions, globs, shell comments and tilde expansion, including disabled checks.
+Quote or escape special characters meant literally. Use npm scripts, Gradle tasks,
+Makefiles or dedicated scripts to combine commands. Explicit shells remain possible;
+Hannes does not interpret shell expressions.
+
+`working_directory` defaults to `"."`. Bare executables resolve through PATH; path
+executables must be relative to the working directory and resolve inside the project.
+Availability and execute permissions are checked at runtime, not validation: missing
+executables become ERROR. Working directories and referenced review files must exist
+inside the root. Parent traversal and absolute configuration paths are rejected;
+this is configuration validation, not a sandbox for trusted deterministic commands.
+Checks can modify files or access secrets.
 
 Each `reviews/*.toml` requires unique `id`, nonempty `description`, boolean `enabled`
 and `instructions` referencing a UTF-8 `.md` file relative to `reviews/`.

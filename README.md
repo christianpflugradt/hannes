@@ -374,7 +374,7 @@ For a Rust application, create `.hannes/checks/unit-tests.toml`:
 id = "unit-tests"
 description = "Run unit and integration tests"
 enabled = true
-command = ["cargo", "test", "--locked"]
+command = "cargo test --locked"
 working_directory = "."
 timeout_seconds = 120
 ```
@@ -387,16 +387,45 @@ In addition to the [shared fields](#fields-shared-by-checks-and-reviews):
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `command` | Required | List of `1..256` strings: executable first, then its arguments. Each string is at most 32768 bytes and contains no NUL; the executable must be nonblank. |
+| `command` | Required | String parsed into `1..256` elements: executable first, then arguments. Each parsed element is at most 32768 bytes and contains no NUL; the executable must be nonblank. Arrays are rejected. |
 | `working_directory` | Optional; `"."` | Existing working directory relative to the project root. |
 | `timeout_seconds` | Required | Integer `1..3600`: this check's time limit in seconds. |
 
-For example, `["cargo", "test", "--locked"]` runs `cargo test --locked` directly.
-There is no shell expansion: pipes, `&&` and environment-variable expansion need
-an explicit shell, such as `["sh", "-c", "cargo test && cargo clippy"]`.
+Hannes executes exactly one program with arguments, directly without a shell.
+Whitespace separates arguments; single/double quotes keep spaces within one
+argument. Backslash escapes whitespace or quotes outside quotes. Inside single
+quotes everything is literal; inside double quotes backslash escapes `"`, `\`,
+`$` and backticks. Quoted empty arguments are preserved. These command-string
+rules apply after TOML decoding: TOML literal strings (`'…'`) preserve backslashes;
+TOML basic strings (`"…"`) require their own escaping.
+
+| Command configuration | Supported? |
+| --- | --- |
+| `command = "cargo test --locked"` | Yes: executable and two arguments. |
+| `command = "npm run test"` | Yes: use the project's task runner. |
+| `command = "git log -1 --format='%h %s'"` | Yes: the format stays one argument. |
+| `command = 'git commit -m "Fix broken tests"'` | Yes: quoted argument (but checks should avoid changing Git state). |
+| `command = 'my-tool --path "directory with spaces/file.txt"'` | Yes: quoted path; executable paths can be quoted too. |
+| `command = 'my-tool --message "Hello; world"'` | Yes: the semicolon is literal. |
+| `command = 'my-tool directory\ with\ spaces/file.txt'` | Yes: escaped spaces. |
+| `cargo test && cargo clippy`, `test \|\| fallback`, `test; next` | No: command composition. |
+| `test \| tee out`, `test > out`, `test < in`, `test &` | No: pipes, redirection or background execution. |
+| `echo $HOME`, `echo $(date)`, `` echo `date` ``, `ls *.rs` | No: expansions or substitutions. |
+
+`hannes pass auf` rejects these shell constructs, unmatched quotes, trailing
+escapes, empty commands and missing executable names, including in disabled checks. Unquoted
+`?`/`[ab]` globs, shell comments and tilde expansion are also rejected. Quote or
+escape special characters intended as literal arguments. Single quotes protect
+`$HOME` and substitutions; double quotes alone do not.
+To combine commands, use an npm script, Gradle task, Makefile or dedicated script.
+An explicitly invoked shell is possible, but Hannes supplies no shell semantics.
+
 Commands inherit the environment and receive no stdin. Bare executable names use
 PATH; relative executables such as `./scripts/check.sh` resolve from
-`working_directory` and must be runnable files inside the project.
+`working_directory` and must remain inside the project. Absolute executable paths
+and parent traversal are rejected. Validation checks syntax and path containment,
+not executable availability or permissions; a missing or non-executable program
+is a runtime ERROR.
 
 Exit 0 becomes PASS; a nonzero exit or signal becomes FAIL. Timeout, startup or
 output-capture problems become ERROR. Checks are trusted local commands and are

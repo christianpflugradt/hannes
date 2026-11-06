@@ -20,7 +20,7 @@ fn copy_tree(source: &Path, destination: &Path) {
     }
 }
 #[test]
-fn historical_configurations_and_reports_remain_readable() {
+fn historical_array_commands_are_rejected_but_reports_remain_readable() {
     for (version, schema) in [("v1", 1), ("v2", 2)] {
         let root = tempfile::tempdir().unwrap();
         assert!(
@@ -35,16 +35,13 @@ fn historical_configurations_and_reports_remain_readable() {
             .join("tests/fixtures/compat")
             .join(version);
         copy_tree(&fixtures.join("config"), &root.path().join(".hannes"));
-        let project = config::load(root.path()).unwrap();
-        assert_eq!(project.config.version, schema);
-        assert_eq!(project.config.project, "My_App");
-        assert_eq!(project.checks.iter().filter(|c| c.enabled).count(), 1);
-        assert!(project.reviews.iter().all(|r| !r.enabled));
-        assert_eq!(project.provider.model.as_deref(), Some("gpt-6.1-sol"));
-        if schema == 2 {
-            assert_eq!(project.config.default_profile.as_deref(), Some("local"));
-            assert!(project.profiles[0].gate);
-        }
+        // Intentional pre-1.0 format break. Keep the original arrays frozen so
+        // historical syntax cannot become accepted through a silent migration.
+        let error = format!("{:#}", config::load(root.path()).unwrap_err());
+        assert!(
+            error.contains("checks/always-ok.toml") && error.contains("string"),
+            "{error}"
+        );
         let reports = root.path().join(".hannes/reports");
         fs::create_dir_all(&reports).unwrap();
         for name in if schema == 1 {

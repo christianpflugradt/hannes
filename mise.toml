@@ -8,9 +8,9 @@ description = "Build the native release executable"
 run = "cargo build --release --locked"
 
 [tasks.deploy]
-description = "Build and install Hannes to ~/.local/bin, replacing an existing binary"
-run = 'cargo install --path . --locked --force --root "${CARGO_INSTALL_ROOT:-$HOME/.local}"'
-run_windows = "cargo install --path . --locked --force"
+description = "Download and install the latest Hannes release for this platform"
+run = "python3 scripts/deploy.py"
+run_windows = "python scripts/deploy.py"
 
 [tasks.release]
 description = "Start the GitHub Release workflow for remote main"
@@ -56,6 +56,7 @@ description = "Run formatting, Clippy, tests, release build and smoke test"
 run = [
   { task = "hooks:test" },
   "python3 scripts/test-docs.py",
+  "python3 scripts/test-deploy.py",
   "python3 scripts/check-docs.py",
   { task = "format:check" },
   { task = "lint" },

@@ -108,7 +108,15 @@ Download the matching archive and `SHA256SUMS` from
 | Linux x64 | `x86_64-unknown-linux-gnu` |
 | Linux ARM64 | `aarch64-unknown-linux-gnu` |
 
-Verify the archive against its checksum, then extract and install it. Replace
+From a source checkout, `mise deploy` downloads the latest published release,
+selects the current OS/CPU, verifies its checksum and executable compatibility,
+and installs it to `~/.local/bin`, replacing an existing binary. It requires
+Python 3.11+ and network access, and never builds local source. Unsupported
+platforms (including Windows and musl Linux) fail with a helpful error.
+Set `CARGO_INSTALL_ROOT=/your/prefix mise deploy` to install into that prefix's
+`bin/` directory. Download or compatibility failures preserve the installed copy.
+
+For manual installation, verify the checksum, then extract and install it. Replace
 `VERSION` and `TARGET` below with the downloaded archive's values:
 
 ```sh
@@ -140,18 +148,16 @@ cargo build --release --locked
 The executable is `target/release/hannes`. To install it on your Cargo PATH,
 run `cargo install --path . --locked`.
 
-With [mise](https://mise.jdx.dev/), the equivalent setup is:
+With [mise](https://mise.jdx.dev/), development setup and release installation are:
 
 ```sh
 mise trust
 mise install                  # Install development tools.
 mise build                    # Build target/release/hannes.
-mise deploy                   # Build and install to ~/.local/bin; replace existing binary.
+mise deploy                   # Download and install the latest published release.
 ```
 
-Set `CARGO_INSTALL_ROOT=/your/prefix mise deploy` to change the install prefix;
-the binary goes into its `bin/` directory. `mise install` installs the toolchain,
-not Hannes itself. See [Development](#development) for checks and release tasks.
+`mise install` installs the toolchain, not Hannes itself. See [Development](#development) for checks and release tasks.
 
 ### Initialize your project
 

@@ -245,6 +245,13 @@ with the same formatting, lint, tests, build and executable smoke gates. Build w
 Rust/Cargo (declared minimum 1.85) into a native executable. Git and configured
 external tools remain runtime dependencies; no Python/Node runtime is bundled.
 
+`mise deploy` downloads the latest published GitHub release for the detected OS
+and CPU (the four targets above), verifies SHA-256 and executable compatibility,
+and installs to `${CARGO_INSTALL_ROOT:-$HOME/.local}/bin/hannes`. It never builds
+local source. Unsupported platforms, missing downloads, invalid checksums and
+incompatible binaries fail with an actionable error and preserve the installed binary.
+
+Push/PR CI runs the Linux x64 native gates; release runs all four native hosts.
 CI runs formatting, Clippy, offline unit/acceptance tests, native smoke tests,
 minimum-Rust checks, dependency audits and release-tooling/workflow checks.
 Releases are manually dispatched on main and reuse the quality workflow. The

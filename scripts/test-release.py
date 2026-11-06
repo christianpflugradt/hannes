@@ -122,10 +122,12 @@ class ReleaseTests(unittest.TestCase):
 
     def test_native_matrix_and_archive_contract_cover_the_same_platforms(self):
         workflow = (SCRIPTS.parent / ".github/workflows/quality.yml").read_text()
-        targets = re.findall(r"^\s+target: (\S+)$", workflow, re.M)
-        self.assertEqual(set(targets), set(verification.TARGETS))
-        self.assertEqual(len(targets), len(verification.TARGETS))
-        self.assertIn("os: ubuntu-24.04-arm\n            target: aarch64-unknown-linux-gnu", workflow)
+        matrices = re.findall(r"'([\[][^']+)'", workflow)
+        release, ordinary = [json.loads(value) for value in matrices]
+        self.assertEqual({entry["target"] for entry in release}, set(verification.TARGETS))
+        self.assertEqual(len(release), len(verification.TARGETS))
+        self.assertIn(dict(os="ubuntu-24.04-arm", target="aarch64-unknown-linux-gnu"), release)
+        self.assertEqual(ordinary, [dict(os="ubuntu-24.04", target="x86_64-unknown-linux-gnu")])
 
     def test_missing_or_extra_archives_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

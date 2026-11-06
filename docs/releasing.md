@@ -21,7 +21,8 @@ authenticated with the required permissions. It starts the workflow for **remote
 main** and returns after dispatch; it neither commits/pushes local changes nor
 waits for publication. Follow progress in GitHub Actions or with `gh run list
 --workflow release.yml`. `mise run release` is equivalent. `mise deploy` instead
-builds and installs the CLI locally; it does not publish a GitHub release.
+downloads and installs the latest published release for the current OS/CPU,
+verifying its checksum and executable compatibility before replacement.
 
 ## Version policy
 
@@ -132,8 +133,8 @@ Native downloads still need Git and, for enabled reviews, Codex CLI/login.
 
 ## Quality gates
 
-- All four native hosts: rustfmt, Clippy with warnings denied, unit/acceptance
-  tests, optimized native build and real CLI smoke test. Tests use fake providers,
+- Push/PR: Linux x64 native gates. Release: all four native hosts. Each runs
+  rustfmt, Clippy with warnings denied, unit/acceptance tests, optimized native build and real CLI smoke test. Tests use fake providers,
   never real Codex, credentials or paid APIs.
 - Linux: compile-check all Rust targets in the package with the declared minimum
   Rust 1.85, test the Git commit hook, validate commit messages and squash title.

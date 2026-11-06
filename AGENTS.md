@@ -82,7 +82,8 @@ private projects.
   `refactor`, `revert`, `style`, `test`. No additional types or automatic merge-message exceptions.
 - Release policy: `feat` is minor; `fix`, `perf`, `chore`, `build`, `refactor`
   and effective `revert` are patch. `ci`, `docs`, `style`, `test` do not release.
-  Breaking changes are major for every type. Reserve `build(release)` for generated
+  Hannes starts at 0.1.0. During 0.x, breaking changes increment minor; stable
+  1.0.0 requires an explicit policy change. After graduation, breaking changes are major. Reserve `build(release)` for generated
   version commits, which do not trigger another release. See docs/releasing.md.
 - Header: `type(scope): summary` (scope optional; breaking-change `!` supported).
   When present, scope must be one of `checks`, `ci`, `cli`, `config`, `deps`,

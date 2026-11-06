@@ -20,6 +20,7 @@ jobs:
     outputs:
       release: ${{ steps.plan.outputs.release }}
       version: ${{ steps.plan.outputs.version }}
+      initial: ${{ steps.plan.outputs.initial }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -73,4 +74,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+          INITIAL_RELEASE: ${{ needs.plan.outputs.initial }}
         run: npm run release

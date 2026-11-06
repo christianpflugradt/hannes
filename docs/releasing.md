@@ -32,7 +32,7 @@ release tag, then generates release notes and updates `CHANGELOG.md`:
 | --- | --- |
 | `feat` | Minor |
 | `fix`, `perf`, `chore`, `build`, `refactor`, effective `revert` | Patch |
-| Any allowed type with `!` or a `BREAKING CHANGE:` footer | Major |
+| Any allowed type with `!` or a `BREAKING CHANGE:` footer | Minor during `0.x`; Major after explicit stable graduation |
 | `ci`, `docs`, `style`, `test` without a breaking change | None |
 | Generated `build(release)` version commit without a breaking change | None |
 
@@ -45,8 +45,8 @@ commit messages do not satisfy this project's policy.
 Push/PR checks validate the proposed commit range; manual releases without a
 base validate the selected tip, not legacy commit messages from before this policy.
 
-The highest required increment across all effective commits wins: major before
-minor before patch. Patch maintenance (`chore`, `build`, `refactor`, `revert`)
+The highest required increment across all effective commits wins. During 0.x,
+features and breaking changes both require minor; patch changes never override them. Patch maintenance (`chore`, `build`, `refactor`, `revert`)
 appears in the release notes alongside features, fixes and performance changes.
 Non-release types stay hidden unless they contain a breaking change.
 `build(release)` is reserved for generated version commits and is hidden from notes.
@@ -64,17 +64,29 @@ This reverts commit FULL_ORIGINAL_COMMIT_SHA.
 
 When using `git revert`, edit its default message into the accepted format and
 preserve the `This reverts commit ...` line. Other effective changes in the range
-still determine the release; an explicit breaking change is major.
+still determine the release; breaking changes require minor during 0.x and major
+after stable graduation.
 
-Without a previous release tag, Semantic Release starts at **1.0.0**, independent
-of the development version currently in Cargo.toml. If no release-worthy commits
-exist, the release workflow exits without building or publishing a release.
+Hannes starts at **0.1.0** and stays in the `0.x` development series. Features and
+breaking changes increment the minor version; fixes and maintenance increment
+patch. Moving to `1.0.0` requires an explicit change to the development-series
+policy in release.config.mjs, not merely a breaking commit.
+
+Semantic Release's built-in first version is 1.0.0. Therefore, when no semantic
+release tag exists, this workflow publishes the initial 0.1.0 through GitHub CLI,
+after the same native quality/artifact gates. Source Cargo versions must already
+be 0.1.0, and the release/tag targets the exact tested source SHA. From that tag
+onward Semantic Release calculates versions and handles publication normally.
+If no release-worthy commits exist after a release, the workflow exits without
+building or publishing. The initial path uses all history for release notes and
+does not create a separate version commit.
 Node 24.15+ (24.x) and `npm ci --ignore-scripts` are needed only for release tooling,
 not to build or run Hannes. Dependencies are locked in `package-lock.json`.
 
 ## Release sequence
 
-1. A dry run on main calculates the proposed version. Prepare/publish plugins do
+1. Planning on main selects initial 0.1.0 if no semantic tag exists; otherwise a
+   Semantic Release dry run calculates the proposed version. Prepare/publish plugins do
    not run; no tag, commit, changelog update or release is created at this stage.
 2. The quality workflow validates release tooling, dependencies and native builds.
    Each native runner stamps Cargo.toml/Cargo.lock with that version, runs
@@ -85,7 +97,8 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
 4. Only after every quality job passes, publish downloads the four archives,
    calculates `SHA256SUMS`, and verifies completeness, hashes, permissions,
    documentation, source commit and the planned version before creating a tag.
-5. Semantic Release updates Cargo.toml/Cargo.lock and CHANGELOG.md, commits them as
+5. For the initial release, GitHub CLI publishes v0.1.0 at the tested source SHA.
+   For subsequent releases, Semantic Release updates Cargo.toml/Cargo.lock and CHANGELOG.md, commits them as
    `build(release): VERSION [skip ci]`, tags the release and publishes the archives,
    checksums, README and LICENSE to GitHub Releases. Nothing is published to npm
    or crates.io. Issue/PR comments and release labels are disabled.

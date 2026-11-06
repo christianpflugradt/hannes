@@ -232,9 +232,12 @@ external tools remain runtime dependencies; no Python/Node runtime is bundled.
 
 CI runs formatting, Clippy, offline unit/acceptance tests, native smoke tests,
 minimum-Rust checks, dependency audits and release-tooling/workflow checks.
-Releases are manually dispatched on main, reuse the quality workflow, and use
-Semantic Release for versions, changelog, version commits, tags and native
-archives with README, Unlicense and checksums. Artifacts must match the tested
+Releases are manually dispatched on main and reuse the quality workflow. The
+initial release is 0.1.0, published through GitHub CLI only after artifact/source
+verification; subsequent releases use Semantic Release. During 0.x, breaking
+changes/features increment minor and fixes/maintenance increment patch. Stable
+1.0.0 requires explicit policy graduation. Publish native archives with README,
+Unlicense and checksums. Artifacts must match the tested
 version/source. Normal CI is read-only; only release planning/publishing may
 request write permission. Actions are pinned. See [release policy](docs/releasing.md).
 

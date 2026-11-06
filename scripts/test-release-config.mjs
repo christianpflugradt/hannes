@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { analyzeCommits } from "@semantic-release/commit-analyzer";
+import { analyzeCommits } from "./release-analyzer.mjs";
 import { generateNotes } from "@semantic-release/release-notes-generator";
 import config from "../release.config.mjs";
 
@@ -10,21 +10,21 @@ for (const [message, expected] of [
   ["feat(cli): add a command", "minor"],
   ["fix: correct a verdict", "patch"],
   ["perf: reduce repeated context", "patch"],
-  ["feat!: remove a command", "major"],
-  ["refactor(config)!: change configuration", "major"],
-  ["fix: change format\n\nBREAKING CHANGE: old reports need migration", "major"],
+  ["feat!: remove a command", "minor"],
+  ["refactor(config)!: change configuration", "minor"],
+  ["fix: change format\n\nBREAKING CHANGE: old reports need migration", "minor"],
   ["chore(deps): update rust crate toml to v1.2.0", "patch"],
-  ["chore(deps)!: drop an older runtime", "major"],
+  ["chore(deps)!: drop an older runtime", "minor"],
   ...["build", "chore", "refactor", "revert"].flatMap(type => [
     [`${type}: maintenance`, "patch"],
     [`${type}(cli): maintenance`, "patch"],
   ]),
   ...["ci", "docs", "style", "test"].map(type => [`${type}: maintenance`, null]),
   ...["build", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"].map(type => [
-    `${type}!: incompatible change`, "major",
+    `${type}!: incompatible change`, "minor",
   ]),
   ["build(release): 1.2.3 [skip ci]", null],
-  ["build(release)!: incompatible release tooling", "major"],
+  ["build(release)!: incompatible release tooling", "minor"],
 ]) {
   test(`release rule: ${message.split("\n")[0]}`, async () => {
     assert.equal(await analyzeCommits(options, {
@@ -64,7 +64,7 @@ test("a release uses the highest version increment across commits", async () => 
   const feature = commit("feat(cli): add a command", "b");
   const breaking = commit("docs!: remove supported configuration", "c");
   assert.equal(await analyze([maintenance, feature]), "minor");
-  assert.equal(await analyze([maintenance, feature, breaking]), "major");
+  assert.equal(await analyze([maintenance, feature, breaking]), "minor");
 });
 
 test("patch maintenance is visible in release notes; internal and cosmetic changes are hidden", async () => {
@@ -102,4 +102,11 @@ test("release is main-only with private tooling and no npm publication", () => {
   const github = config.plugins.at(-1)[1];
   assert.equal(github.successComment, false);
   assert.equal(github.failComment, false);
+});
+
+test("stable graduation is explicit; development policy rejects stable history", async () => {
+  const context = { cwd: process.cwd(), commits: [commit("feat!: incompatible change", "a")], logger, lastRelease: { version: "0.1.0" } };
+  assert.equal(await analyzeCommits(options, context), "minor");
+  assert.equal(await analyzeCommits({ ...options, developmentSeries: false }, context), "major");
+  await assert.rejects(analyzeCommits(options, { ...context, lastRelease: { version: "1.0.0" } }), /unexpected stable release tag/);
 });

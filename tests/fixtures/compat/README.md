@@ -6,7 +6,7 @@ current report types:
 | Fixture | Source | Contract |
 | --- | --- | --- |
 | [v1](v1/source.txt) | `29be82e3027c36509295f431f824fae4b2efe1b3`, immediately before profiles | Configuration 1, report 1, no plan |
-| [v2](v2/source.txt) | `717a1102ca11b2c23c40e7cf9b7372a5a2d6c329`, release 1.0.0 | Configuration 2, report 2, required local profile |
+| [v2](v2/source.txt) | `717a1102ca11b2c23c40e7cf9b7372a5a2d6c329`, withdrawn release 1.0.0 | Configuration 2, report 2, required local profile |
 
 Capture procedure: archive each pinned source, build its locked native executable,
 initialize a temporary Git project named `My_App`, and run its initialized check

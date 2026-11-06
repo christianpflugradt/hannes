@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use hannes::{
-    cli::{Cli, Ist, Mach, Was, Words},
+    cli::{Cli, Ist, Mach, Pass, Was, Words},
     config, git_snapshot, mood,
     provider::Codex,
     report,
@@ -26,12 +26,14 @@ fn execute(cli: Cli) -> Result<i32> {
             );
             Ok(0)
         }
-        Words::Pass { .. } => {
+        Words::Pass {
+            command: Pass::Auf { auto_approve },
+        } => {
             let project = config::load(&root)?;
             for diagnostic in &project.effective.diagnostics {
                 eprintln!("Hinweis: {}", terminal::clean(diagnostic));
             }
-            hannes::reconciliation::prepare(&project, None, None)?;
+            hannes::reconciliation::prepare(&project, None, None, auto_approve)?;
             println!(
                 "{}",
                 terminal::paint(
@@ -99,7 +101,7 @@ fn execute(cli: Cli) -> Result<i32> {
                 }
             });
             let hook_context =
-                hannes::reconciliation::prepare(&project, invocation, at.as_deref())?;
+                hannes::reconciliation::prepare(&project, invocation, at.as_deref(), false)?;
             let no_rules = project.checks.is_empty() && project.reviews.is_empty();
             let report = hannes::verify_project_with_context(
                 project,

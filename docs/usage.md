@@ -210,6 +210,21 @@ Declining, missing a terminal, conflicts or failures exit 2 and preserve the
 previous report. Invalid configuration always fails before hook modification.
 `--plan` previews rule execution only and never synchronizes hooks.
 
+For a fresh CI checkout or other unattended setup, run:
+
+```sh
+hannes pass auf --auto-approve
+hannes mach was --at pre-push
+```
+
+The option explicitly approves the displayed integration plan without stdin or a
+terminal. It defaults to off and is available only on `pass auf`. Invalid
+configuration, ownership conflicts and apply/verification failures still exit 2;
+recursion protection remains active. No checks or reviews run during setup, and
+the previous report is preserved. Repeated setup performs no writes when already
+synchronized. Auto-approval manages declared integrations only; it does not create
+or repair governed files such as README, LICENSE or `.editorconfig`.
+
 Generated wrappers supply explicit event and wrapper-path arguments validated by
 Hannes against Git's effective directory and the declared execution point. Within hooks,
 reconciliation is read-only: drift fails with instructions to run `hannes pass auf`

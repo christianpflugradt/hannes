@@ -41,6 +41,8 @@ outside it cannot serve as evidence.
 After editing, run `hannes pass auf`. This validates settings, files and selected
 Markdown headings without executing rules. Provider availability is checked only
 when reviews execute. Declared external state is then reconciled after confirmation.
+Use `hannes pass auf --auto-approve` for explicit unattended approval of the
+displayed integration plan; validation and conflict checks still apply.
 
 For existing projects using `.Hannes`, rename it to `.hannes` and update path
 references in scripts, criteria and ignore rules. On case-insensitive filesystems,

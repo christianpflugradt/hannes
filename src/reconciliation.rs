@@ -462,11 +462,15 @@ pub fn reconcile(project: &Project, approve: &mut dyn FnMut(&Plan) -> Result<boo
     Ok(())
 }
 
-pub fn terminal_approval(plan: &Plan) -> Result<bool> {
+fn approve_plan(plan: &Plan, auto_approve: bool) -> Result<bool> {
     eprint!(
         "Reconciliation plan:\n{}",
         crate::terminal::clean(&plan.display())
     );
+    if auto_approve {
+        eprintln!("Auto-approved (--auto-approve).");
+        return Ok(true);
+    }
     ensure!(
         std::io::stdin().is_terminal() && std::io::stderr().is_terminal(),
         "reconciliation requires confirmation in a terminal; run hannes pass auf interactively; no changes applied"
@@ -482,6 +486,7 @@ pub fn prepare(
     project: &Project,
     invocation: Option<HookInvocation>,
     point: Option<&str>,
+    auto_approve: bool,
 ) -> Result<Option<HookContext>> {
     let (_, owner) = location(project)?;
     ensure!(
@@ -519,7 +524,7 @@ pub fn prepare(
         );
         Ok(Some(HookContext { invocation, owner }))
     } else {
-        reconcile(project, &mut terminal_approval)?;
+        reconcile(project, &mut |plan| approve_plan(plan, auto_approve))?;
         Ok(None)
     }
 }

@@ -2331,3 +2331,30 @@ fn provider_profile_validation_is_strict_and_old_configs_remain_readable() {
     assert!(p.provider.review_profile.reasoning_effort.is_none());
     assert_eq!(p.provider.review_profile.tool_output_token_limit, 2000);
 }
+
+#[test]
+fn auto_approve_is_explicit_and_scoped_to_pass_auf() {
+    use hannes::cli::{Pass, Words};
+    for (args, expected) in [
+        (vec!["hannes", "pass", "auf"], false),
+        (vec!["hannes", "pass", "auf", "--auto-approve"], true),
+    ] {
+        assert!(
+            matches!(Cli::try_parse_from(args).unwrap().command, Words::Pass {command: Pass::Auf {auto_approve}} if auto_approve == expected)
+        );
+    }
+    for command in ["mach was", "fang an", "was ist phase"] {
+        let mut args = vec!["hannes"];
+        args.extend(command.split_whitespace());
+        args.push("--auto-approve");
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+    let help = Cli::command()
+        .find_subcommand_mut("pass")
+        .unwrap()
+        .find_subcommand_mut("auf")
+        .unwrap()
+        .render_help()
+        .to_string();
+    assert!(help.contains("--auto-approve"));
+}

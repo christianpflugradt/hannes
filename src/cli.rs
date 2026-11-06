@@ -44,7 +44,13 @@ pub enum Fang {
 }
 #[derive(Debug, Subcommand)]
 pub enum Pass {
-    Auf,
+    Auf {
+        #[arg(
+            long,
+            help = "Geplante Integrationsänderungen ohne Rückfrage genehmigen"
+        )]
+        auto_approve: bool,
+    },
 }
 #[derive(Debug, Subcommand)]
 pub enum Mach {

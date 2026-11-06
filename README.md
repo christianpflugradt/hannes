@@ -201,6 +201,7 @@ The command phrases are German and must be entered as shown, without quotes:
 
 | Option | Used with | Meaning |
 | --- | --- | --- |
+| `--auto-approve` | `pass auf` | Approve the displayed integration changes without a prompt, including in CI. Defaults to off. |
 | `--geiz-ist-geil` | `mach was` | Run only checks; do not call an AI provider. |
 | `--at NAME` | `mach was` | Select a known execution point (default `pre-push`). |
 | `--plan` | `mach was` | Preview what would run without executing rules or calling the provider. |
@@ -307,6 +308,19 @@ the same before executing its execution point. Synchronized repositories need no
 or writes. Declining, conflicts, failed reconciliation or a required confirmation
 without a terminal exit 2 before checks; run `hannes pass auf` interactively.
 `mach was --plan` remains a read-only execution preview and does not synchronize.
+
+For unattended setup, explicitly approve declared integration changes:
+
+```sh
+hannes pass auf --auto-approve
+hannes mach was --at pre-push
+```
+
+`--auto-approve` prints and approves the reconciliation plan without reading stdin
+or requiring a terminal. Validation, conflict detection and state verification
+still apply. It runs no checks or reviews and leaves an existing report untouched.
+Synchronized state causes no writes. The option is available only on `pass auf`;
+ordinary execution retains its existing confirmation behavior.
 
 Hannes marks its sections explicitly, preserves unmanaged commands, and refuses
 ambiguous ownership or unsafe composition. Removed mappings remove only managed

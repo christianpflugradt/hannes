@@ -462,7 +462,8 @@ fn invocation_validation_recursion_and_missing_executable_block_commits() {
                 path: "checker.sh".into(),
                 arguments: vec![]
             }),
-            Some("first")
+            Some("first"),
+            false
         )
         .is_err()
     );
@@ -474,7 +475,8 @@ fn invocation_validation_recursion_and_missing_executable_block_commits() {
                 path: hook(root.path(), "pre-commit"),
                 arguments: vec![]
             }),
-            Some("second")
+            Some("second"),
+            false
         )
         .is_err()
     );
@@ -632,4 +634,115 @@ fn actual_terminal_approval_and_rejection_gate_execution() {
             .status
             .success()
     );
+}
+
+#[test]
+fn auto_approve_reconciles_noninteractively_without_executing_rules() {
+    let root =
+        project("[hooks.git]\npre-commit = 'first'\ncommit-msg = 'second'\npre-push = 'first'");
+    checker(
+        root.path(),
+        "git config --local hannes.executed yes\nexit 99\n",
+    );
+    let report = root.path().join(".hannes/reports/last.json");
+    fs::write(&report, "prior report").unwrap();
+    assert_eq!(cli(root.path(), &["pass", "auf"]).status.code(), Some(2));
+    assert!(!hook(root.path(), "pre-commit").exists());
+    let output = ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Reconciliation plan:")
+            && stderr.contains("Auto-approved (--auto-approve).")
+    );
+    assert!(!stderr.contains("Apply these changes?"));
+    for event in ["pre-commit", "commit-msg", "pre-push"] {
+        assert!(hook(root.path(), event).is_file());
+    }
+    assert!(
+        !git(root.path(), &["config", "--get", "hannes.executed"])
+            .status
+            .success()
+    );
+    assert_eq!(fs::read_to_string(&report).unwrap(), "prior report");
+    assert!(!root.path().join(".editorconfig").exists());
+    let before = fs::metadata(hook(root.path(), "pre-commit"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let repeated = ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
+    assert!(repeated.stderr.is_empty());
+    assert_eq!(
+        before,
+        fs::metadata(hook(root.path(), "pre-commit"))
+            .unwrap()
+            .modified()
+            .unwrap()
+    );
+    // A fresh CI job can execute after setup without another approval.
+    let path = root.path().join(".hannes/checks/always-ok.toml");
+    fs::write(
+        &path,
+        fs::read_to_string(&path)
+            .unwrap()
+            .replace("enabled = true", "enabled = false"),
+    )
+    .unwrap();
+    ok(cli(root.path(), &["mach", "was", "--at", "first"]));
+    mappings_write(root.path(), "[hooks.git]\npre-commit = 'second'");
+    ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
+    assert!(
+        fs::read_to_string(hook(root.path(), "pre-commit"))
+            .unwrap()
+            .contains("--at 'second'")
+    );
+    assert!(!hook(root.path(), "commit-msg").exists());
+    assert!(!hook(root.path(), "pre-push").exists());
+    mappings_write(root.path(), "");
+    ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
+    assert!(!hook(root.path(), "pre-commit").exists());
+}
+
+#[test]
+fn auto_approve_preserves_conflicts_and_full_configuration_validation() {
+    let root = project("[hooks.git]\npre-commit = 'first'\npre-push = 'first'");
+    let path = hook(root.path(), "pre-push");
+    let foreign = "#!/usr/bin/env python3\nprint('custom')\n";
+    executable(&path, foreign);
+    let report = root.path().join(".hannes/reports/last.json");
+    fs::write(&report, "prior report").unwrap();
+    let output = cli(root.path(), &["pass", "auf", "--auto-approve"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(fs::read_to_string(&path).unwrap(), foreign);
+    assert!(!hook(root.path(), "pre-commit").exists());
+    fs::remove_file(&path).unwrap();
+    mappings_write(root.path(), "[hooks.git]\npre-commit = 'missing'");
+    assert_eq!(
+        cli(root.path(), &["pass", "auf", "--auto-approve"])
+            .status
+            .code(),
+        Some(2)
+    );
+    assert!(!hook(root.path(), "pre-commit").exists());
+    assert_eq!(fs::read_to_string(&report).unwrap(), "prior report");
+}
+
+#[test]
+fn auto_approve_cannot_bypass_hook_recursion_protection() {
+    let root = project("[hooks.git]\npre-commit = 'first'");
+    checker(root.path(), "hannes pass auf --auto-approve\n");
+    ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
+    let before = fs::read(hook(root.path(), "pre-commit")).unwrap();
+    // Invoking the managed wrapper directly exercises the guard without a commit.
+    let output = hooked_git(root.path(), &["hook", "run", "pre-commit"]);
+    assert!(!output.status.success());
+    let report = hannes::report::read(root.path()).unwrap();
+    assert!(
+        report.results[0]
+            .stderr
+            .as_ref()
+            .unwrap()
+            .text
+            .contains("recursive Hannes hook execution blocked")
+    );
+    assert_eq!(fs::read(hook(root.path(), "pre-commit")).unwrap(), before);
 }

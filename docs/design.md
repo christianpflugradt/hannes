@@ -28,6 +28,9 @@ not generate old schemas from current structs; fixture provenance is recorded in
 Configuration validation describes valid desired state; `reconciliation` compares
 it with external state and builds an ordered plan. The CLI owns confirmation;
 both `pass auf` and executing `mach was` share inspection/application/verification.
+The CLI exposes explicit unattended approval through `pass auf --auto-approve`;
+it uses the same inspection, application and verification path as interactive
+confirmation, including recursion protection and conflict detection.
 The rule engine starts only after that prerequisite. Offline execution previews
 remain read-only and do not synchronize. No generic domain registry is needed:
 Git hooks are the sole current reconciliation domain.

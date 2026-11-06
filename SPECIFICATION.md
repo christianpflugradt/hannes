@@ -323,6 +323,16 @@ No discrepancy means no prompt or write. Rejection, unavailable terminal, confli
 or failure exits 2 and preserves the previous report. `--plan` remains read-only
 and does not reconcile. No provider is called by reconciliation.
 
+`hannes pass auf --auto-approve` explicitly approves the displayed reconciliation
+plan without reading stdin or requiring a terminal. It is scoped to pass auf and
+defaults to false. Validation, conflict detection, recursion protection, apply-time
+state checks, rollback and final verification still apply. It creates, updates or
+removes only declared managed integration state, never governed project files,
+and executes no checks or reviews. Repeating it on synchronized state performs no
+writes. Without the flag, noninteractive drift still exits 2. CI can run this
+command once before `mach was --at NAME`; execution itself has no auto-approval.
+Acceptance: `tests/reconciliation.rs::auto_approve_reconciles_noninteractively_without_executing_rules`.
+
 Version 3 optionally maps hooks.git keys pre-commit, commit-msg, pre-push to
 known execution points. Unknown events, duplicate mappings, invalid values and
 unknown points fail full validation. Existing generated wrappers are reconciled

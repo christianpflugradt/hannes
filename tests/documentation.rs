@@ -116,6 +116,15 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
     let root = project();
     let p = config::load(root.path()).unwrap();
     contract(&p.config, section(README, "Project settings"), "");
+    contract(
+        &hannes::external::Import {
+            git: "https://example.invalid/rules.git".into(),
+            path: "repository".into(),
+            reference: "main".into(),
+        },
+        section(README, "Import rule sets from Git"),
+        "",
+    );
     let shared = section(README, "Fields shared by checks and reviews");
     contract(
         &p.checks[0],

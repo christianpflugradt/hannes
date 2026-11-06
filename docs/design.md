@@ -159,18 +159,38 @@ and `never` approval settings explicitly. It does not load credentials itself,
 copy tokens to CI, record raw provider traces or repair files. Read-only sandbox
 support depends on Codex and the platform. Unsupported CLI versions fail closed.
 
-## Phase boundaries
+## External source boundaries
 
-Phase 1 uses local TOML documents only. Discovery supplies assignments and source
-paths to a pure resolver; it never resolves remote repositories. Rule sets contain
-rule IDs only, with no nesting or back-references on rules. Phase 2 can supply
-external definitions after enforcing same-source references, exactly one set per
-repository, and immutable consumer assignments. Source identity and Git reference
-handling belong to that loader; no speculative provider framework is introduced.
+`external` supplies isolated documents to the existing discovery/validation flow.
+`external::cache` owns host Git, shared object storage, immutable checkouts,
+integrity receipts and OS locks. Each selected directory contains exactly one
+local set. The ordinary resolver validates references against only that boundary's
+rules and the consumer's declared execution points. Namespacing follows validation,
+before effective results merge. Local resolution runs first, preventing consumer
+references from modifying imports. No second execution engine is introduced.
+
+`pass auf` refreshes sources and atomically publishes per-project resolution state
+only after complete configuration validation. Hook reconciliation still follows
+validation; its failure does not invalidate successfully resolved configuration.
+Execution/previews read state and validate cache integrity without fetching or
+creating missing state. Project locks span validation and publication. Different
+projects also lock shared cache writers.
+
+Repositories are keyed by the selector's SHA-256; checkouts by resolved commit.
+No URL is persisted in cache remotes or fetch metadata. Git plumbing materializes
+commits without repository hooks, global filters or submodule initialization.
+Failed validation can leave reusable cache contents but never changes project
+resolution state. Corrupt immutable entries fail explicitly. See
+[storage, trust and recovery](external-rule-sets.md).
+
+Checks use the consumer root. Review instructions resolve from source documents;
+the loader enforces containment. Imported checks receive an explicit source-path
+environment variable for resources. No argument rewriting or working-directory
+switch occurs. Providers, snapshots, selection and reports remain shared.
 
 The self-governance migration replaces active profile configuration and checked-in
 hook wrappers with rules, rule sets, execution points and declarative hook
 management. CI reconciles hooks once with pass auf --auto-approve. The exact governor pin is v0.5.0; source builds never replace the published
 governor. No hooks,
 remote services, releases or governed project files are automatically installed or
-repaired by phase 1.
+repaired as part of loading or execution.

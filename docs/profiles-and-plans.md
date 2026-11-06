@@ -22,10 +22,10 @@ Incomplete snapshots or context preparation block execution. Preview does not
 certify a later source state. Current reports use schema 3 and plan schema 2;
 historical report schemas remain readable without providing current assignments.
 
-External Git rule sets are planned for phase 2. Loading is independent of domain
-resolution so later loaders can supply rules with source provenance. No provider
-framework, imports or download behavior exists yet. External source restrictions
-must be enforced by the phase-2 loader before using the shared resolver.
+External Git rule sets use the same resolver in isolated directory scopes. The
+loader namespaces validated rules before combining the effective result. Plans
+use previously validated cached revisions; pass auf refreshes sources. Origins
+retain the resolved commit. See [external sets](external-rule-sets.md).
 
 The repository's self-integration uses version-3 configuration and declarative
 hooks. Its CI setup calls pass auf --auto-approve before executing the configured

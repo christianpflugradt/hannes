@@ -16,6 +16,7 @@ pub struct Loaded {
     pub reviews: Vec<(PathBuf, Review)>,
     pub rule_sets: Vec<(PathBuf, RuleSet)>,
     pub assignments: Vec<Assignment>,
+    pub imports: Vec<crate::external::Import>,
 }
 fn discover(root: &Path, directory: &Path, depth: usize, files: &mut Vec<PathBuf>) -> Result<()> {
     ensure!(
@@ -66,24 +67,40 @@ fn discover(root: &Path, directory: &Path, depth: usize, files: &mut Vec<PathBuf
     Ok(())
 }
 pub fn load(root: &Path) -> Result<Loaded> {
+    load_directory(root, &config::path(""), None)
+}
+
+pub(crate) fn load_external(root: &Path, config: Config) -> Result<Loaded> {
+    load_directory(root, Path::new("."), Some(config))
+}
+
+fn load_directory(root: &Path, directory: &Path, fallback: Option<Config>) -> Result<Loaded> {
+    let external = fallback.is_some();
     let mut files = Vec::new();
-    discover(root, &config::path(""), 0, &mut files)?;
+    discover(root, directory, 0, &mut files)?;
     files.sort();
     let central = config::path("config.toml");
-    ensure!(files.contains(&central), "missing {}", central.display());
-    let mut loaded = None;
+    ensure!(
+        external || files.contains(&central),
+        "missing {}",
+        central.display()
+    );
+    let mut loaded = fallback;
+    let mut imports = Vec::new();
     let mut documents = Vec::new();
     for path in files {
         let text = config::read_bounded(&root.join(&path), MAX_METADATA_BYTES)?;
-        let mut table: toml::Table =
-            toml::from_str(&text).with_context(|| format!("invalid {}", path.display()))?;
+        // TOML source excerpts could expose credentials in a malformed Git URL.
+        let mut table: toml::Table = toml::from_str(&text).map_err(|error: toml::de::Error| {
+            anyhow::anyhow!("invalid {}: {}", path.display(), error.message())
+        })?;
         let mut definitions = toml::Table::new();
         for key in ["checks", "reviews", "rule_sets"] {
             if let Some(value) = table.remove(key) {
                 definitions.insert(key.into(), value);
             }
         }
-        if path == central {
+        if !external && path == central {
             loaded = Some(
                 toml::Value::Table(table)
                     .try_into::<Config>()
@@ -128,10 +145,39 @@ pub fn load(root: &Path) -> Result<Loaded> {
                 })
                 .collect()
         }
+        let mut sets = Vec::new();
+        if let Some(value) = definitions.remove("rule_sets") {
+            let toml::Value::Array(values) = value else {
+                anyhow::bail!("{}: expected array tables [[rule_sets]]", path.display());
+            };
+            for (index, value) in values.into_iter().enumerate() {
+                if value.get("git").is_some() {
+                    ensure!(
+                        !external,
+                        "nested external rule-set imports are unsupported"
+                    );
+                    let import = value.try_into::<crate::external::Import>().with_context(|| format!(
+                        "invalid {}: external rule-set entry {} requires exactly git, path and ref; overrides are unsupported",
+                        path.display(), index + 1))?;
+                    imports.push(import);
+                } else {
+                    let id = value
+                        .get("id")
+                        .and_then(toml::Value::as_str)
+                        .map(String::from)
+                        .unwrap_or_else(|| format!("entry {}", index + 1));
+                    sets.push(
+                        value.try_into::<RuleSet>().with_context(|| {
+                            format!("invalid {}: rule set {id}", path.display())
+                        })?,
+                    );
+                }
+            }
+        }
         let defs = Definitions {
             checks: entries(&mut definitions, "checks", &path)?,
             reviews: entries(&mut definitions, "reviews", &path)?,
-            rule_sets: entries(&mut definitions, "rule_sets", &path)?,
+            rule_sets: sets,
         };
         documents.push((path, defs));
     }
@@ -141,6 +187,7 @@ pub fn load(root: &Path) -> Result<Loaded> {
         reviews: vec![],
         rule_sets: vec![],
         assignments: vec![],
+        imports,
     };
     for (source, defs) in documents {
         for check in defs.checks {

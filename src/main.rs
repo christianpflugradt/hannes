@@ -29,7 +29,7 @@ fn execute(cli: Cli) -> Result<i32> {
         Words::Pass {
             command: Pass::Auf { auto_approve },
         } => {
-            let project = config::load(&root)?;
+            let project = config::refresh(&root)?;
             for diagnostic in &project.effective.diagnostics {
                 eprintln!("Hinweis: {}", terminal::clean(diagnostic));
             }

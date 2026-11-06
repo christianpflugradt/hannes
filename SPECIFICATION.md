@@ -36,7 +36,7 @@ command or redundant examples. Other execution phrases are rejected.
 Run from the Git working-tree root; subdirectory execution is rejected. Hannes
 must not create commits, modify the Git index or silently discover another root.
 
-## RULE-001: Local rules, rule sets and execution points (phase 1)
+## RULE-001: Rules, rule sets and execution points
 
 Configuration version 3 replaces profiles and gates. `.hannes/config.toml`
 declares `[execution_points] custom = [...]`; pre-commit, commit-msg and pre-push
@@ -61,13 +61,49 @@ Checks precede reviews, ordered by ID, each at most once. Every selected rule is
 mandatory; checks-only cannot omit a required review. Empty contexts succeed.
 Validation never executes rules or creates governed project files.
 
-Loading local documents is separate from domain resolution. Phase 2 may load
-external repositories into the same resolver but no downloads, imports or remote
-overrides exist in phase 1. Self-governance uses this model with the existing reconciliation flow and the
+Loading documents is separate from domain resolution. External Git rule sets use
+the same resolver within isolated source boundaries; see EXT-001. Self-governance uses this model with the existing reconciliation flow and the
 pinned published governor.
 
 Acceptance: `tests/execution_points.rs` covers pure resolution, discovery,
 validation, selection, CLI and existing execution engines.
+
+## EXT-001: External Git rule sets
+
+`[[rule_sets]]` accepts either a local definition or exactly `git`, `path`, `ref`.
+Each selected directory contains exactly one local rule set and its own rules,
+discovered recursively with the existing document syntax. Imports cannot nest,
+reference sibling/consumer rules, or declare consumer settings. The consumer
+cannot override imported definitions. Custom execution points come only from the
+consumer. Each boundary uses the existing semantic resolver before namespaced
+identities are merged; local IDs and reference semantics remain unchanged.
+
+`pass auf` resolves exact branches, tags and full commits using host Git, retrieves
+shared immutable revisions and validates the complete combined configuration
+without executing rules. Only successful full validation atomically publishes
+local resolution state. A failed refresh preserves previous state and returns an
+error. `mach was`, hooks and `--plan` use only that last successful state and
+validated cache contents, without fetching. Missing, changed or corrupt state or
+cache fails with a request to run `hannes pass auf`; no revision substitution.
+State is stored in the project's Git directory, outside working-tree snapshots.
+Repository caches live in the user's platform cache directory. Atomic publication
+and bounded OS file locks serialize concurrent writers; revision contents have
+integrity receipts checked before use. Imports of one repository and commit share
+one checkout. Duplicate identical imports are rejected.
+
+Checks keep the consuming project working directory and command path semantics.
+Review instructions remain relative to their defining document, contained within
+the selected source directory. Review entry/context paths remain consumer-relative.
+Checks receive `HANNES_RULE_SET_SOURCE` for explicit access to source resources;
+Hannes performs no argument rewriting. Import paths and all source resource
+ancestors reject symlinks and parent traversal. Git retrieval/materialization
+executes no repository hooks or initialization scripts. Imported commands are
+trusted code with the permissions of Hannes, not sandboxed code. Credential-bearing
+HTTP URLs are rejected; host Git supplies authentication. Diagnostics never echo
+Git stderr or repository URLs containing credentials.
+
+Acceptance: `tests/external_rule_sets.rs` covers local Git references, isolated
+discovery, cached execution, refresh failure, concurrency and trust boundaries.
 
 ## CFG-001: Configuration and initialization
 
@@ -415,6 +451,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
+| EXT-001 | `tests/external_rule_sets.rs::branch_tag_and_full_commit_share_one_immutable_revision` |
 | RULE-001 | `tests/execution_points.rs::resolution_obeys_active_membership_override_union_and_disabled_rules` |
 | REC-001 | `tests/reconciliation.rs::approval_updates_removals_and_idempotency` |
 | ARC-001 | `tests/documentation.rs::documented_bounds_and_provider_scaffold_match_the_implementation` |

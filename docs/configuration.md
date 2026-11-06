@@ -354,6 +354,87 @@ External rule sets from Git repositories are planned for phase 2. There are no
 remote downloads, imports or local overrides of external rules in phase 1.
 See [execution and plan details](profiles-and-plans.md).
 
+### Import rule sets from Git
+
+Reference each external set with three required fields. Imports and local
+definitions can coexist in the same document:
+
+```toml
+[[rule_sets]]
+git = "https://github.com/company/hannes-governance.git"
+path = "repository"
+ref = "v1.2.0"
+
+[[rule_sets]]
+git = "https://github.com/company/hannes-governance.git"
+path = "software"
+ref = "v1.2.0"
+
+[[rule_sets]]
+git = "https://github.com/company/hannes-governance.git"
+path = "rust"
+ref = "main"
+```
+
+| Field | Required / default | Meaning |
+| --- | --- | --- |
+| `git` | Required | Repository selector using host Git authentication: HTTPS, HTTP, SSH, SCP-style SSH, Git protocol, file URL or local path. Local paths are consumer-relative. |
+| `path` | Required | Directory within the repository, or `"."` for its root. Parent traversal and symlinks are rejected. |
+| `ref` | Required | Exact branch, tag or full commit hash, 1–1024 bytes. No version ranges. |
+
+A shared repository can contain independently addressable sets:
+
+```text
+hannes-governance/
+  repository/
+    ruleset.toml
+    rules/readme.toml
+  software/
+    ruleset.toml
+    rules/changelog.toml
+  rust/
+    ruleset.toml
+    rules/formatting.toml
+```
+
+Each selected directory must define exactly one set using the same
+`[[rule_sets]]`, `[[checks]]` and `[[reviews]]` syntax as local documents.
+Rules may live in nested TOML files; file names carry no entity semantics.
+References resolve only within that directory's subtree. Declare custom points
+such as `check` in the consumer's `[execution_points]` table. Imports cannot
+declare them or import further sets.
+
+`hannes pass auf` resolves references, downloads missing revisions and validates
+the combined configuration. It executes no rules. Only successful full validation
+publishes resolved commits. Branches and movable tags can change on refresh; use
+a full commit hash to pin contents. Sets at the same repository and commit share
+one immutable cached checkout.
+
+Execution, Git hooks and plans use the last validated revisions without network
+access. Missing state, changed imports and missing/corrupt cached contents block
+execution and request `hannes pass auf`. A failed refresh reports an error and
+preserves previous state; later execution still uses that saved revision.
+Removing an import removes it from execution immediately.
+
+Consumers cannot disable or override imported definitions, membership or settings.
+Normal source-side `enabled = false` semantics still apply. Local IDs retain their
+meaning; imported IDs include a deterministic source namespace and original ID.
+Reports retain repository identity, directory, configured ref and resolved commit.
+
+Checks run in the consuming project with ordinary consumer-relative command and
+working-directory paths. Review instructions load relative to their imported
+document and must stay within the selected directory. Review entry/context paths
+refer to consumer files. Imported checks receive `HANNES_RULE_SET_SOURCE` for
+explicit access to source scripts/resources; Hannes does not rewrite arguments.
+
+Importing a set trusts its commands to run with Hannes' permissions. Hannes
+provides no command sandbox. Retrieval runs no downloaded hooks or initialization
+scripts. Configure authentication through host Git or SSH; do not put passwords
+or tokens in repository URLs.
+
+See [complete source examples, cache locations and troubleshooting](external-rule-sets.md).
+
+
 ### Reports and other files
 
 `.hannes/reports/last.json` is generated atomically and replaced by each run that

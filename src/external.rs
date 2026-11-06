@@ -1,0 +1,412 @@
+//! Git distribution and isolated loading; semantics remain in config and rules.
+mod cache;
+
+use crate::{
+    config::{self, Project},
+    limits::*,
+    rules::EffectiveRule,
+};
+use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::BTreeMap,
+    fs,
+    io::Write,
+    path::{Component, Path, PathBuf},
+};
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Import {
+    pub git: String,
+    pub path: String,
+    #[serde(rename = "ref")]
+    pub reference: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Origin {
+    /// SHA-256 of the repository selector, never a credential-bearing URL.
+    pub repository: String,
+    pub path: String,
+    pub reference: String,
+    pub commit: String,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct State {
+    version: u32,
+    resolutions: BTreeMap<String, Origin>,
+}
+
+fn hash(value: impl AsRef<[u8]>) -> String {
+    format!("{:x}", Sha256::digest(value.as_ref()))
+}
+
+impl Import {
+    fn validate(&mut self, root: &Path) -> Result<()> {
+        ensure!(
+            !self.git.is_empty()
+                && !self.git.starts_with("-")
+                && !self.git.chars().any(char::is_control),
+            "invalid Git repository selector"
+        );
+        if let Some((scheme, address)) = self.git.split_once("://") {
+            ensure!(
+                ["https", "http", "ssh", "git", "file"].contains(&scheme),
+                "unsupported Git URL scheme; use HTTPS, SSH, Git, file or a local repository"
+            );
+            let authority = address.split('/').next().unwrap_or_default();
+            ensure!(
+                !authority.is_empty() || scheme == "file",
+                "invalid Git repository URL"
+            );
+            ensure!(
+                !authority.contains('@') || scheme == "ssh",
+                "credential-bearing Git URLs are unsupported; configure host Git credentials"
+            );
+            ensure!(
+                !(scheme == "ssh"
+                    && authority
+                        .split_once('@')
+                        .is_some_and(|(userinfo, _)| userinfo.contains(':'))),
+                "passwords in Git URLs are unsupported; configure SSH authentication"
+            );
+            ensure!(
+                !self.git.contains(['?', '#']),
+                "Git URL queries and fragments are unsupported"
+            );
+        } else if Path::new(&self.git).is_absolute()
+            || self.git.starts_with("./")
+            || self.git.starts_with("../")
+            || !self.git.contains(':')
+        {
+            let path = root.join(&self.git);
+            self.git = path
+                .to_str()
+                .context("Git repository path must be UTF-8")?
+                .to_owned();
+        } else {
+            ensure!(
+                !self.git.split_once("::").is_some_and(|(helper, _)| helper
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"+-_".contains(&c))),
+                "unsupported Git remote-helper selector"
+            );
+            ensure!(
+                self.git
+                    .split_once(':')
+                    .is_some_and(|(host, path)| !host.is_empty()
+                        && !path.is_empty()
+                        && !host.contains('/')),
+                "invalid SSH repository selector"
+            );
+        }
+        ensure!(
+            !self.reference.is_empty()
+                && self.reference.len() <= MAX_EXTERNAL_REFERENCE_BYTES
+                && !self.reference.starts_with('-')
+                && !self.reference.chars().any(char::is_control),
+            "invalid Git reference"
+        );
+        config::relative(Path::new(&self.path)).context("invalid external rule-set path")?;
+        ensure!(
+            !self.path.chars().any(char::is_control),
+            "invalid external rule-set path"
+        );
+        self.path = Path::new(&self.path)
+            .components()
+            .filter_map(|c| match c {
+                Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        if self.path.is_empty() {
+            self.path = ".".into();
+        }
+        Ok(())
+    }
+    fn repository(&self) -> String {
+        hash(&self.git)
+    }
+    fn key(&self) -> String {
+        hash(serde_json::to_vec(&(&self.repository(), &self.reference, &self.path)).unwrap())
+    }
+}
+
+/// Resolve a source resource without following any symlink component.
+pub(crate) fn source_path(root: &Path, relative: &Path) -> Result<PathBuf> {
+    config::relative(relative)?;
+    let mut path = root.to_path_buf();
+    ensure!(
+        path.symlink_metadata()?.is_dir() && !path.symlink_metadata()?.file_type().is_symlink(),
+        "external source boundary must be a directory, not a symlink"
+    );
+    for part in relative.components() {
+        if let Component::Normal(part) = part {
+            path.push(part);
+            let metadata = path
+                .symlink_metadata()
+                .context("missing external source path")?;
+            ensure!(
+                !metadata.file_type().is_symlink(),
+                "external source symlink traversal is unsupported"
+            );
+        }
+    }
+    ensure!(
+        path.canonicalize()?.starts_with(root.canonicalize()?),
+        "external source escapes selected directory"
+    );
+    Ok(path)
+}
+
+/// Explicit cache selection supports embedders and offline integration tests.
+pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Result<Project> {
+    let root = root.canonicalize()?;
+    crate::git_snapshot::require_root(&root)?;
+    let mut loaded = crate::discovery::load(&root)?;
+    let mut imports = std::mem::take(&mut loaded.imports);
+    for import in &mut imports {
+        import.validate(&root)?;
+    }
+    imports.sort_by_key(Import::key);
+    ensure!(
+        !imports
+            .windows(2)
+            .any(|pair| pair[0].key() == pair[1].key()),
+        "duplicate external rule-set import"
+    );
+    ensure!(
+        imports.len() <= MAX_RULES,
+        "at most {MAX_RULES} external rule sets"
+    );
+    // Local semantic errors fail before retrieval; local references cannot reach imports.
+    let mut project = config::validate(root.clone(), loaded, None)?;
+    if imports.is_empty() && !refresh {
+        return Ok(project);
+    }
+    let state_directory = PathBuf::from(cache::git(
+        &root,
+        None,
+        &["rev-parse", "--absolute-git-dir"],
+        false,
+    )?)
+    .join("hannes");
+    let state_path = state_directory.join("external-rule-sets.json");
+    if imports.is_empty() {
+        if state_path.try_exists()? {
+            let _lock = cache::Lock::acquire(&state_directory.join("resolution.lock"))?;
+            fs::remove_file(&state_path)?;
+            fs::File::open(&state_directory)?.sync_all()?;
+        }
+        return Ok(project);
+    }
+    let cache_directory = cache_directory
+        .map(Path::to_path_buf)
+        .map(Ok)
+        .unwrap_or_else(cache::directory)?;
+    // The user-selected cache root may use platform aliases such as /var on macOS.
+    // Managed children are checked separately and must never traverse symlinks.
+    if refresh {
+        fs::create_dir_all(&cache_directory).context("cannot create external cache root")?;
+    }
+    let cache_directory = cache_directory
+        .canonicalize()
+        .context("external cache unavailable; run hannes pass auf")?;
+    let _state_lock = if refresh {
+        cache::create_directory(&state_directory)
+            .context("cannot create local Git resolution directory")?;
+        cache::Lock::acquire(&state_directory.join("resolution.lock"))?
+    } else {
+        source_path(state_directory.parent().unwrap(), Path::new("hannes"))
+            .context("external resolution state unavailable or unsafe; run hannes pass auf")?;
+        cache::Lock::read(&state_directory.join("resolution.lock"))
+            .context("external resolution state unavailable; run hannes pass auf")?
+    };
+    if !refresh {
+        source_path(&state_directory, Path::new("external-rule-sets.json"))
+            .context("external resolution state unavailable or unsafe; run hannes pass auf")?;
+    }
+    let previous: State = if refresh {
+        State::default()
+    } else {
+        serde_json::from_str(
+            &config::read_bounded(&state_path, MAX_METADATA_BYTES)
+                .context("external resolution state unavailable; run hannes pass auf")?,
+        )
+        .context("invalid external resolution state; run hannes pass auf")?
+    };
+    ensure!(
+        refresh || previous.version == 1,
+        "unsupported external resolution state; run hannes pass auf"
+    );
+    let mut next = State {
+        version: 1,
+        resolutions: BTreeMap::new(),
+    };
+    let mut resolved: BTreeMap<(String, String), String> = BTreeMap::new();
+    let mut checkouts: BTreeMap<(String, String), PathBuf> = BTreeMap::new();
+    for import in imports {
+        let repository = import.repository();
+        let key = import.key();
+        let origin = if refresh {
+            let ref_key = (repository.clone(), import.reference.clone());
+            let commit = if let Some(commit) = resolved.get(&ref_key) {
+                commit.clone()
+            } else {
+                let commit = cache::resolve(
+                    &root,
+                    &cache_directory,
+                    &repository,
+                    &import.git,
+                    &import.reference,
+                )?;
+                resolved.insert(ref_key, commit.clone());
+                commit
+            };
+            Origin {
+                repository: repository.clone(),
+                path: import.path.clone(),
+                reference: import.reference.clone(),
+                commit,
+            }
+        } else {
+            let origin = previous
+                .resolutions
+                .get(&key)
+                .context("external import has no validated revision; run hannes pass auf")?
+                .clone();
+            ensure!(
+                origin.repository == repository
+                    && origin.path == import.path
+                    && origin.reference == import.reference,
+                "external resolution state does not match configuration; run hannes pass auf"
+            );
+            origin
+        };
+        let revision_key = (repository.clone(), origin.commit.clone());
+        let checkout = if let Some(checkout) = checkouts.get(&revision_key) {
+            checkout.clone()
+        } else {
+            let checkout = cache::checkout(
+                &root,
+                &cache_directory,
+                &repository,
+                &origin.commit,
+                refresh,
+            )
+            .context("external cache unavailable or corrupt; run hannes pass auf")?;
+            checkouts.insert(revision_key, checkout.clone());
+            checkout
+        };
+        let boundary = source_path(&checkout, Path::new(&import.path)).with_context(|| {
+            format!(
+                "missing or unsafe external rule-set directory {:?}",
+                import.path
+            )
+        })?;
+        ensure!(
+            boundary.is_dir(),
+            "external rule-set path is not a directory"
+        );
+        let definitions = crate::discovery::load_external(&boundary, project.config.clone())
+            .context("invalid external rule-set definitions")?;
+        ensure!(
+            definitions.rule_sets.len() == 1,
+            "invalid external rule set: selected directory must define exactly one rule set"
+        );
+        let mut external = config::validate(root.clone(), definitions, Some(&boundary))
+            .with_context(|| format!("invalid external rule set {:?}", import.path))?;
+        ensure!(
+            project.checks.len()
+                + project.reviews.len()
+                + external.checks.len()
+                + external.reviews.len()
+                <= MAX_RULES
+                && project.rule_sets.len() + external.rule_sets.len() <= MAX_RULES,
+            "at most {MAX_RULES} rules and {MAX_RULES} rule sets including imports"
+        );
+        ensure!(
+            project
+                .reviews
+                .iter()
+                .chain(&external.reviews)
+                .map(|r| r.text.len())
+                .sum::<usize>()
+                <= MAX_TOTAL_INSTRUCTION_BYTES,
+            "total review instructions exceed {MAX_TOTAL_INSTRUCTION_BYTES} bytes"
+        );
+        let prefix = format!("git:{key}:{}:", import.path);
+        for check in &mut external.checks {
+            check.id = format!("{prefix}{}", check.id);
+            project
+                .external_sources
+                .insert(check.id.clone(), boundary.clone());
+        }
+        for review in &mut external.reviews {
+            review.id = format!("{prefix}{}", review.id);
+        }
+        for set in &mut external.rule_sets {
+            set.id = format!("{prefix}{}", set.id);
+            for id in &mut set.rules {
+                *id = format!("{prefix}{id}");
+            }
+        }
+        for (id, effective) in external.effective.rules {
+            let source = PathBuf::from(format!(
+                "git/{repository}/{}@{}/{}",
+                import.path,
+                origin.commit,
+                effective.source.display()
+            ));
+            project.effective.rules.insert(
+                format!("{prefix}{id}"),
+                EffectiveRule {
+                    source,
+                    execution_points: effective.execution_points,
+                    rule_sets: effective
+                        .rule_sets
+                        .into_iter()
+                        .map(|id| format!("{prefix}{id}"))
+                        .collect(),
+                    external: Some(origin.clone()),
+                },
+            );
+        }
+        project.effective.diagnostics.extend(
+            external
+                .effective
+                .diagnostics
+                .into_iter()
+                .map(|message| format!("external {}: {message}", import.path)),
+        );
+        project.checks.extend(external.checks);
+        project.reviews.extend(external.reviews);
+        project.rule_sets.extend(external.rule_sets);
+        next.resolutions.insert(key, origin);
+    }
+    crate::review_context::collect(&root, &project.reviews.iter().collect::<Vec<_>>())?;
+    project.checks.sort_by(|a, b| a.id.cmp(&b.id));
+    project.reviews.sort_by(|a, b| a.id.cmp(&b.id));
+    project.rule_sets.sort_by(|a, b| a.id.cmp(&b.id));
+    if refresh {
+        let bytes = serde_json::to_vec_pretty(&next)?;
+        ensure!(
+            bytes.len() as u64 <= MAX_METADATA_BYTES,
+            "external resolution state exceeds {MAX_METADATA_BYTES} bytes"
+        );
+        let mut temporary = tempfile::NamedTempFile::new_in(&state_directory)?;
+        temporary.write_all(&bytes)?;
+        temporary.as_file().sync_all()?;
+        temporary
+            .persist(&state_path)
+            .context("cannot publish external resolution state")?;
+        fs::File::open(&state_directory)?.sync_all()?;
+    }
+    Ok(project)
+}

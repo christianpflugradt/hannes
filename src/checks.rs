@@ -38,6 +38,10 @@ pub fn execute_with_context(
         .args(&arguments[1..])
         .current_dir(project.root.join(&check.working_directory))
         .stdin(Stdio::null());
+    command.env_remove("HANNES_RULE_SET_SOURCE");
+    if let Some(source) = project.external_sources.get(&check.id) {
+        command.env("HANNES_RULE_SET_SOURCE", source);
+    }
     if let Some(hook) = hook {
         hook.configure(&mut command);
     }

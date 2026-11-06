@@ -156,7 +156,7 @@ The initial implementation focuses exclusively on software development verificat
 
 Its primary capabilities are:
 
-- Repository-local configuration.
+- Repository-local configuration with reusable external Git rule sets.
 - Deterministic checks.
 - LLM-based reviews.
 - A Codex CLI provider.
@@ -177,7 +177,6 @@ Hannes may eventually evolve beyond individual repository verification.
 Potential future capabilities include:
 
 - Organization-wide governance policies.
-- Reusable and distributable rule packages.
 - Additional LLM providers.
 - Lifecycle-specific verification.
 - Integration with coding-agent hooks.

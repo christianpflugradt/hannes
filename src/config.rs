@@ -129,6 +129,7 @@ pub struct Project {
     pub reviews: Vec<Review>,
     pub rule_sets: Vec<RuleSet>,
     pub effective: crate::rules::EffectiveConfig,
+    pub external_sources: BTreeMap<String, PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -268,9 +269,19 @@ fn identity(id: &str, description: &str, ids: &mut BTreeSet<String>) -> Result<(
     nonempty(description, "description")
 }
 pub fn load(root: &Path) -> Result<Project> {
-    let root = root.canonicalize()?;
-    crate::git_snapshot::require_root(&root)?;
-    let loaded = crate::discovery::load(&root)?;
+    crate::external::load(root, false, None)
+}
+
+/// Refresh external sources and publish resolution state only after full validation.
+pub fn refresh(root: &Path) -> Result<Project> {
+    crate::external::load(root, true, None)
+}
+
+pub(crate) fn validate(
+    root: PathBuf,
+    loaded: crate::discovery::Loaded,
+    source_root: Option<&Path>,
+) -> Result<Project> {
     let config = loaded.config;
     ensure!(
         config.version == 3,
@@ -410,11 +421,14 @@ pub fn load(root: &Path) -> Result<Project> {
                 p.extension().is_some_and(|s| s == "md"),
                 "instructions must reference Markdown (.md)"
             );
-            let full = inside(&root, &path.parent().unwrap().join(p))?;
-            ensure!(
-                full.starts_with(root.join(self::path("")).canonicalize()?),
-                "instructions must stay inside .hannes"
-            );
+            let full = if let Some(source_root) = source_root {
+                crate::external::source_path(source_root, &path.parent().unwrap().join(p))?
+            } else {
+                let full = inside(&root, &path.parent().unwrap().join(p))?;
+                ensure!(full.starts_with(root.join(self::path("")).canonicalize()?),
+                    "instructions must stay inside .hannes");
+                full
+            };
             review.text = read_bounded(&full, MAX_INSTRUCTIONS)?;
             nonempty(&review.text, "instructions")?;
             instruction_bytes += review.text.len();
@@ -456,6 +470,7 @@ pub fn load(root: &Path) -> Result<Project> {
         reviews,
         rule_sets,
         effective,
+        external_sources: BTreeMap::new(),
     })
 }
 

@@ -3,6 +3,7 @@ pub mod checks;
 pub mod cli;
 pub mod config;
 pub mod discovery;
+pub mod external;
 pub mod git_snapshot;
 pub mod limits;
 pub mod mood;

@@ -20,6 +20,8 @@ pub struct Assignment {
 #[serde(deny_unknown_fields)]
 pub struct EffectiveRule {
     pub source: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external: Option<crate::external::Origin>,
     pub execution_points: BTreeSet<String>,
     pub rule_sets: BTreeSet<String>,
 }
@@ -135,6 +137,7 @@ pub fn resolve(
             id,
             EffectiveRule {
                 source: rule.source.clone(),
+                external: None,
                 execution_points: if rule.enabled { at } else { BTreeSet::new() },
                 rule_sets: sets,
             },

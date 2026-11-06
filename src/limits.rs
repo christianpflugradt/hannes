@@ -35,3 +35,10 @@ pub const MAX_CAPTURE_BYTES: usize = 64 * 1024;
 pub const MAX_SUMMARY_CHARS: usize = 120;
 pub const MAX_FINDINGS: usize = 20;
 pub const MAX_FINDING_MESSAGE_BYTES: usize = 2000;
+
+// External Git source retrieval and immutable-cache bounds.
+pub const MAX_EXTERNAL_REFERENCE_BYTES: usize = 1024;
+pub const MAX_EXTERNAL_CACHE_DEPTH: usize = 128;
+pub const EXTERNAL_FETCH_TIMEOUT_SECONDS: u64 = 60;
+pub const EXTERNAL_GIT_TIMEOUT_SECONDS: u64 = 30;
+pub const EXTERNAL_LOCK_TIMEOUT_SECONDS: u64 = 30;

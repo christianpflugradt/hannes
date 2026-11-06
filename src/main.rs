@@ -18,7 +18,7 @@ fn execute(cli: Cli) -> Result<i32> {
                 "{}",
                 terminal::paint(
                     &format!(
-                        "Alles bereit: .Hannes/ · {created} files created; existing files preserved."
+                        "Alles bereit: .hannes/ · {created} files created; existing files preserved."
                     ),
                     Tone::Success,
                     color
@@ -118,7 +118,7 @@ fn execute(cli: Cli) -> Result<i32> {
             },
         } => {
             git_snapshot::require_root(&root)?;
-            let path = root.join(".Hannes/reports/last.json");
+            let path = root.join(".hannes/reports/last.json");
             if !path.try_exists()? {
                 eprintln!(
                     "{}",

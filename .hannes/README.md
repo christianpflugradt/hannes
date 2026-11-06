@@ -1,6 +1,6 @@
 # Hannes configuration, version 1
 
-Run Hannes from the Git working-tree root. `.Hannes` uses a capital H.
+Run Hannes from the Git working-tree root. `.hannes` is lowercase.
 `config.toml` requires `version = 1`, a nonempty `project` and
 `max_display_files = 1..5`. `provider.toml` requires `provider = "codex-cli"`,
 `timeout_seconds = 1..3600` and an optional nonempty `model`.

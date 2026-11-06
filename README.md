@@ -70,7 +70,7 @@ see [release instructions](docs/releasing.md).
 Run from the Git working-tree root:
 
 ```sh
-hannes fang an                # Create missing .Hannes files; preserve existing ones
+hannes fang an                # Create missing .hannes files; preserve existing ones
 hannes pass auf               # Validate configuration; execute no rules/provider
 hannes mach mal               # Execute selected rules and save a report
 hannes was ist phase          # Show saved results and freshness
@@ -102,16 +102,21 @@ Unknown commands show a face and a saying, avoiding the last 20 sayings globally
 Repeated errors worsen the mood across invocations; recognized commands improve
 it by one step. Five moods range from green to red; maximum anger shouts in capitals.
 The third consecutive maximum-anger reaction actually uninstalls
-Hannes and removes its external mood/history state. Repository files and `.Hannes`
+Hannes and removes its external mood/history state. Repository files and `.hannes`
 are preserved. Reinstall with `mise deploy`. See [usage details](docs/usage.md).
 
-## Configuration: `.Hannes/`
+## Configuration: `.hannes/`
 
-Use exactly the capitalized directory name. Versions **1 and 2** are supported;
+Use the lowercase directory name. Versions **1 and 2** are supported;
 initialization creates version 1. Version 2 enables tags and profiles explicitly.
 
+Existing projects: rename `.Hannes` to `.hannes`, keeping configuration and reports.
+On case-insensitive filesystems, use an unused temporary name for the intermediate
+rename (for example `.hannes-rename`). Update references in Git ignore rules,
+scripts and review criteria. Saved reports may need a new run to refresh paths.
+
 ```text
-.Hannes/
+.hannes/
   config.toml
   provider.toml
   checks/*.toml
@@ -211,7 +216,7 @@ review starts disabled; customize its criteria before enabling it.
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `instructions` | Required | Nonblank UTF-8 `.md` file relative to `.Hannes/reviews/`, staying inside that directory. |
+| `instructions` | Required | Nonblank UTF-8 `.md` file relative to `.hannes/reviews/`, staying inside that directory. |
 | `files` | Optional; `[]` | Up to 64 unique existing files relative to the project root; exact paths, no globs. Source entry points. |
 | `context` | Optional; `[]` | Up to 32 requirement-document selections using `[[context]]`. |
 | `context.path` | Required per entry | Existing UTF-8 file relative to the project root. |
@@ -344,7 +349,7 @@ mcp_servers = ["project-memory", "browser"]
 
 At most 32 unique names, each 1–256 ASCII letters, digits, `_` or `-`; no wildcard.
 Server commands, URLs, transports and credentials are configured in Codex, not
-`.Hannes`. All selected reviews get the same allow list; no per-review overrides.
+`.hannes`. All selected reviews get the same allow list; no per-review overrides.
 
 Before the model call, `codex mcp list --json` reads configuration without starting
 a model/server. Hannes disables every unlisted server in the child process.
@@ -375,10 +380,10 @@ Keep reports local with the editable `reports/.gitignore`:
 !.gitignore
 ```
 
-Commit configuration/criteria, not reports or credentials. `.Hannes/README.md` is
+Commit configuration/criteria, not reports or credentials. `.hannes/README.md` is
 editable guidance with no parsed settings. Other assets have no implicit execution
 meaning; criteria Markdown must be referenced by a review. Mood/quote state lives
-outside repositories; faces, sayings and uninstall behavior have no `.Hannes` setting.
+outside repositories; faces, sayings and uninstall behavior have no `.hannes` setting.
 
 ### Fixed limits
 
@@ -389,8 +394,8 @@ These are built in, not configurable fields:
 | Metadata | 64 KiB per TOML file; up to 256 checks, 256 reviews and 256 profiles. |
 | Review instructions | 32 KiB per file; 256 KiB combined, including disabled reviews. |
 | Initial orientation | Up to 200 manifest paths and 32 KiB of diff, with truncation indicated. Required evidence still needs inspection. |
-| Snapshot | 8 MiB/file, 128 MiB total, 100,000 paths; Git file enumeration is capped at 64 KiB; `.Hannes` nesting at 16 levels. |
-| Coverage | Tracked and nonignored untracked files, plus `.Hannes` even if ignored; `.git` and `.Hannes/reports` excluded. Unsupported symlinks/submodules/paths or exceeded limits block PASS. |
+| Snapshot | 8 MiB/file, 128 MiB total, 100,000 paths; Git file enumeration is capped at 64 KiB; `.hannes` nesting at 16 levels. |
+| Coverage | Tracked and nonignored untracked files, plus `.hannes` even if ignored; `.git` and `.hannes/reports` excluded. Unsupported symlinks/submodules/paths or exceeded limits block PASS. |
 | Stability | Working files/HEAD must match before/after execution and before a model call. This does not separately verify staging or pushed commits. |
 | Usage | Available input/cached-input/output counters once per call; total = input + output. Optional reasoning/cache-write counters are subsets. Missing telemetry stays unavailable; no money/quota estimate or enforced total token budget. |
 

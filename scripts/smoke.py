@@ -27,13 +27,13 @@ with tempfile.TemporaryDirectory(prefix="hannes-smoke-") as temporary:
     run("--version")
     run("so hilf mir doch")
     run("fang an")
-    initial = (root / ".Hannes/config.toml").read_bytes()
+    initial = (root / ".hannes/config.toml").read_bytes()
     run("fang an")
-    assert (root / ".Hannes/config.toml").read_bytes() == initial
+    assert (root / ".hannes/config.toml").read_bytes() == initial
     run("pass auf")
     run("was ist phase", 3)
     run("mach mal")
-    report_path = root / ".Hannes/reports/last.json"
+    report_path = root / ".hannes/reports/last.json"
     report = json.loads(report_path.read_text())
     assert report["overall"] == "PASS"
     assert [r["id"] for r in report["results"]] == ["always-ok"]
@@ -48,9 +48,9 @@ with tempfile.TemporaryDirectory(prefix="hannes-smoke-") as temporary:
     stale = run("was ist phase", 1)
     assert "STALE" in stale and "changed files since verification: 8" in stale
     assert stale.count("(line counts unavailable)") == 5
-    check_path = root / ".Hannes/checks/deliberately-failing.toml"
+    check_path = root / ".hannes/checks/deliberately-failing.toml"
     check_path.write_text(check_path.read_text().replace("enabled = false", "enabled = true"))
-    review_path = root / ".Hannes/reviews/product-consistency.toml"
+    review_path = root / ".hannes/reviews/product-consistency.toml"
     review_path.write_text(review_path.read_text().replace("enabled = false", "enabled = true"))
     # The failed check must skip the enabled review. Any provider call would fail this assertion.
     run("mach mal", 1)

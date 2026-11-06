@@ -264,7 +264,7 @@ fn metadata_files(root: &Path, dir: &str) -> Result<Vec<PathBuf>> {
 pub fn load(root: &Path) -> Result<Project> {
     let root = root.canonicalize()?;
     crate::git_snapshot::require_root(&root)?;
-    let config: Config = parse(&root, Path::new(".Hannes/config.toml"))?;
+    let config: Config = parse(&root, Path::new(".hannes/config.toml"))?;
     ensure!(
         matches!(config.version, 1 | 2),
         "unsupported configuration version {}",
@@ -279,7 +279,7 @@ pub fn load(root: &Path) -> Result<Project> {
         (1..=5).contains(&config.max_display_files),
         "max_display_files must be 1..=5"
     );
-    let provider: ProviderConfig = parse(&root, Path::new(".Hannes/provider.toml"))?;
+    let provider: ProviderConfig = parse(&root, Path::new(".hannes/provider.toml"))?;
     ensure!(
         provider.provider == "codex-cli",
         "unsupported provider: {}; expected codex-cli",
@@ -321,7 +321,7 @@ pub fn load(root: &Path) -> Result<Project> {
     }
     let mut ids = BTreeSet::new();
     let mut checks = Vec::new();
-    for path in metadata_files(&root, ".Hannes/checks")? {
+    for path in metadata_files(&root, ".hannes/checks")? {
         let mut check: Check = parse_rule(&root, &path, config.version)?;
         (|| -> Result<()> {
             identity(&check.id, &check.description, &mut ids)?;
@@ -362,7 +362,7 @@ pub fn load(root: &Path) -> Result<Project> {
     }
     let mut reviews = Vec::new();
     let mut instruction_bytes = 0;
-    for path in metadata_files(&root, ".Hannes/reviews")? {
+    for path in metadata_files(&root, ".hannes/reviews")? {
         let mut review: Review = parse_rule(&root, &path, config.version)?;
         (|| -> Result<()> {
             identity(&review.id, &review.description, &mut ids)?;
@@ -410,9 +410,9 @@ pub fn load(root: &Path) -> Result<Project> {
                 p.extension().is_some_and(|s| s == "md"),
                 "instructions must reference Markdown (.md)"
             );
-            let full = inside(&root, &Path::new(".Hannes/reviews").join(p))?;
+            let full = inside(&root, &Path::new(".hannes/reviews").join(p))?;
             ensure!(
-                full.starts_with(root.join(".Hannes/reviews").canonicalize()?),
+                full.starts_with(root.join(".hannes/reviews").canonicalize()?),
                 "instructions must stay inside reviews directory"
             );
             review.text = read_bounded(&full, MAX_INSTRUCTIONS)?;
@@ -431,8 +431,8 @@ pub fn load(root: &Path) -> Result<Project> {
     reviews.sort_by(|a, b| a.id.cmp(&b.id));
     crate::review_context::collect(&root, &reviews.iter().collect::<Vec<_>>())?;
     let mut profiles = Vec::new();
-    if root.join(".Hannes/profiles").symlink_metadata().is_ok() {
-        let paths = metadata_files(&root, ".Hannes/profiles")?;
+    if root.join(".hannes/profiles").symlink_metadata().is_ok() {
+        let paths = metadata_files(&root, ".hannes/profiles")?;
         ensure!(
             config.version == 2 || paths.is_empty(),
             "profiles require configuration version 2"
@@ -507,10 +507,10 @@ pub fn init(root: &Path) -> Result<usize> {
     let root = root.canonicalize()?;
     crate::git_snapshot::require_root(&root)?;
     for dir in [
-        ".Hannes",
-        ".Hannes/checks",
-        ".Hannes/reviews",
-        ".Hannes/reports",
+        ".hannes",
+        ".hannes/checks",
+        ".hannes/reviews",
+        ".hannes/reports",
     ] {
         let p = root.join(dir);
         if p.symlink_metadata().is_ok() {
@@ -553,7 +553,7 @@ pub fn init(root: &Path) -> Result<usize> {
     ];
     let mut created = 0;
     for (path, content) in files {
-        let full = root.join(".Hannes").join(path);
+        let full = root.join(".hannes").join(path);
         match OpenOptions::new().write(true).create_new(true).open(&full) {
             Ok(mut f) => {
                 f.write_all(content.as_bytes())?;

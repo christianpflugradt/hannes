@@ -16,8 +16,8 @@ schema 1 stays readable as unprofiled legacy evidence.
 
 A snapshot is Git HEAD plus a sorted manifest of SHA-256 hashes, byte sizes and
 executable flags for current tracked files and nonignored untracked files returned
-by `git ls-files --cached --others --exclude-standard -z`. All `.Hannes/` files
-are explicitly included even if ignored, except `.Hannes/reports/`. `.git/` is
+by `git ls-files --cached --others --exclude-standard -z`. All `.hannes/` files
+are explicitly included even if ignored, except `.hannes/reports/`. `.git/` is
 excluded. Ignored build products, caches and secrets are outside scope; a tracked
 file stays in scope even if an ignore rule matches it. Deleted files are absent
 from the manifest. There are no temporary commits, Git index writes or content

@@ -65,7 +65,7 @@ pub fn require_root(root: &Path) -> Result<()> {
     Ok(())
 }
 fn excluded(path: &Path) -> bool {
-    path.starts_with(".git") || path.starts_with(".Hannes/reports")
+    path.starts_with(".git") || path.starts_with(".hannes/reports")
 }
 fn add_config(
     root: &Path,
@@ -164,7 +164,7 @@ pub fn capture(root: &Path) -> Result<Snapshot> {
             paths.insert(raw.to_owned());
         }
     }
-    add_config(root, Path::new(".Hannes"), &mut paths, &mut limitations, 0)?;
+    add_config(root, Path::new(".hannes"), &mut paths, &mut limitations, 0)?;
     let mut files = BTreeMap::new();
     let mut total = 0;
     for path in paths {
@@ -278,7 +278,7 @@ pub fn bounded_diff_for_paths(
     if let Some(paths) = paths {
         cmd.arg("--").args(paths);
     } else {
-        cmd.args(["--", ".", ":(exclude).Hannes/reports"]);
+        cmd.args(["--", ".", ":(exclude).hannes/reports"]);
     }
     let out = crate::process::run(&mut cmd, Duration::from_secs(20)).context("Git diff failed")?;
     ensure!(

@@ -2,7 +2,7 @@
 {usage-heading} {usage}
 
 Commands:
-  fang an           .Hannes/ initialisieren
+  fang an           .hannes/ initialisieren
   pass auf          Konfiguration prüfen, ohne Regeln auszuführen
   mach mal          Regeln ausführen (--profil, --plan; --geiz-ist-geil: nur Checks)
   was ist phase     Letzten Report anzeigen (--details für vollständige Befunde)

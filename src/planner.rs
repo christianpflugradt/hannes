@@ -91,12 +91,12 @@ pub struct PreparedPlan {
 }
 
 fn metadata_path(path: &str) -> bool {
-    if matches!(path, ".Hannes/config.toml" | ".Hannes/provider.toml") {
+    if matches!(path, ".hannes/config.toml" | ".hannes/provider.toml") {
         return true;
     }
     let parts: Vec<_> = path.split('/').collect();
     parts.len() == 3
-        && parts[0] == ".Hannes"
+        && parts[0] == ".hannes"
         && matches!(parts[1], "checks" | "reviews" | "profiles")
         && parts[2].ends_with(".toml")
 }

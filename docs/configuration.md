@@ -3,7 +3,7 @@
 Initialization creates version 1. Existing configurations are never automatically
 migrated. To enable profiles/tags, explicitly set `version = 2` in config.toml.
 
-Run Hannes from the Git working-tree root. `.Hannes` uses a capital H.
+Run Hannes from the Git working-tree root. `.hannes` is lowercase.
 `config.toml` requires `version = 1` or `2`, a nonempty `project` and
 `max_display_files = 1..5`. `provider.toml` requires `provider = "codex-cli"`,
 `timeout_seconds = 1..3600` and an optional nonempty `model`. New scaffolds use
@@ -121,7 +121,7 @@ lowercase ASCII tags, 1..32 characters, starting with a letter/digit and otherwi
 using letters, digits, hyphens or underscores. Version 1 rejects the field even
 when empty. Configuration version 2 permits optional `default_profile = "local"`.
 
-Add `.Hannes/profiles/local.toml`:
+Add `.hannes/profiles/local.toml`:
 
 ```toml
 id = "local"

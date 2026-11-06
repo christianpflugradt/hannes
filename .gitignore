@@ -2,8 +2,8 @@
 /dist/
 /node_modules/
 .DS_Store
-.Hannes/reports/*
-!.Hannes/reports/.gitignore
+.hannes/reports/*
+!.hannes/reports/.gitignore
 
 # Local codebase-memory MCP setup and graph data
 /.codex/

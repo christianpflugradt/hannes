@@ -9,7 +9,7 @@ Make rule selection explicit and inspectable before any expensive execution.
 The authoritative detailed contract is
 [profiles and execution plans](../profiles-and-plans.md).
 
-- Version 2 adds common rule tags and `.Hannes/profiles/*.toml` definitions.
+- Version 2 adds common rule tags and `.hannes/profiles/*.toml` definitions.
 - A profile selects the union of explicit IDs and any matching tag, deduplicated.
   Checks precede reviews; each kind is ordered by ID.
 - `--profil` overrides `default_profile`. Reserved `all` preserves the current

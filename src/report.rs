@@ -115,10 +115,10 @@ pub fn overall(items: &[Item]) -> Status {
     }
 }
 pub fn write(root: &Path, report: &Report) -> Result<()> {
-    let directory = crate::config::inside(root, Path::new(".Hannes/reports"))?;
+    let directory = crate::config::inside(root, Path::new(".hannes/reports"))?;
     // Reports must be local regular files, never an output symlink into another directory.
     ensure!(
-        directory == root.join(".Hannes/reports"),
+        directory == root.join(".hannes/reports"),
         "reports directory cannot be a symlink"
     );
     let mut temporary = tempfile::NamedTempFile::new_in(&directory)?;
@@ -131,7 +131,7 @@ pub fn write(root: &Path, report: &Report) -> Result<()> {
     Ok(())
 }
 pub fn read(root: &Path) -> Result<Report> {
-    let path = crate::config::inside(root, Path::new(".Hannes/reports/last.json"))?;
+    let path = crate::config::inside(root, Path::new(".hannes/reports/last.json"))?;
     let report: Report =
         serde_json::from_str(&crate::config::read_bounded(&path, 128 * 1024 * 1024)?)?;
     ensure!(

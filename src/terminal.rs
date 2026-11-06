@@ -399,7 +399,7 @@ pub fn render(report: &Report, color: bool) -> String {
             short_summary(&item.reason)
         ));
     }
-    text.push_str(&format!("\nGesamt: {}\nReport: .Hannes/reports/last.json\nDetails: hannes was ist phase --details\n", status(report.overall, color)));
+    text.push_str(&format!("\nGesamt: {}\nReport: .hannes/reports/last.json\nDetails: hannes was ist phase --details\n", status(report.overall, color)));
     if let Some(usage) = report.provider_usage {
         text.push_str(&format!(
             "Codex-Tokens: {} gesamt · {} Eingabe ({} Cache) · {} Ausgabe\n",

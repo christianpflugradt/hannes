@@ -37,7 +37,7 @@ fn project() -> TempDir {
     dir
 }
 fn path(root: &Path, relative: &str) -> PathBuf {
-    root.join(".Hannes").join(relative)
+    root.join(".hannes").join(relative)
 }
 fn replace(root: &Path, file: &str, from: &str, to: &str) {
     let file = path(root, file);
@@ -75,7 +75,7 @@ impl Provider for Mock {
     }
 }
 fn verdict(id: &str, status: &str) -> serde_json::Value {
-    serde_json::json!({"id":id,"status":status,"reason":"Compared explicit expectations with evidence", "findings":[{"message":"Documented expectations inspected", "path":".Hannes/README.md", "line":1}]})
+    serde_json::json!({"id":id,"status":status,"reason":"Compared explicit expectations with evidence", "findings":[{"message":"Documented expectations inspected", "path":".hannes/README.md", "line":1}]})
 }
 fn mock(values: Vec<serde_json::Value>) -> Mock {
     Mock {
@@ -140,7 +140,12 @@ fn init_exact_paths_idempotent_preserves_edits() {
     ] {
         assert!(path(root, file).is_file(), "{file}");
     }
-    assert!(!root.join(".hannes").exists() || cfg!(target_os = "macos") || cfg!(windows));
+    // Check the actual directory entry, even on case-insensitive filesystems.
+    assert!(
+        fs::read_dir(root)
+            .unwrap()
+            .any(|entry| { entry.unwrap().file_name() == ".hannes" })
+    );
     assert!(!path(root, "reports/last.json").exists());
     assert_eq!(config::init(root).unwrap(), 0);
     fs::write(path(root, "config.toml"), "personal edits").unwrap();
@@ -447,7 +452,7 @@ fn status_tracks_staged_modified_untracked_and_ignores_report_changes() {
 #[test]
 fn ignored_configuration_is_still_fingerprinted() {
     let d = project();
-    fs::write(d.path().join(".gitignore"), ".Hannes/\n").unwrap();
+    fs::write(d.path().join(".gitignore"), ".hannes/\n").unwrap();
     let before = git_snapshot::capture(d.path()).unwrap();
     replace(
         d.path(),
@@ -505,7 +510,7 @@ fn no_root_detection_or_git_mutation() {
     let nested = d.path().join("nested");
     fs::create_dir(&nested).unwrap();
     assert!(config::init(&nested).is_err());
-    assert!(!nested.join(".Hannes").exists());
+    assert!(!nested.join(".hannes").exists());
 }
 #[cfg(unix)]
 #[test]
@@ -577,7 +582,7 @@ fn symlink_escape_and_unsupported_snapshot_are_not_green() {
     assert!(!r.snapshot.complete);
     let noinit = tempdir().unwrap();
     git(noinit.path(), &["init", "--quiet"]);
-    symlink(other.path(), noinit.path().join(".Hannes")).unwrap();
+    symlink(other.path(), noinit.path().join(".hannes")).unwrap();
     assert!(config::init(noinit.path()).is_err());
     assert!(!other.path().join("config.toml").exists());
 }
@@ -696,7 +701,7 @@ fn unusual_paths_and_binary_files_are_fingerprinted() {
         "space name.txt",
         "newline\nname.txt",
         "back\\slash.txt",
-        ".Hannes/back\\slash.md",
+        ".hannes/back\\slash.md",
     ] {
         fs::write(d.path().join(name), b"\x00\xffbinary").unwrap();
     }
@@ -706,7 +711,7 @@ fn unusual_paths_and_binary_files_are_fingerprinted() {
         "space name.txt",
         "newline\nname.txt",
         "back\\slash.txt",
-        ".Hannes/back\\slash.md",
+        ".hannes/back\\slash.md",
     ] {
         assert!(before.files.contains_key(name), "{name:?}");
         fs::write(d.path().join(name), b"\x01\xffbinary").unwrap();
@@ -831,7 +836,7 @@ fn unsupported_commands_show_one_supplied_quote_and_face_without_execution() {
         assert!(quotes.contains(&quote));
         assert!(stderr.contains("hannes so hilf mir doch"));
         assert!(!stderr.contains('\x1b'));
-        assert!(!d.path().join(".Hannes").exists());
+        assert!(!d.path().join(".hannes").exists());
     }
 }
 #[test]
@@ -1169,10 +1174,10 @@ fn review_summary_is_visible_for_pass_and_fail_while_details_stay_separate() {
         let short = terminal::render(&report, false);
         assert!(short.contains("SUMMARY"));
         assert!(short.contains("Settings navigation exposes labels and keyboard focus."));
-        assert!(!short.contains("DETAIL_ONLY") && !short.contains(".Hannes/README.md:1"));
+        assert!(!short.contains("DETAIL_ONLY") && !short.contains(".hannes/README.md:1"));
         assert!(short.contains("hannes was ist phase --details"));
         let detailed = terminal::render_details(&report, false);
-        assert!(detailed.contains("DETAIL_ONLY") && detailed.contains(".Hannes/README.md:1"));
+        assert!(detailed.contains("DETAIL_ONLY") && detailed.contains(".hannes/README.md:1"));
         assert!(
             report::read(d.path()).unwrap().results[1].findings[0]
                 .message
@@ -1744,8 +1749,8 @@ fn state_overrides_inside_repositories_or_hannes_directories_are_never_removed()
     for directory in [
         root.path().to_path_buf(),
         root.path().join("state"),
-        root.path().join(".Hannes"),
         root.path().join(".hannes"),
+        root.path().join(".Hannes"), // Legacy spelling must remain protected from cleanup.
     ] {
         fs::create_dir_all(&directory).unwrap();
         let data = br#"{"level":4,"previous_unknown":true,"screaming_streak":2}"#;
@@ -1774,7 +1779,7 @@ fn symlinked_state_overrides_cannot_reach_into_a_repository() {
     let root = project();
     let executable = disposable_hannes(installation.path());
     let alias = outside.path().join("alias");
-    symlink(root.path().join(".Hannes"), &alias).unwrap();
+    symlink(root.path().join(".hannes"), &alias).unwrap();
     let config = fs::read(path(root.path(), "config.toml")).unwrap();
     let output = Command::new(&executable)
         .arg("foo")
@@ -2091,7 +2096,7 @@ fn review_context_rejects_escaping_missing_and_excessive_sources_without_a_provi
     for extra in [
         "files = [\"../outside.swift\"]",
         "files = [\"missing.swift\"]",
-        "files = [\".Hannes\"]",
+        "files = [\".hannes\"]",
         "[[context]]\npath = \"../outside.md\"",
         "[[context]]\npath = \"missing.md\"",
         "[[context]]\npath = \"Policy.md\"",

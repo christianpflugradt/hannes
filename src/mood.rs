@@ -183,7 +183,7 @@ fn update_in(directory: &Path, unknown: bool) -> Result<Reaction> {
     })
 }
 
-/// Never interpret a repository, .git or .Hannes directory as disposable state,
+/// Never interpret a repository, .git or .hannes directory as disposable state,
 /// including when an override reaches it through a symlink.
 fn ensure_external(directory: &Path) -> Result<()> {
     ensure!(
@@ -199,7 +199,7 @@ fn ensure_external(directory: &Path) -> Result<()> {
     };
     ensure!(
         !protected(directory),
-        "Hannes state must be outside repositories and .Hannes"
+        "Hannes state must be outside repositories and .hannes"
     );
     let mut existing = directory;
     while !existing.try_exists()? {
@@ -210,7 +210,7 @@ fn ensure_external(directory: &Path) -> Result<()> {
     let resolved = existing.canonicalize()?;
     ensure!(
         !protected(&resolved),
-        "Hannes state must be outside repositories and .Hannes"
+        "Hannes state must be outside repositories and .hannes"
     );
     for ancestor in resolved.ancestors() {
         ensure!(

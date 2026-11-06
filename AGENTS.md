@@ -6,7 +6,7 @@
   precedence; the project license is Unlicense.
 - Keep the CLI small and agent-agnostic. Do not add repair loops, services or
   speculative provider infrastructure.
-- Preserve the exact nested German command paths and capital `.Hannes/` directory.
+- Preserve the exact nested German command paths and lowercase `.hannes/` directory.
   Source, configuration, file names and documentation stay in English.
 - Deterministic checks run first. Provider failures, invalid JSON and incomplete
   snapshot coverage must never become PASS. Disabled items stay out of results.
@@ -37,7 +37,7 @@ For Rust changes, run `mise run check`, or the equivalent commands in
 CONTRIBUTING.md. Tests must not call Codex, the network or a paid API; Cargo may
 fetch build dependencies. For documentation/config-only changes, validate affected
 formats, links and commands. Keep README approachable, concise and complete for
-supported CLI commands and every user-editable `.Hannes` field, default and limit.
+supported CLI commands and every user-editable `.hannes` field, default and limit.
 Update it alongside behavior/configuration changes, clearly separating current
 features from planned work. Implementation details belong in docs/.
 Keep LICENSE and Cargo.toml license metadata aligned. Do not add machine-specific

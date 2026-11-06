@@ -15,11 +15,11 @@ hannes --help
 hannes --version
 ```
 
-`fang an` creates `.Hannes/` (capital H), preserving all existing files. It never
+`fang an` creates `.hannes/` (lowercase), preserving all existing files. It never
 installs hooks, stages files or commits. The enabled example uses `git --version`
 and passes without Codex. The deliberately failing check and example review are
 disabled. To demonstrate failure, change `enabled = false` to `enabled = true`
-in `.Hannes/checks/deliberately-failing.toml` and run `hannes mach mal`.
+in `.hannes/checks/deliberately-failing.toml` and run `hannes mach mal`.
 
 Checks and reviews are collectively called **rules**. If neither is defined,
 `mach mal` prints `Du hast noch keine Regeln definiert, du Vogel!` alongside the
@@ -71,7 +71,7 @@ profile gate. `--details` includes plan identity and omission reasons.
 
 ## Run results
 
-Errors and failures block success. A valid run writes `.Hannes/reports/last.json`
+Errors and failures block success. A valid run writes `.hannes/reports/last.json`
 atomically, including on FAIL/ERROR. Invalid configuration leaves the previous
 report untouched. Reports are ignored and remain local.
 
@@ -116,7 +116,7 @@ It is not automatically redacted; configure commands to avoid printing secrets.
 ## Configure checks and reviews
 
 See the [configuration reference](configuration.md). To add a check, create
-`.Hannes/checks/test.toml`:
+`.hannes/checks/test.toml`:
 
 ```toml
 id = "test"
@@ -135,13 +135,13 @@ integrity ERROR: rerun on stable files.
 For an optional Codex review:
 
 1. Install a compatible Codex CLI and authenticate using `codex login`.
-2. Customize `.Hannes/reviews/product-consistency.md` for your project's criteria.
-3. Set `enabled = true` in `.Hannes/reviews/product-consistency.toml`.
+2. Customize `.hannes/reviews/product-consistency.md` for your project's criteria.
+3. Set `enabled = true` in `.hannes/reviews/product-consistency.toml`.
 4. Run `hannes pass auf`, then `hannes mach mal`.
 
 New provider configuration uses `codex-cli`, a 180-second timeout, `gpt-6.1-sol`,
 medium reasoning and no MCP servers. Model and MCP allow list are configurable in
-`.Hannes/provider.toml`; see [review context and profile](configuration.md). A ChatGPT-backed local login works without a separate
+`.hannes/provider.toml`; see [review context and profile](configuration.md). A ChatGPT-backed local login works without a separate
 API key. Usage consumes your account allowance; Hannes does not bypass limits.
 Inherited `OPENAI_API_KEY`/`CODEX_API_KEY` variables are removed from the child;
 your saved Codex authentication and user configuration still apply. Check
@@ -224,7 +224,7 @@ prints an error, never a false success. Project files, reports and other binarie
 are preserved. The external `patience` and `patience.lock` files are removed before
 the executable; the state directory is removed only if empty. Foreign files are
 preserved and directories are never deleted recursively. Repository paths and
-`.Hannes` paths are rejected as state locations, including symlinked overrides.
+`.hannes` paths are rejected as state locations, including symlinked overrides.
 If cleanup fails, the executable is kept and an error is reported.
 
 From the Hannes source checkout, reinstall with `mise deploy`. Its forced

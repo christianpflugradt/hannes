@@ -24,10 +24,10 @@ their validation rules. IDs remain unique across checks and reviews.
 tags = ["local", "critical"]
 ```
 
-Profiles live in `.Hannes/profiles/*.toml`, one definition per file:
+Profiles live in `.hannes/profiles/*.toml`, one definition per file:
 
 ```toml
-# .Hannes/profiles/local.toml
+# .hannes/profiles/local.toml
 id = "local"
 rules = ["unit-tests"]
 include_tags = ["local"]
@@ -36,7 +36,7 @@ input = "worktree"
 ```
 
 ```toml
-# .Hannes/profiles/verify.toml
+# .hannes/profiles/verify.toml
 id = "verify"
 rules = []
 include_tags = ["critical"]
@@ -51,7 +51,7 @@ occur in no rule definition are configuration errors. All definitions, including
 disabled rules and unused profiles, are validated before execution.
 
 ```toml
-# .Hannes/config.toml
+# .hannes/config.toml
 version = 2
 project = "Passing By"
 max_display_files = 5

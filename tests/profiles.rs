@@ -38,7 +38,7 @@ impl Fixture {
         this
     }
     fn write(&self, path: &str, text: &str) {
-        let full = self.root.path().join(".Hannes").join(path);
+        let full = self.root.path().join(".hannes").join(path);
         fs::create_dir_all(full.parent().unwrap()).unwrap();
         fs::write(full, text).unwrap();
     }
@@ -55,7 +55,7 @@ impl Fixture {
         let file = self
             .root
             .path()
-            .join(".Hannes/reviews/product-consistency.toml");
+            .join(".hannes/reviews/product-consistency.toml");
         fs::write(
             &file,
             fs::read_to_string(&file)
@@ -186,7 +186,7 @@ impl Provider for ReviewPass {
     fn review(&self, request: &Request<'_>) -> Result<String> {
         self.calls.set(self.calls.get() + 1);
         assert_eq!(request.reviews.len(), 1);
-        Ok(serde_json::json!({"reviews":[{"id":request.reviews[0].id,"status":"PASS","reason":"Documented criteria inspected.","findings":[{"message":"Criteria checked","path":".Hannes/README.md","line":1}]}]}).to_string())
+        Ok(serde_json::json!({"reviews":[{"id":request.reviews[0].id,"status":"PASS","reason":"Documented criteria inspected.","findings":[{"message":"Criteria checked","path":".hannes/README.md","line":1}]}]}).to_string())
     }
 }
 
@@ -231,8 +231,8 @@ fn defaults_explicit_overrides_and_v1_activation_are_strict() {
         "version = 1\nproject = 'Fixture'\nmax_display_files = 5\n",
     );
     assert!(config::load(f.root.path()).is_err()); // new tags/profile files cannot silently work in v1
-    fs::remove_file(f.root.path().join(".Hannes/checks/local-test.toml")).unwrap();
-    fs::remove_dir_all(f.root.path().join(".Hannes/profiles")).unwrap();
+    fs::remove_file(f.root.path().join(".hannes/checks/local-test.toml")).unwrap();
+    fs::remove_dir_all(f.root.path().join(".hannes/profiles")).unwrap();
     f.write("checks/always-ok.toml", "id='always-ok'\ndescription='Test'\nenabled=true\ncommand=['git','--version']\ntimeout_seconds=30\ntags=[]\n");
     assert!(config::load(f.root.path()).is_err());
 }
@@ -311,7 +311,7 @@ fn preview_is_offline_and_preserves_report_and_git_state() {
     assert_eq!(value["planned_model_calls"], 1);
     assert_eq!(value["provider_availability_checked"], false);
     assert_eq!(
-        fs::read_to_string(f.root.path().join(".Hannes/reports/last.json")).unwrap(),
+        fs::read_to_string(f.root.path().join(".hannes/reports/last.json")).unwrap(),
         "unchanged report bytes"
     );
     assert_eq!(
@@ -357,7 +357,7 @@ fn checks_only_explains_omissions_and_cannot_shrink_a_gate() {
         "gate",
         "gate=true\nrules=['always-ok','product-consistency']",
     );
-    let saved = fs::read(f.root.path().join(".Hannes/reports/last.json")).unwrap();
+    let saved = fs::read(f.root.path().join(".hannes/reports/last.json")).unwrap();
     let blocked = f.plan(Some("gate"), true);
     assert!(!blocked.executable());
     let output = f.cli(&[
@@ -376,7 +376,7 @@ fn checks_only_explains_omissions_and_cannot_shrink_a_gate() {
     );
     assert!(f.run("gate", true, &Never).is_err());
     assert_eq!(
-        fs::read(f.root.path().join(".Hannes/reports/last.json")).unwrap(),
+        fs::read(f.root.path().join(".hannes/reports/last.json")).unwrap(),
         saved
     );
     assert!(!f.state.path().join("provider-called").exists());
@@ -420,8 +420,8 @@ fn plan_ids_ignore_selector_and_metadata_order_but_track_semantic_inputs() {
         "include_tags=['critical','local']\nrules=['alpha','beta']",
     );
     fs::rename(
-        f.root.path().join(".Hannes/checks/alpha.toml"),
-        f.root.path().join(".Hannes/checks/renamed.toml"),
+        f.root.path().join(".hannes/checks/alpha.toml"),
+        f.root.path().join(".hannes/checks/renamed.toml"),
     )
     .unwrap();
     assert_eq!(original.plan_id, f.plan(Some("local"), false).plan_id);
@@ -429,7 +429,7 @@ fn plan_ids_ignore_selector_and_metadata_order_but_track_semantic_inputs() {
         original.input.fingerprint,
         f.plan(Some("local"), false).input.fingerprint
     );
-    let provider = f.root.path().join(".Hannes/provider.toml");
+    let provider = f.root.path().join(".hannes/provider.toml");
     fs::write(
         &provider,
         fs::read_to_string(&provider)

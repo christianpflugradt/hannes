@@ -6,11 +6,13 @@
 examples; `checks` executes deterministic commands; `process` handles deadlines
 and capture; `provider` invokes Codex; `reviews` validates final JSON; `git_snapshot`
 fingerprints working files; `report` serializes/persists; `terminal` renders both
-run and status. `planner` resolves profiles/tags, prepares bounded offline context
+run and status. `discovery` loads version-3 documents with source paths; `rules` validates domain
+references and resolves effective execution points; `planner` selects one point and prepares bounded offline context
 and fingerprints the plan; preview and `lib::verify` share that selection. Plan
 metadata is canonicalized separately from raw snapshots to keep semantic IDs
-stable across TOML formatting and selector order. Report schema 2 saves the plan;
-schema 1 stays readable as unprofiled legacy evidence.
+stable across TOML formatting and selector order. Report schema 3 saves execution-point plans; historical report schemas stay readable.
+Legacy profile/gate fields in plan deserialization exist only to read historical
+reports and never participate in configuration or rule selection.
 
 Configuration defaults and bounds are shared through `limits` and typed scaffold
 serialization in `config`. Documentation tests check public fields, defaults,
@@ -39,7 +41,7 @@ Safe composition inserts a section before existing POSIX sh commands; no shell
 parser or arbitrary rewriting is used. Repository-local custom paths are supported;
 external paths, links and ambiguous ownership fail before mutation.
 
-Explicit hook context is checked against the configured event/profile and effective
+Explicit hook context is checked against the configured event/execution point and effective
 wrapper path. Hook invocations inspect the same plan read-only; checker subprocesses
 receive arguments as indexed environment values plus a repository recursion guard.
 No provider or network participates. See [usage and recovery](usage.md#optional-git-hook).
@@ -153,3 +155,18 @@ Hannes inherits trusted local Codex login and applies the documented review over
 and `never` approval settings explicitly. It does not load credentials itself,
 copy tokens to CI, record raw provider traces or repair files. Read-only sandbox
 support depends on Codex and the platform. Unsupported CLI versions fail closed.
+
+## Phase boundaries
+
+Phase 1 uses local TOML documents only. Discovery supplies assignments and source
+paths to a pure resolver; it never resolves remote repositories. Rule sets contain
+rule IDs only, with no nesting or back-references on rules. Phase 2 can supply
+external definitions after enforcing same-source references, exactly one set per
+repository, and immutable consumer assignments. Source identity and Git reference
+handling belong to that loader; no speculative provider framework is introduced.
+
+Phase 3 coordinates migration of pinned self-governance configuration, versioned
+hooks, GitHub Actions and historical roadmap/release documentation. These continue
+using the published governor until a compatible release is available. No hooks,
+remote services, releases or governed project files are automatically installed or
+repaired by phase 1.

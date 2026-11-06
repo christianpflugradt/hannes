@@ -199,10 +199,10 @@ fn read(path: &Path) -> Result<Option<FileState>> {
     }))
 }
 
-fn block(owner: &str, event: &str, profile: &str) -> String {
-    // Profile IDs and events are validated ASCII identifiers, never shell source.
+fn block(owner: &str, event: &str, point: &str) -> String {
+    // Execution-point IDs and events are validated ASCII identifiers, never shell source.
     format!(
-        "{BEGIN}\n# Hannes repository: {owner}\nhannes mach was --profil '{profile}' --git-hook '{event}' --git-hook-path \"$0\" -- \"$@\" || exit \"$?\"\n{END}\n"
+        "{BEGIN}\n# Hannes repository: {owner}\nhannes mach was --at '{point}' --git-hook '{event}' --git-hook-path \"$0\" -- \"$@\" || exit \"$?\"\n{END}\n"
     )
 }
 
@@ -210,11 +210,11 @@ fn desired(
     before: Option<&FileState>,
     owner: &str,
     event: &str,
-    profile: Option<&String>,
+    point: Option<&String>,
 ) -> Result<Option<FileState>> {
     let Some(before) = before else {
-        return Ok(profile.map(|profile| FileState {
-            text: format!("{HEADER}{}", block(owner, event, profile)),
+        return Ok(point.map(|point| FileState {
+            text: format!("{HEADER}{}", block(owner, event, point)),
             mode: 0o755,
         }));
     };
@@ -226,7 +226,7 @@ fn desired(
         || !ends.is_empty()
         || text.contains("Hannes repository:")
         || text.contains("Hannes hook wrapper");
-    if !managed && profile.is_none() {
+    if !managed && point.is_none() {
         return Ok(Some(before.clone()));
     }
     let shebang = "#!/bin/sh\n";
@@ -276,11 +276,11 @@ fn desired(
         );
         (shebang.len(), shebang.len())
     };
-    let replacement = profile
-        .map(|profile| block(owner, event, profile))
+    let replacement = point
+        .map(|point| block(owner, event, point))
         .unwrap_or_default();
     let whole = text.starts_with(HEADER) && start == HEADER.len() && end == text.len();
-    if whole && profile.is_none() {
+    if whole && point.is_none() {
         return Ok(None);
     }
     let result = format!("{}{}{}", &text[..start], replacement, &text[end..]);
@@ -290,7 +290,7 @@ fn desired(
     );
     Ok(Some(FileState {
         text: result,
-        mode: if profile.is_some() {
+        mode: if point.is_some() {
             before.mode | 0o100
         } else {
             before.mode
@@ -481,7 +481,7 @@ pub fn terminal_approval(plan: &Plan) -> Result<bool> {
 pub fn prepare(
     project: &Project,
     invocation: Option<HookInvocation>,
-    profile: Option<&str>,
+    point: Option<&str>,
 ) -> Result<Option<HookContext>> {
     let (_, owner) = location(project)?;
     ensure!(
@@ -500,8 +500,8 @@ pub fn prepare(
             .as_ref()
             .and_then(|hooks| hooks.git.get(&invocation.event));
         ensure!(
-            configured.map(String::as_str) == profile && configured.is_some(),
-            "hook invocation profile does not match configuration; run hannes pass auf manually"
+            configured.map(String::as_str) == point && configured.is_some(),
+            "hook invocation point does not match configuration; run hannes pass auf manually"
         );
         let path = if invocation.path.is_absolute() {
             invocation.path.clone()
@@ -539,7 +539,7 @@ mod tests {
                 .success()
         );
         crate::config::init(root.path()).unwrap();
-        fs::write(root.path().join(".hannes/config.toml"), "version = 2\nproject = 'My_App'\nmax_display_files = 5\n[hooks.git]\npre-commit = 'all'\npre-push = 'all'\n").unwrap();
+        fs::write(root.path().join(".hannes/config.toml"), "version = 3\nproject = 'My_App'\nmax_display_files = 5\n[hooks.git]\npre-commit = 'pre-commit'\npre-push = 'pre-push'\n").unwrap();
         root
     }
 

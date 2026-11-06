@@ -42,7 +42,8 @@ pub struct Config {
     pub version: u32,
     pub project: String,
     pub max_display_files: usize,
-    pub default_profile: Option<String>,
+    #[serde(default)]
+    pub execution_points: ExecutionPoints,
     pub hooks: Option<Hooks>,
 }
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -95,6 +96,8 @@ pub struct Check {
     pub timeout_seconds: u64,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub run_at: Vec<String>,
 }
 fn default_directory() -> String {
     ".".into()
@@ -112,6 +115,8 @@ pub struct Review {
     pub context: Vec<ReviewContext>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub run_at: Vec<String>,
     #[serde(skip)]
     pub text: String,
 }
@@ -122,40 +127,36 @@ pub struct Project {
     pub provider: ProviderConfig,
     pub checks: Vec<Check>,
     pub reviews: Vec<Review>,
-    pub profiles: Vec<Profile>,
+    pub rule_sets: Vec<RuleSet>,
+    pub effective: crate::rules::EffectiveConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutionPoints {
+    #[serde(default)]
+    pub custom: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Profile {
+pub struct RuleSet {
     pub id: String,
-    #[serde(default)]
+    pub enabled: bool,
     pub rules: Vec<String>,
     #[serde(default)]
-    pub include_tags: Vec<String>,
-    #[serde(default)]
-    pub gate: bool,
-    #[serde(default = "worktree")]
-    pub input: String,
+    pub run_at: Vec<String>,
 }
-fn worktree() -> String {
-    "worktree".into()
-}
-impl Profile {
-    pub fn selects(&self, id: &str, tags: &[String]) -> bool {
-        self.id == "all"
-            || self.rules.iter().any(|rule| rule == id)
-            || tags.iter().any(|tag| self.include_tags.contains(tag))
-    }
-    pub fn all() -> Self {
-        Self {
-            id: "all".into(),
-            rules: vec![],
-            include_tags: vec![],
-            gate: false,
-            input: worktree(),
-        }
-    }
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Definitions {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<Check>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reviews: Vec<Review>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rule_sets: Vec<RuleSet>,
 }
 
 fn tag(value: &str) -> Result<()> {
@@ -166,7 +167,7 @@ fn tag(value: &str) -> Result<()> {
             && value
                 .bytes()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"-_".contains(&c)),
-        "invalid tag/profile ID {value:?}: use 1..{MAX_TAG_BYTES} lowercase ASCII letters, digits, - or _, starting with a letter or digit"
+        "invalid label {value:?}: use 1..{MAX_TAG_BYTES} lowercase ASCII letters, digits, - or _, starting with a letter or digit"
     );
     Ok(())
 }
@@ -185,19 +186,6 @@ fn tags(values: &mut [String]) -> Result<()> {
     }
     unique(values, "rule tag")
 }
-fn parse_rule<T: serde::de::DeserializeOwned>(root: &Path, path: &Path, version: u32) -> Result<T> {
-    let text = read_bounded(&inside(root, path)?, MAX_METADATA)?;
-    if version == 1 {
-        let table: toml::Table = toml::from_str(&text)?;
-        ensure!(
-            !table.contains_key("tags"),
-            "{}: tags require configuration version 2",
-            path.display()
-        );
-    }
-    toml::from_str(&text).with_context(|| format!("invalid {}", path.display()))
-}
-
 pub fn relative(path: &Path) -> Result<()> {
     ensure!(
         !path.as_os_str().is_empty() && !path.is_absolute(),
@@ -279,43 +267,20 @@ fn identity(id: &str, description: &str, ids: &mut BTreeSet<String>) -> Result<(
     ensure!(ids.insert(id.to_owned()), "duplicate id: {id}");
     nonempty(description, "description")
 }
-fn metadata_files(root: &Path, dir: &Path) -> Result<Vec<PathBuf>> {
-    let full = inside(root, dir)?;
-    let mut paths = Vec::new();
-    for entry in fs::read_dir(full)? {
-        let entry = entry?;
-        if entry.path().extension().is_some_and(|x| x == "toml") {
-            paths.push(dir.join(entry.file_name()));
-        }
-        ensure!(
-            paths.len() <= MAX_RULES,
-            "at most {MAX_RULES} metadata files per directory"
-        );
-    }
-    paths.sort();
-    Ok(paths)
-}
 pub fn load(root: &Path) -> Result<Project> {
     let root = root.canonicalize()?;
     crate::git_snapshot::require_root(&root)?;
-    let config: Config = parse(&root, &self::path("config.toml"))?;
+    let loaded = crate::discovery::load(&root)?;
+    let config = loaded.config;
     ensure!(
-        matches!(config.version, 1 | 2),
-        "unsupported configuration version {}",
+        config.version == 3,
+        ".hannes/config.toml: unsupported configuration version {}; migrate to version 3 rules and rule sets",
         config.version
     );
-    ensure!(
-        config.version == 2 || config.default_profile.is_none(),
-        "default_profile requires configuration version 2"
-    );
-    ensure!(
-        config.version == 2 || config.hooks.is_none(),
-        "hooks require configuration version 2"
-    );
-    nonempty(&config.project, "project")?;
+    nonempty(&config.project, "project").context(".hannes/config.toml")?;
     ensure!(
         (1..=MAX_DISPLAY_FILES).contains(&config.max_display_files),
-        "max_display_files must be 1..={MAX_DISPLAY_FILES}"
+        ".hannes/config.toml: max_display_files must be 1..={MAX_DISPLAY_FILES}"
     );
     let provider: ProviderConfig = parse(&root, &self::path("provider.toml"))?;
     ensure!(
@@ -360,8 +325,7 @@ pub fn load(root: &Path) -> Result<Project> {
     }
     let mut ids = BTreeSet::new();
     let mut checks = Vec::new();
-    for path in metadata_files(&root, &self::path("checks"))? {
-        let mut check: Check = parse_rule(&root, &path, config.version)?;
+    for (path, mut check) in loaded.checks {
         (|| -> Result<()> {
             identity(&check.id, &check.description, &mut ids)?;
             tags(&mut check.tags)?;
@@ -398,8 +362,7 @@ pub fn load(root: &Path) -> Result<Project> {
     }
     let mut reviews = Vec::new();
     let mut instruction_bytes = 0;
-    for path in metadata_files(&root, &self::path("reviews"))? {
-        let mut review: Review = parse_rule(&root, &path, config.version)?;
+    for (path, mut review) in loaded.reviews {
         (|| -> Result<()> {
             identity(&review.id, &review.description, &mut ids)?;
             tags(&mut review.tags)?;
@@ -447,10 +410,10 @@ pub fn load(root: &Path) -> Result<Project> {
                 p.extension().is_some_and(|s| s == "md"),
                 "instructions must reference Markdown (.md)"
             );
-            let full = inside(&root, &self::path("reviews").join(p))?;
+            let full = inside(&root, &path.parent().unwrap().join(p))?;
             ensure!(
-                full.starts_with(root.join(self::path("reviews")).canonicalize()?),
-                "instructions must stay inside reviews directory"
+                full.starts_with(root.join(self::path("")).canonicalize()?),
+                "instructions must stay inside .hannes"
             );
             review.text = read_bounded(&full, MAX_INSTRUCTIONS)?;
             nonempty(&review.text, "instructions")?;
@@ -461,95 +424,38 @@ pub fn load(root: &Path) -> Result<Project> {
             );
             Ok(())
         })()
-        .with_context(|| format!("invalid {}", path.display()))?;
+        .with_context(|| format!("invalid review '{}' ({})", review.id, path.display()))?;
         reviews.push(review);
     }
     checks.sort_by(|a, b| a.id.cmp(&b.id));
     reviews.sort_by(|a, b| a.id.cmp(&b.id));
     crate::review_context::collect(&root, &reviews.iter().collect::<Vec<_>>())?;
-    let mut profiles = Vec::new();
-    if root.join(self::path("profiles")).symlink_metadata().is_ok() {
-        let paths = metadata_files(&root, &self::path("profiles"))?;
-        ensure!(
-            config.version == 2 || paths.is_empty(),
-            "profiles require configuration version 2"
-        );
-        let known_tags: BTreeSet<_> = checks
-            .iter()
-            .flat_map(|r| &r.tags)
-            .chain(reviews.iter().flat_map(|r| &r.tags))
-            .collect();
-        let mut profile_ids = BTreeSet::new();
-        for path in paths {
-            let mut profile: Profile = parse(&root, &path)?;
-            (|| -> Result<()> {
-                tag(&profile.id)?;
-                ensure!(
-                    profile.id != "all" && profile_ids.insert(profile.id.clone()),
-                    "reserved or duplicate profile ID: {}",
-                    profile.id
-                );
-                ensure!(
-                    profile.input == "worktree",
-                    "unsupported profile input {}; only worktree is implemented",
-                    profile.input
-                );
-                unique(&mut profile.rules, "profile rule selector")?;
-                unique(&mut profile.include_tags, "profile tag selector")?;
-                for id in &profile.rules {
-                    ensure!(ids.contains(id), "unknown rule selector: {id}");
-                }
-                for value in &profile.include_tags {
-                    tag(value)?;
-                    ensure!(known_tags.contains(value), "unknown tag selector: {value}");
-                }
-                if profile.gate {
-                    let selected: Vec<_> = checks
-                        .iter()
-                        .map(|r| (&r.id, &r.tags, r.enabled))
-                        .chain(reviews.iter().map(|r| (&r.id, &r.tags, r.enabled)))
-                        .filter(|(id, tags, _)| profile.selects(id, tags))
-                        .collect();
-                    ensure!(!selected.is_empty(), "gate {} selects no rules", profile.id);
-                    ensure!(
-                        selected.iter().all(|(_, _, enabled)| *enabled),
-                        "gate {} selects disabled required rules",
-                        profile.id
-                    );
-                }
-                Ok(())
-            })()
-            .with_context(|| format!("invalid {}", path.display()))?;
-            profiles.push(profile);
-        }
-    }
-    profiles.sort_by(|a, b| a.id.cmp(&b.id));
-    if let Some(default) = &config.default_profile {
-        ensure!(
-            default == "all" || profiles.iter().any(|p| &p.id == default),
-            "unknown default profile: {default}"
-        );
-    }
+    let effective = crate::rules::resolve(
+        &config.execution_points,
+        &loaded.assignments,
+        &loaded.rule_sets,
+    )?;
     if let Some(hooks) = &config.hooks {
-        for (event, profile) in &hooks.git {
+        for (event, point) in &hooks.git {
             ensure!(
                 crate::reconciliation::GIT_EVENTS.contains(&event.as_str()),
-                "unsupported Git hook: {event}"
+                ".hannes/config.toml: hooks.git: unsupported Git hook: {event}"
             );
-            tag(profile)?;
             ensure!(
-                profile == "all" || profiles.iter().any(|p| &p.id == profile),
-                "unknown Git hook profile: {profile}"
+                effective.points.contains(point),
+                ".hannes/config.toml: hooks.git.{event}: unknown execution point: {point}"
             );
         }
     }
+    let rule_sets = loaded.rule_sets.into_iter().map(|(_, set)| set).collect();
     Ok(Project {
         root,
         config,
         provider,
         checks,
         reviews,
-        profiles,
+        rule_sets,
+        effective,
     })
 }
 
@@ -574,10 +480,10 @@ pub fn init(root: &Path) -> Result<usize> {
         .to_string_lossy()
         .into_owned();
     let config = Config {
-        version: 1,
+        version: 3,
         project,
         max_display_files: MAX_DISPLAY_FILES,
-        default_profile: None,
+        execution_points: ExecutionPoints::default(),
         hooks: None,
     };
     let check = |id: &str, description: &str, enabled: bool, argument: &str| Check {
@@ -588,6 +494,7 @@ pub fn init(root: &Path) -> Result<usize> {
         working_directory: default_directory(),
         timeout_seconds: 30,
         tags: vec![],
+        run_at: vec!["pre-push".into()],
     };
     let review = Review {
         id: "product-consistency".into(),
@@ -597,14 +504,15 @@ pub fn init(root: &Path) -> Result<usize> {
         files: vec![],
         context: vec![],
         tags: vec![],
+        run_at: vec!["pre-push".into()],
         text: String::new(),
     };
     let files = [
         ("config.toml", scaffold(&config)?),
         ("provider.toml", scaffold(&ProviderConfig::scaffold())?),
-        ("checks/always-ok.toml", scaffold(&check("always-ok", "Example deterministic pass", true, "--version"))?),
-        ("checks/deliberately-failing.toml", scaffold(&check("deliberately-failing", "Disabled example demonstrating failure", false, "definitely-not-a-subcommand"))?),
-        ("reviews/product-consistency.toml", scaffold(&review)?),
+        ("checks/always-ok.toml", check_scaffold(check("always-ok", "Example deterministic pass", true, "--version"))?),
+        ("checks/deliberately-failing.toml", check_scaffold(check("deliberately-failing", "Disabled example demonstrating failure", false, "definitely-not-a-subcommand"))?),
+        ("reviews/product-consistency.toml", scaffold(&Definitions { reviews: vec![review], ..Definitions::default() })?),
         ("reviews/product-consistency.md", "Evaluate the current working files against expectations explicitly documented in this project. Inspect relevant changed code and documentation. Do not invent requirements. Cite concrete file paths and line numbers. State uncertainty as ERROR when necessary evidence is unavailable. Report FAIL for a grounded contradiction, PASS only with grounded reasons. Customize this guidance before enabling.\n".into()),
         ("reports/.gitignore", "*\n!.gitignore\n".into()),
         ("README.md", include_str!("../docs/configuration.md").into()),
@@ -624,17 +532,40 @@ pub fn init(root: &Path) -> Result<usize> {
     Ok(created)
 }
 
-/// Serialize real configuration types while keeping version-1 examples minimal.
+/// Serialize real configuration types while omitting empty optional rule fields.
 fn scaffold(value: &impl Serialize) -> Result<String> {
     let mut table = toml::Value::try_from(value)?;
-    for key in ["tags", "files", "context"] {
-        if table
-            .get(key)
-            .and_then(toml::Value::as_array)
-            .is_some_and(Vec::is_empty)
-        {
-            table.as_table_mut().unwrap().remove(key);
+    fn trim(value: &mut toml::Value) {
+        match value {
+            toml::Value::Table(table) => {
+                for key in ["tags", "files", "context"] {
+                    if table
+                        .get(key)
+                        .and_then(toml::Value::as_array)
+                        .is_some_and(Vec::is_empty)
+                    {
+                        table.remove(key);
+                    }
+                }
+                for (_, child) in table.iter_mut() {
+                    trim(child);
+                }
+            }
+            toml::Value::Array(array) => {
+                for child in array {
+                    trim(child);
+                }
+            }
+            _ => {}
         }
     }
+    trim(&mut table);
     Ok(toml::to_string(&table)?)
+}
+
+fn check_scaffold(check: Check) -> Result<String> {
+    scaffold(&Definitions {
+        checks: vec![check],
+        ..Definitions::default()
+    })
 }

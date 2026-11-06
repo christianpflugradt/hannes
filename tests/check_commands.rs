@@ -27,7 +27,10 @@ fn check(root: &Path, command: toml::Value, enabled: bool, directory: &str) {
     };
     fs::write(
         root.join(".hannes/checks/always-ok.toml"),
-        toml::to_string(&value).unwrap(),
+        format!(
+            "[[checks]]\nrun_at = ['pre-push']\n{}",
+            toml::to_string(&value).unwrap()
+        ),
     )
     .unwrap();
 }
@@ -107,13 +110,9 @@ fn pass_auf_rejects_invalid_commands_even_when_disabled_without_execution() {
 }
 
 #[test]
-fn arrays_are_rejected_in_both_configuration_versions() {
+fn arrays_are_rejected_in_configuration_version_three() {
     let root = project();
-    for version in [1, 2] {
-        let file = root.path().join(".hannes/config.toml");
-        let mut value: toml::Table = toml::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
-        value.insert("version".into(), version.into());
-        fs::write(file, toml::to_string(&value).unwrap()).unwrap();
+    {
         check(
             root.path(),
             toml::Value::Array(vec!["git".into(), "--version".into()]),

@@ -238,7 +238,7 @@ pub fn render_progress(event: &crate::Progress<'_>, color: bool) -> String {
 }
 pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
     let mut text = format!(
-        "{} · {}\nProfil: {} ({}) · {} · Input: {}\nPlan-ID: {}\nHEAD: {}\nSnapshot: {} · {}\n",
+        "{} · {}\nExecution Point: {} ({}) · {} · Input: {}\nPlan-ID: {}\nHEAD: {}\nSnapshot: {} · {}\n",
         paint("Hannes Ausführungsplan", Tone::Heading, color),
         paint(
             &plan.status.to_uppercase(),
@@ -249,9 +249,21 @@ pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
             },
             color
         ),
-        clean(&plan.profile),
-        clean(&plan.profile_source),
-        if plan.gate { "Gate" } else { "Regelauswahl" },
+        clean(if plan.at.is_empty() {
+            &plan.profile
+        } else {
+            &plan.at
+        }),
+        clean(if plan.at.is_empty() {
+            &plan.profile_source
+        } else {
+            "execution point"
+        }),
+        if plan.at.is_empty() {
+            "Legacy selection"
+        } else {
+            "Execution point"
+        },
         clean(&plan.input.kind),
         plan.plan_id,
         plan.input.head.as_deref().unwrap_or("unborn"),
@@ -295,7 +307,7 @@ pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
             omitted.reason
         ));
     }
-    if plan.gate {
+    if !plan.required_ids.is_empty() {
         text.push_str(&format!(
             "Pflichtregeln: {}\n",
             clean(&plan.required_ids.join(", "))
@@ -358,10 +370,18 @@ pub fn render(report: &Report, color: bool) -> String {
     );
     if let Some(plan) = &report.plan {
         text.push_str(&format!(
-            "Profil: {} · Input: {} · {}{}\n",
-            clean(&plan.profile),
+            "Execution Point: {} · Input: {} · {}{}\n",
+            clean(if plan.at.is_empty() {
+                &plan.profile
+            } else {
+                &plan.at
+            }),
             clean(&plan.input.kind),
-            if plan.gate { "Gate" } else { "Regelauswahl" },
+            if plan.at.is_empty() {
+                "Legacy selection"
+            } else {
+                "Execution point"
+            },
             if plan.selection_complete {
                 ""
             } else {
@@ -372,7 +392,7 @@ pub fn render(report: &Report, color: bool) -> String {
             text.push_str("Keine aktiven Regeln ausgewählt; kein Regel-PASS belegt.\n");
         }
     } else {
-        text.push_str("Profil: Legacy-Report ohne Profilzuordnung · kein Profil-Gate-Nachweis\n");
+        text.push_str("Legacy-Report ohne Execution-Point-Zuordnung\n");
     }
     if report.checks_only {
         text.push_str(&paint(
@@ -436,7 +456,7 @@ pub fn render_details(report: &Report, color: bool) -> String {
                 "eingeschränkt"
             }
         ));
-        if plan.gate {
+        if !plan.required_ids.is_empty() {
             text.push_str(&format!(
                 "Pflichtregeln: {}\n",
                 clean(&plan.required_ids.join(", "))

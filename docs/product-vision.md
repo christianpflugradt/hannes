@@ -161,7 +161,7 @@ Its primary capabilities are:
 - LLM-based reviews.
 - A Codex CLI provider.
 - Configuration validation and confirmed reconciliation of declared external state.
-- Rule selection through profiles.
+- Rule selection through execution points and rule sets.
 - Structured verification reports.
 - Git working-tree change detection.
 - CLI integration with Git hooks and CI pipelines.

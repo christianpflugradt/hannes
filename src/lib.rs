@@ -2,6 +2,7 @@ mod check_command;
 pub mod checks;
 pub mod cli;
 pub mod config;
+pub mod discovery;
 pub mod git_snapshot;
 pub mod limits;
 pub mod mood;
@@ -15,6 +16,7 @@ pub mod review_context;
 pub mod review_contract;
 pub mod review_input;
 pub mod reviews;
+pub mod rules;
 pub mod terminal;
 pub mod uninstall;
 
@@ -78,17 +80,17 @@ pub fn verify_project_with_mode(
     mode: VerificationMode,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Report> {
-    verify_project_with_profile(project, provider, mode, None, progress)
+    verify_project_at(project, provider, mode, None, progress)
 }
 
-pub fn verify_project_with_profile(
+pub fn verify_project_at(
     project: config::Project,
     provider: &dyn provider::Provider,
     mode: VerificationMode,
-    profile: Option<&str>,
+    at: Option<&str>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Report> {
-    verify_project_with_context(project, provider, mode, profile, None, progress)
+    verify_project_with_context(project, provider, mode, at, None, progress)
 }
 
 /// Execute rules after the command lifecycle has validated and reconciled the project.
@@ -96,7 +98,7 @@ pub fn verify_project_with_context(
     mut project: config::Project,
     provider: &dyn provider::Provider,
     mode: VerificationMode,
-    profile: Option<&str>,
+    at: Option<&str>,
     hook: Option<&reconciliation::HookContext>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Report> {
@@ -108,10 +110,10 @@ pub fn verify_project_with_context(
         plan,
         snapshot,
         review_input,
-    } = planner::build(&project, profile, checks_only)?;
+    } = planner::build(&project, at, checks_only)?;
     anyhow::ensure!(
-        !plan.gate || plan.selection_complete,
-        "Gate requires reviews; --geiz-ist-geil cannot omit required rules"
+        plan.selection_complete,
+        "Execution point requires reviews; --geiz-ist-geil cannot omit required rules"
     );
     planner::apply(&mut project, &plan);
     let check_count = project.checks.iter().filter(|c| c.enabled).count();
@@ -244,7 +246,7 @@ pub fn verify_project_with_context(
         }
     }
     let report = Report {
-        schema_version: 2,
+        schema_version: 3,
         timestamp: chrono::Utc::now().to_rfc3339(),
         repository: project.root.to_string_lossy().into_owned(),
         project: project.config.project,

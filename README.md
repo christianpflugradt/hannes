@@ -45,7 +45,7 @@ for its principles and long-term direction.
   - [Add a check](#add-a-check)
   - [Configure the AI provider](#configure-the-ai-provider)
   - [Add a review](#add-a-review)
-  - [Group rules into profiles](#group-rules-into-profiles)
+  - [Group rules into rule sets](#group-rules-into-rule-sets)
   - [Reports and other files](#reports-and-other-files)
 - [Limits and unsupported features](#limits-and-unsupported-features)
 - [Development](#development)
@@ -202,7 +202,7 @@ The command phrases are German and must be entered as shown, without quotes:
 | Option | Used with | Meaning |
 | --- | --- | --- |
 | `--geiz-ist-geil` | `mach was` | Run only checks; do not call an AI provider. |
-| `--profil NAME` | `mach was` | Select a named group of rules instead of the default. |
+| `--at NAME` | `mach was` | Select a known execution point (default `pre-push`). |
 | `--plan` | `mach was` | Preview what would run without executing rules or calling the provider. |
 | `--json` | `mach was --plan` | Print the plan or plan errors as JSON. |
 | `--details` | `was ist phase` | Show full findings and captured check output. |
@@ -210,7 +210,7 @@ The command phrases are German and must be entered as shown, without quotes:
 | `-h`, `--help` | Any command | Show help. |
 | `-V`, `--version` | `hannes` | Show the version. |
 
-Without a profile, all enabled checks run first, followed by all enabled reviews.
+At the selected execution point, enabled checks run first, followed by reviews.
 Within each kind, rules run in ID order. Disabled rules are validated but are not
 executed or included in results. Selected reviews share one Codex invocation.
 
@@ -223,6 +223,9 @@ establish that your project passed any quality rules.
 ```sh
 hannes mach was --geiz-ist-geil
 ```
+
+The selected execution point must contain checks only. A required review makes
+this invocation fail before any rule runs.
 
 This runs selected enabled checks only: no Codex discovery, MCP connections or
 review-token usage. The report is explicitly marked as checks-only and omits
@@ -272,28 +275,20 @@ calculate money, remaining account quota or enforce a total token budget.
 
 ### Choose rules and preview a run
 
-A **profile** is a named selection of rules, such as a quick local selection and
-a stricter release selection. Profiles and rule **tags** (labels used for selection)
-require configuration version 2. Profiles select checks and reviews; hook mappings
-choose when a profile runs. Provider permissions remain separate. See [profile configuration](#group-rules-into-profiles).
+Execution points select the rules assigned to a named context. Use `--plan` for
+an offline preview of the same selection and prepared review input:
 
 ```sh
-hannes mach was --profil local --plan
-hannes mach was --profil local --plan --json
-hannes mach was --profil local
+hannes mach was --at pre-push --plan
+hannes mach was --at pre-push --plan --json
+hannes mach was --at pre-push
 ```
 
-A plan shows selected rules, order, selection reasons, omissions, required rules,
-model/MCP settings and bounded context/diff sizes. It runs no checks, provider CLI,
-MCP servers or network calls, and preserves the saved report. It cannot confirm
-model availability, login or inherited Codex defaults. JSON plans use schema 1.
-
-Each actual run builds a fresh plan. A matching plan ID is neither a cached result
-nor proof that a later working tree is unchanged.
+See [rule sets and execution points](#group-rules-into-rule-sets) for assignments.
 
 ### Use a Git hook or CI
 
-Declare Git events and the profiles they execute in version-2 configuration:
+Declare Git events and their execution points in version-3 configuration:
 
 ```toml
 [hooks.git]
@@ -302,13 +297,13 @@ commit-msg = "commit-msg"
 pre-push = "pre-push"
 ```
 
-Create the referenced profiles first. These are the three supported events;
+Assign rules to the referenced execution points first. These are the three supported events;
 `commit-msg` receives the final message file, while `pre-commit` runs before it is
 available. Hannes delegates message validation to your configured checker.
 
 `hannes pass auf` validates configuration, inspects actual state, plans changes,
 asks for confirmation, applies the approved plan and verifies it. `mach was` does
-the same before executing its profile. Synchronized repositories need no prompt
+the same before executing its execution point. Synchronized repositories need no prompt
 or writes. Declining, conflicts, failed reconciliation or a required confirmation
 without a terminal exit 2 before checks; run `hannes pass auf` interactively.
 `mach was --plan` remains a read-only execution preview and does not synchronize.
@@ -333,10 +328,10 @@ Hannes reads the lowercase `.hannes/` directory in the Git working-tree root:
 .hannes/
   config.toml                 # Project settings and configuration version.
   provider.toml               # Codex model, timeout and allowed integrations.
-  checks/*.toml               # One check per file.
-  reviews/*.toml              # One review per file.
+  checks/*.toml               # Example layout; names and directories are freely chosen.
+  reviews/*.toml              # Definitions use [[reviews]].
   reviews/*.md                # Criteria referenced by reviews.
-  profiles/*.toml             # Optional rule selections; version 2 only.
+  security/quality.toml       # Example nested rules and rule sets.
   reports/.gitignore          # Keeps generated reports local.
   reports/last.json           # Generated results, not configuration.
   README.md                   # Editable guidance, not parsed settings.
@@ -346,10 +341,15 @@ Settings use TOML. Each file below has its own example and field table.
 “Required” means the field must be present. A default applies when an optional
 field is omitted; generated files may explicitly choose a different value.
 
-Only immediate `.toml` files in rule/profile directories are loaded; subdirectories
-are not searched. Filenames need not match IDs. Unknown fields, duplicate TOML
-keys/IDs and invalid values are errors, including in disabled rules and unused
-profiles. Required nonblank text fields must not contain NUL; text files use UTF-8.
+TOML files are discovered recursively in sorted order. Each document may contain
+`[[checks]]`, `[[reviews]]` and `[[rule_sets]]` tables, including `config.toml`.
+File names do not determine the content type. The central `config.toml` is read
+once; `provider.toml` is reserved for provider settings. Hidden entries and
+`reports`, `cache`, `caches` directories are excluded. Symlinks and special files
+are rejected, including internal links; directory nesting is bounded.
+Unknown fields, duplicate keys/IDs and invalid references are errors, including
+in disabled definitions. Errors identify the source document and affected entity
+or schema field. Required nonblank text fields contain no NUL; files use UTF-8.
 
 Referenced paths must exist, be relative to their documented base, and resolve
 inside the project. Absolute paths and parent traversal (`..`) are rejected.
@@ -370,19 +370,23 @@ again to refresh saved paths.
 `.hannes/config.toml`:
 
 ```toml
-version = 1
+version = 3
 project = "My_App"
 max_display_files = 5
+
+[execution_points]
+custom = ["check", "release"]
 ```
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `version` | Required | `1` for ordinary checks/reviews, or `2` to enable tags/profiles and Git hook mappings. No automatic migration. |
+| `version` | Required | Exactly `3`. Earlier profile configurations require manual migration. |
 | `project` | Required | Nonblank display name. Initialization uses the project directory name. |
 | `max_display_files` | Required | Integer `1..5`: maximum changed paths shown in status, not a verification limit. |
-| `default_profile` | Optional; `"all"` | Version 2 only: profile selected unless `--profil` overrides it. |
-| `hooks` | Optional; `null` (omitted in TOML) | Version 2 only: desired external integrations. No mappings by default. |
-| `hooks.git` | Optional; `{}` | Git event-to-profile table; only `pre-commit`, `commit-msg`, `pre-push`. Values are existing profile IDs, including `all`. |
+| `execution_points` | Optional table | Declares additional execution contexts. |
+| `execution_points.custom` | Optional; `[]` | Unique custom names: 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Built-in names are reserved. |
+| `hooks` | Optional; `null` (omitted in TOML) | Desired external integrations. No mappings by default. |
+| `hooks.git` | Optional; `{}` | Git event-to-execution-point table; keys are `pre-commit`, `commit-msg`, `pre-push`. Values must be known execution points. |
 
 ### Fields shared by checks and reviews
 
@@ -391,17 +395,23 @@ max_display_files = 5
 | `id` | Required | Case-sensitive ID, unique across checks and reviews: 1–80 ASCII letters, digits, `-` or `_`. Prefix `hannes-` is reserved. |
 | `description` | Required | Nonblank explanation shown in progress output. |
 | `enabled` | Required | `true` to make the rule available for execution; `false` to validate it without running it. |
-| `tags` | Optional; `[]` | Version 2 only: up to 32 unique labels for profile selection. Each uses 1–32 lowercase ASCII letters, digits, `-` or `_`, starting with a letter/digit. |
+| `tags` | Optional; `[]` | Descriptive metadata: up to 32 unique labels. Each uses 1–32 lowercase ASCII letters, digits, `-` or `_`, starting with a letter/digit. |
+| `run_at` | Optional; `[]` | Known execution points. Required effectively for an active rule; active rule sets override this list. |
 
-Version 1 rejects `tags`, even an empty list. Enabling a rule does not force it
-into every profile; the selected profile still decides which enabled rules run.
+A **Rule** is either a deterministic check or an AI review. A **Rule Set** names
+a group of rule IDs. An **Execution Point** names an independent execution context.
+`pre-commit`, `commit-msg` and `pre-push` are always available and cannot be
+redeclared. Other names must appear in `execution_points.custom`.
+
 
 ### Add a check
 
 For a Rust application, create `.hannes/checks/unit-tests.toml`:
 
 ```toml
+[[checks]]
 id = "unit-tests"
+run_at = ["pre-push", "check"]
 description = "Run unit and integration tests"
 enabled = true
 command = "cargo test --locked"
@@ -498,7 +508,7 @@ tool_output_token_limit = 2000
 | `timeout_seconds` | Required | Integer `1..3600`: total seconds for MCP discovery and the model call. Discovery itself is capped at 10 seconds. |
 | `model` | Optional; Codex default | Model identifier passed as `--model`. Generated files select GPT-6.1 Sol (`gpt-6.1-sol`); alternatives must be supported by your CLI/account. |
 | `mcp_servers` | Optional; `[]` | Names of Codex MCP servers allowed for reviews. Empty or omitted disables all of them. See below. |
-| `review_profile` | Optional table | Settings for the shared AI call. This is separate from a rule-selection profile. |
+| `review_profile` | Optional table | Settings for the shared AI call. These settings apply to all reviews. |
 | `review_profile.reasoning_effort` | Optional; Codex default | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`. Actual support depends on the model/CLI. |
 | `review_profile.tool_output_token_limit` | Optional; `2000` | Integer `256..16384`: tokens retained per tool output in Codex history. This is not a limit on total tokens or cost. |
 
@@ -549,13 +559,15 @@ For example, if `My_App` is a Rust CLI with `src/main.rs` and a `Usage` section
 in its README, create `.hannes/reviews/cli-help.toml`:
 
 ```toml
+[[reviews]]
 id = "cli-help"
+run_at = ["pre-push"]
 description = "Compare documented commands with their implementation"
 enabled = true
 instructions = "cli-help.md"
 files = ["src/main.rs"]
 
-[[context]]
+[[reviews.context]]
 path = "README.md"
 headings = ["Usage"]
 ```
@@ -577,9 +589,9 @@ In addition to the [shared fields](#fields-shared-by-checks-and-reviews):
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `instructions` | Required | Nonblank UTF-8 `.md` criteria file relative to `.hannes/reviews/`. It must stay inside that directory. |
+| `instructions` | Required | Nonblank UTF-8 `.md` criteria file relative to its defining TOML document. It must stay inside `.hannes/`. |
 | `files` | Optional; `[]` | Up to 64 unique existing source files relative to the project root. Exact paths, not globs. These are starting points for inspection. |
-| `context` | Optional; `[]` | Up to 32 document selections, written as `[[context]]` entries. They supply requirements or other background to the AI. |
+| `context` | Optional; `[]` | Up to 32 document selections, written as `[[reviews.context]]` entries. They supply requirements or other background to the AI. |
 | `context.path` | Required per entry | Existing UTF-8 file relative to the project root. |
 | `context.headings` | Optional; `[]` | Up to 32 nonblank exact Markdown heading titles. Empty or omitted includes the whole document. |
 
@@ -609,49 +621,54 @@ Missing, duplicate or malformed results make the batch ERROR. You write criteria
 not a custom output schema; Hannes sends these response constraints to the provider
 and checks the returned result locally, including evidence and UTF-8 byte limits.
 
-### Group rules into profiles
+### Group rules into rule sets
 
-Use profiles when different runs need different rule selections, for example a
-small local selection and a mandatory release selection. To enable profiles and
-tags, set `version = 2` in `config.toml`, keeping its other required fields.
-Optionally add `default_profile = "local"`.
-
-To select the check from the earlier example, create `.hannes/profiles/local.toml`:
+Create a TOML document anywhere under `.hannes/`, for example
+`.hannes/backend/quality.toml`, referencing the earlier `unit-tests` rule:
 
 ```toml
-id = "local"
+[[rule_sets]]
+id = "quality"
+enabled = true
 rules = ["unit-tests"]
-include_tags = []
-gate = false
-input = "worktree"
+run_at = ["pre-push", "check"]
 ```
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `id` | Required | Unique profile ID: 1–32 lowercase ASCII letters, digits, `-` or `_`, starting with a letter/digit. `all` is reserved. |
-| `rules` | Optional; `[]` | Unique IDs of existing checks or reviews to select. |
-| `include_tags` | Optional; `[]` | Unique tags that occur on at least one defined rule. Selects rules matching any listed tag. |
-| `gate` | Optional; `false` | Treat all selected rules as mandatory. Reject empty selections and disabled required rules. |
-| `input` | Optional; `"worktree"` | Verify the current working files. Other inputs, including `index` and `commit`, are rejected. |
+| `id` | Required | Unique rule-set ID: 1–80 lowercase ASCII letters, digits, `-` or `_`, starting with a letter/digit. Independent of rule IDs. |
+| `enabled` | Required | `false` disables this set's assignments. |
+| `rules` | Required | Unique existing rule IDs. Other rule sets cannot be referenced. An empty list is allowed. |
+| `run_at` | Optional; `[]` | Known execution points; must be nonempty for an active set. |
 
-Explicit IDs and tag matches are combined without duplicates. To select by tag,
-add `tags = ["local"]` to the relevant version-2 rule definitions, then use
-`include_tags = ["local"]` in the profile. Unknown selectors and duplicates are
-errors, even in unused profiles.
+An active rule with no active set membership uses its own `run_at`. Membership
+in one or more active sets replaces the rule's own list with the union of those
+sets' lists. Hannes reports overridden own assignments as a hint. A rule runs
+once per invocation, even when multiple sets assign it to the same point.
 
-`--profil NAME` overrides `default_profile`. With neither, built-in `all` selects
-all enabled rules. Version 1 rejects profile TOML files, `default_profile`, `hooks` and
-rule tags. Profiles have no inheritance, exclusions or implicit Git-hook behavior.
+Disabled sets contribute nothing. A rule referenced only by disabled sets needs
+its own `run_at` when active. A disabled rule never runs and needs no assignment,
+even when included in active sets. All references are still validated: typos such
+as `chekc`, duplicate declarations/references and missing rule IDs are errors.
 
-A **gate** makes omissions an error: it cannot select disabled rules, be empty,
-or use `--geiz-ist-geil` if reviews are required. A checks-only gate can use that
-flag. Ordinary profiles omit disabled rules and permit checks-only runs with
-reviews omitted. Actual failures block success in either mode; a gate is about
-requiring coverage, not making failures count differently. A working-tree gate
-does not prove that staged or pushed code was verified.
+```sh
+hannes pass auf
+hannes mach was --at pre-commit
+hannes mach was --at commit-msg
+hannes mach was --at pre-push
+hannes mach was --at check
+hannes mach was --at release --plan --json
+```
 
-An empty ordinary profile explicitly reports that no rules ran. Plans and schema-2
-reports record selections and omissions. See [profile and plan details](docs/profiles-and-plans.md).
+Without `--at`, Hannes selects `pre-push`. Each selected rule is mandatory;
+FAIL, ERROR or NOT_RUN prevents success. An empty execution point succeeds
+without establishing any rule PASS. Checks run before reviews, each ordered by
+ID. `--geiz-ist-geil` is accepted only when the point requires no reviews.
+`--plan` prepares the same selection offline without execution or reconciliation.
+
+External rule sets from Git repositories are planned for phase 2. There are no
+remote downloads, imports or local overrides of external rules in phase 1.
+See [execution and plan details](docs/profiles-and-plans.md).
 
 ### Reports and other files
 
@@ -661,10 +678,9 @@ captured check output, available token usage and input identity. Invalid
 configuration preserves the previous report. Delete the report to clear saved
 status; use the status commands to read it rather than editing its contents.
 
-Schema 2 also records the profile/plan and omissions. Status displays the saved
-selection, not today's default profile. Selection does not mean every rule ran:
-failed checks still leave reviews NOT_RUN. Older schema-1 reports remain readable
-as unprofiled evidence, but cannot certify a profile gate.
+Schema 3 records the execution point, plan, source documents and effective
+assignments. Status displays the saved selection. Failed checks leave reviews
+NOT_RUN. Historical schema-1 and schema-2 reports remain readable as saved evidence.
 
 Check stdout/stderr are each captured up to 64 KiB, with byte totals and truncation
 recorded. Full findings and retained output appear with `--details`. Output is
@@ -688,7 +704,7 @@ These limits are built in, not additional configuration fields:
 
 | Area | Limit or behavior |
 | --- | --- |
-| Configuration metadata | 64 KiB per TOML file; up to 256 checks, 256 reviews and 256 profiles. |
+| Configuration metadata | 64 KiB per TOML file; up to 256 configuration documents, 256 rules and 256 rule sets. |
 | Review criteria | 32 KiB per instructions file; 256 KiB combined, including disabled reviews. |
 | Initial AI hints | Up to 200 file-list entries and 32 KiB of diff, with truncation indicated. Necessary evidence still needs inspection. |
 | Snapshot | 8 MiB per file, 128 MiB total, 100,000 paths; Git file enumeration capped at 64 KiB; `.hannes` nesting limited to 16 levels. |
@@ -706,12 +722,12 @@ is listed in the [TODOs](docs/todo/README.md).
 
 ## Development
 
-This repository's deterministic quality gates run through an installed published
+Pending phase 3, this repository's deterministic quality gates run through an installed published
 Hannes release. Install development tools with `mise install`, dependencies with
 `npm ci --ignore-scripts` and `cargo +stable fetch --locked`, then the governor
 with `mise deploy`. Ensure its `bin/` directory is on PATH.
 
-`mise check` and `hannes mach was` run the comprehensive local `pre-push` profile:
+`mise check` uses the pinned published governor and its `pre-push` profile:
 formatting, documentation validation, Clippy, Rust tests, release/deployment/hook
 regression tests, an optimized candidate build and smoke test. No reviews or real
 provider calls run. The governor never comes from the candidate build.

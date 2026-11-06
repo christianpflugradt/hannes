@@ -51,8 +51,11 @@ pub enum Mach {
     Was {
         #[arg(long, help = "Nur deterministische Checks ausführen, ohne LLM-Aufruf")]
         geiz_ist_geil: bool,
-        #[arg(long, help = "Regeln aus diesem Profil auswählen")]
-        profil: Option<String>,
+        #[arg(
+            long,
+            help = "Regeln an diesem Execution Point ausführen (Standard: pre-push)"
+        )]
+        at: Option<String>,
         #[arg(
             long,
             help = "Ausführungsplan anzeigen, ohne Regeln oder Provider zu starten"

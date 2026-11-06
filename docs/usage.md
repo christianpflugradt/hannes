@@ -28,11 +28,11 @@ report. Defined but disabled rules do not trigger this message.
 `pass auf` validates all files, even disabled entries, and reconciles declared
 external state after confirmation, without running checks or reviews.
 `mach was` validates and reconciles first, then executes selected enabled checks in ID order, then
-selected active reviews in one call if checks passed. Without a profile it selects
-all enabled rules. Disabled items never enter results.
+selected active reviews in one call if checks passed. It selects rules assigned to the requested execution point. Disabled items never enter results.
 Any failed check prevents spending review tokens; those reviews are `NOT_RUN`.
 
-Use `hannes mach was --geiz-ist-geil` to run only enabled deterministic checks.
+Use `hannes mach was --geiz-ist-geil` for an execution point containing checks only.
+Points requiring reviews reject this option before running any checks.
 The full configuration is still validated, but no review or LLM provider is called;
 Hannes incurs no review-token usage. Progress counts only checks. Reviews are
 excluded from results, and both the JSON (`checks_only: true`) and saved status
@@ -43,31 +43,18 @@ No review result is cached or reused. Earlier reports default to the full scope.
 
 ## Select and preview rules
 
-Opt in to configuration version 2 to define rule tags and profiles; see
-[profiles and plans](profiles-and-plans.md). Existing version-1 projects retain
-their selection of all enabled rules. Initialization still creates version 1.
+Use version 3 rules and rule sets to assign named execution points:
 
 ```sh
-hannes mach was --profil local --plan
-hannes mach was --profil local --plan --json
-hannes mach was --profil local
+hannes mach was --at pre-push --plan
+hannes mach was --at pre-push --plan --json
+hannes mach was --at pre-push
 ```
 
-`--profil` overrides `default_profile`; otherwise the implicit profile is `all`.
-Preview validates and reads local evidence without executing rules, Codex, MCP
-or network calls, and preserves the previous report. It shows the selected scope,
-omissions, requirements, input fingerprint and declared provider/context settings.
-JSON errors are structured; executable plans exit 0, blocked/invalid plans exit 2.
-`--json` requires `--plan`. Each execution rebuilds the same deterministic plan.
-
-Ordinary profiles support checks-only execution. A gate requires every selected
-rule, rejects empty/disabled requirements, and rejects `--geiz-ist-geil` if it
-would omit a review. Current profiles verify working files only; staging/commit
-inputs and per-review MCP permissions remain future work.
-
-New reports retain the profile, plan ID and omissions. Status uses that saved
-scope even after the default profile changes; legacy reports cannot certify a
-profile gate. `--details` includes plan identity and omission reasons.
+The default point is pre-push. All selected rules are mandatory, including
+reviews. Checks-only rejects a point requiring reviews. Empty points succeed.
+See [execution points and plans](profiles-and-plans.md) and the
+[configuration reference](configuration.md).
 
 ## Run results
 
@@ -198,7 +185,7 @@ precedence if snapshot coverage is incomplete, even when some differences are kn
 ## Optional Git hook
 
 Git hooks are the first desired-state reconciliation domain. Declare their
-profile mappings in version-2 `.hannes/config.toml`, then run `hannes pass auf`:
+execution-point mappings in version-3 `.hannes/config.toml`, then run `hannes pass auf`:
 
 ```toml
 [hooks.git]
@@ -207,8 +194,8 @@ commit-msg = "message"
 pre-push = "verify"
 ```
 
-Define these profiles in `.hannes/profiles/` first. Hook names determine timing;
-profiles select rules; check scripts implement validation. Pre-commit runs before
+Assign rules to these execution points first. Hook names determine timing;
+execution points select rules; check scripts implement validation. Pre-commit runs before
 the message is finalized. Commit-msg receives the final message file. Pre-push
 runs before references are transferred. All failures block Git with nonzero status,
 including a missing `hannes` on PATH. Conventional Commits validation belongs in
@@ -216,7 +203,7 @@ a standalone checker, which must not invoke the hook again.
 
 The lifecycle is **Validate -> Inspect -> Plan -> Confirm -> Apply -> Verify**.
 `pass auf` performs validation and reconciliation without checks or provider calls.
-`mach was` performs the same prerequisite, then executes its selected profile.
+`mach was` performs the same prerequisite, then executes its selected execution point.
 Synchronized state succeeds without prompting or writing. Changes are displayed
 as creation, managed-section update or removal and require `y`/`yes` in a terminal.
 Declining, missing a terminal, conflicts or failures exit 2 and preserve the
@@ -224,7 +211,7 @@ previous report. Invalid configuration always fails before hook modification.
 `--plan` previews rule execution only and never synchronizes hooks.
 
 Generated wrappers supply explicit event and wrapper-path arguments validated by
-Hannes against Git's effective directory and the declared profile. Within hooks,
+Hannes against Git's effective directory and the declared execution point. Within hooks,
 reconciliation is read-only: drift fails with instructions to run `hannes pass auf`
 manually. No prompt or hook write occurs. A repository-scoped execution guard
 blocks nested Hannes execution from checker processes.
@@ -233,7 +220,7 @@ Deterministic checks receive `HANNES_GIT_HOOK`, `HANNES_GIT_HOOK_ARG_COUNT` and
 one-based `HANNES_GIT_HOOK_ARG_1`, `HANNES_GIT_HOOK_ARG_2`, etc. Values preserve
 Git's arguments; relative paths are relative to the repository root, so checkers
 using another working directory must resolve them accordingly. For a commit-msg
-profile, configure a dedicated script such as `command = "sh scripts/check-message.sh"`:
+execution point, configure a dedicated script such as `command = "sh scripts/check-message.sh"`:
 
 ```sh
 #!/bin/sh
@@ -285,7 +272,7 @@ reconciliation is running. Missing directories are created after approval.
 
 Local hooks are bypassable (`git commit --no-verify`, `git push --no-verify`).
 They verify the working tree, not the exact staged index or pushed commit.
-Exact-index verification is separate future work. CI can execute the same profiles
+Exact-index verification is separate future work. CI can execute the same execution points
 against a clean checkout; hosted authentication and deployment remain separate.
 The repository's own versioned hook setup remains compatible with its pinned
 published governor until native reconciliation is available in a published release.

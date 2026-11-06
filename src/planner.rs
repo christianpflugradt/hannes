@@ -1,10 +1,10 @@
 //! Offline rule selection and bounded preparation, shared by preview and execution.
 use crate::{
-    config::{Profile, Project},
+    config::Project,
     git_snapshot::{self, Snapshot},
     review_context,
 };
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -17,6 +17,8 @@ pub struct Rule {
     pub description: String,
     pub tags: Vec<String>,
     pub selected_by: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<crate::rules::EffectiveRule>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -63,8 +65,14 @@ pub struct Plan {
     pub plan_id: String,
     pub status: String,
     pub blocking_reasons: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub at: String,
+    // Historical report metadata only; never used for current selection.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub profile: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub profile_source: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub gate: bool,
     pub input: Input,
     pub checks_only: bool,
@@ -101,11 +109,7 @@ fn metadata_path(path: &str) -> bool {
     {
         return true;
     }
-    let parts: Vec<_> = path.split('/').collect();
-    parts.len() == 3
-        && parts[0] == crate::limits::CONFIG_DIRECTORY
-        && matches!(parts[1], "checks" | "reviews" | "profiles")
-        && parts[2].ends_with(".toml")
+    path.starts_with(".hannes/") && path.ends_with(".toml")
 }
 
 pub fn build(
@@ -113,18 +117,17 @@ pub fn build(
     requested: Option<&str>,
     checks_only: bool,
 ) -> Result<PreparedPlan> {
-    let name = requested
-        .or(project.config.default_profile.as_deref())
-        .unwrap_or("all");
-    let profile = if name == "all" {
-        Profile::all()
-    } else {
+    let name = requested.unwrap_or("pre-push");
+    anyhow::ensure!(
+        project.effective.points.contains(name),
+        "unknown execution point: {name}"
+    );
+    let selects = |id: &str| {
         project
-            .profiles
-            .iter()
-            .find(|p| p.id == name)
-            .cloned()
-            .ok_or_else(|| anyhow!("unknown profile: {name}"))?
+            .effective
+            .rules
+            .get(id)
+            .is_some_and(|r| r.execution_points.contains(name))
     };
     let mut scheduled = Vec::new();
     let mut omitted = Vec::new();
@@ -141,31 +144,20 @@ pub fn build(
                 .map(|r| (&r.id, "review", &r.description, &r.tags, r.enabled)),
         )
     {
-        if !profile.selects(id, tags) {
+        if !selects(id) {
             continue;
         }
-        let mut selected_by = Vec::new();
-        if profile.id == "all" {
-            selected_by.push("all".into());
-        }
-        if profile.rules.contains(id) {
-            selected_by.push(format!("id:{id}"));
-        }
-        for tag in tags {
-            if profile.include_tags.contains(tag) {
-                selected_by.push(format!("tag:{tag}"));
-            }
-        }
+        let origin = project.effective.rules.get(id).cloned();
+        let selected_by = vec![format!("at:{name}")];
         let rule = Rule {
             id: id.clone(),
             kind: kind.into(),
             description: description.clone(),
             tags: tags.clone(),
             selected_by,
+            origin,
         };
-        if profile.gate {
-            required_ids.push(id.clone());
-        }
+        required_ids.push(id.clone());
         if !enabled {
             omitted.push(Omission {
                 rule,
@@ -181,10 +173,8 @@ pub fn build(
         }
     }
     let selection_complete = !omitted.iter().any(|r| r.reason == "checks_only");
-    if profile.gate && (!selection_complete || !omitted.is_empty() || required_ids.is_empty()) {
-        blocking_reasons.push(
-            "Gate requires every selected rule; checks-only cannot omit required reviews".into(),
-        );
+    if !selection_complete {
+        blocking_reasons.push("Execution point requires every selected rule; checks-only cannot omit required reviews".into());
     }
     let snapshot = git_snapshot::capture(&project.root).unwrap_or_else(|error| Snapshot {
         head: None,
@@ -256,7 +246,7 @@ pub fn build(
     let mut provider = project.provider.clone();
     provider.mcp_servers.sort();
     let mut plan = Plan {
-        plan_schema_version: 1,
+        plan_schema_version: 2,
         config_version: project.config.version,
         plan_id: String::new(),
         status: if blocking_reasons.is_empty() {
@@ -266,18 +256,12 @@ pub fn build(
         }
         .into(),
         blocking_reasons,
-        profile: profile.id.clone(),
-        profile_source: if requested.is_some() {
-            "explicit"
-        } else if project.config.default_profile.is_some() {
-            "default"
-        } else {
-            "implicit"
-        }
-        .into(),
-        gate: profile.gate,
+        at: name.into(),
+        profile: String::new(),
+        profile_source: String::new(),
+        gate: false,
         input: Input {
-            kind: profile.input.clone(),
+            kind: "worktree".into(),
             head: snapshot.head.clone(),
             fingerprint: snapshot.fingerprint.clone(),
             complete: snapshot.complete,
@@ -299,22 +283,24 @@ pub fn build(
     let mut checks: Vec<_> = project
         .checks
         .iter()
-        .filter(|r| profile.selects(&r.id, &r.tags))
+        .filter(|r| selects(&r.id))
         .cloned()
         .collect();
     for check in &mut checks {
         check.tags.sort();
+        check.run_at.sort();
         check.command = shell_words::join(crate::check_command::parse(&check.command)?);
     }
     let mut reviews: Vec<_> = project
         .reviews
         .iter()
-        .filter(|r| profile.selects(&r.id, &r.tags))
+        .filter(|r| selects(&r.id))
         .cloned()
         .collect();
     for review in &mut reviews {
         review.files.sort();
         review.tags.sort();
+        review.run_at.sort();
         for context in &mut review.context {
             context.headings.sort();
             context.headings.dedup();
@@ -332,9 +318,9 @@ pub fn build(
         .as_ref()
         .map_or(&[][..], |input| input.excerpts.as_slice());
     let identity = serde_json::json!({
-        "plan_schema_version": 1, "verifier_version": env!("CARGO_PKG_VERSION"),
+        "plan_schema_version": 2, "verifier_version": env!("CARGO_PKG_VERSION"),
         "config_version": project.config.version, "project": project.config.project,
-        "profile": profile, "checks_only": checks_only, "checks": checks, "reviews": reviews,
+        "at": name, "checks_only": checks_only, "checks": checks, "reviews": reviews,
         "provider": plan.provider, "head": snapshot.head, "files": files, "context": excerpts,
         "complete": snapshot.complete,
     });

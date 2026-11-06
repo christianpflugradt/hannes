@@ -137,18 +137,26 @@ pub fn read(root: &Path) -> Result<Report> {
         crate::limits::MAX_REPORT_BYTES,
     )?)?;
     ensure!(
-        matches!(report.schema_version, 1 | 2),
+        matches!(report.schema_version, 1..=3),
         "unsupported report schema {}; rerun hannes mach was",
         report.schema_version
     );
-    if report.schema_version == 2 {
-        let plan = report
-            .plan
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("schema 2 report requires a plan"))?;
+    if report.schema_version >= 2 {
+        let plan = report.plan.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("report schema {} requires a plan", report.schema_version)
+        })?;
         ensure!(
-            plan.plan_schema_version == 1
+            ((report.schema_version == 2
+                && plan.plan_schema_version == 1
                 && matches!(plan.config_version, 1 | 2)
+                && plan.at.is_empty())
+                || (report.schema_version == 3
+                    && plan.plan_schema_version == 2
+                    && plan.config_version == 3
+                    && !plan.at.is_empty()
+                    && plan.profile.is_empty()
+                    && plan.profile_source.is_empty()
+                    && !plan.gate))
                 && matches!(plan.status.as_str(), "planned" | "blocked")
                 && plan.executable() == plan.blocking_reasons.is_empty()
                 && plan.input.kind == "worktree"
@@ -183,9 +191,23 @@ pub fn read(root: &Path) -> Result<Report> {
                     == actual.len(),
             "inconsistent report rule coverage"
         );
+        if report.schema_version == 3 {
+            ensure!(
+                plan.scheduled.iter().all(|rule| rule
+                    .origin
+                    .as_ref()
+                    .is_some_and(|origin| origin.execution_points.contains(&plan.at))),
+                "inconsistent report execution-point assignment"
+            );
+        }
         let required: std::collections::BTreeSet<_> = plan.required_ids.iter().collect();
         ensure!(
-            if plan.gate {
+            if report.schema_version == 3 {
+                required.len() == plan.required_ids.len()
+                    && required == plan.scheduled.iter().map(|r| &r.id).collect()
+                    && plan.omitted.is_empty()
+                    && plan.selection_complete
+            } else if plan.gate {
                 !required.is_empty()
                     && required.len() == plan.required_ids.len()
                     && required == plan.scheduled.iter().map(|r| &r.id).collect()

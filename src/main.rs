@@ -28,6 +28,9 @@ fn execute(cli: Cli) -> Result<i32> {
         }
         Words::Pass { .. } => {
             let project = config::load(&root)?;
+            for diagnostic in &project.effective.diagnostics {
+                eprintln!("Hinweis: {}", terminal::clean(diagnostic));
+            }
             hannes::reconciliation::prepare(&project, None, None)?;
             println!(
                 "{}",
@@ -43,7 +46,7 @@ fn execute(cli: Cli) -> Result<i32> {
             command:
                 Mach::Was {
                     geiz_ist_geil,
-                    profil,
+                    at,
                     plan,
                     json,
                     git_hook,
@@ -53,7 +56,7 @@ fn execute(cli: Cli) -> Result<i32> {
         } => {
             if plan {
                 let prepared = config::load(&root).and_then(|project| {
-                    hannes::planner::build(&project, profil.as_deref(), geiz_ist_geil)
+                    hannes::planner::build(&project, at.as_deref(), geiz_ist_geil)
                 });
                 return match prepared {
                     Ok(prepared) => {
@@ -85,6 +88,9 @@ fn execute(cli: Cli) -> Result<i32> {
             );
             let _ = stderr.flush();
             let project = config::load(&root)?;
+            for diagnostic in &project.effective.diagnostics {
+                eprintln!("Hinweis: {}", terminal::clean(diagnostic));
+            }
             let invocation = git_hook.zip(git_hook_path).map(|(event, path)| {
                 hannes::reconciliation::HookInvocation {
                     event,
@@ -93,7 +99,7 @@ fn execute(cli: Cli) -> Result<i32> {
                 }
             });
             let hook_context =
-                hannes::reconciliation::prepare(&project, invocation, profil.as_deref())?;
+                hannes::reconciliation::prepare(&project, invocation, at.as_deref())?;
             let no_rules = project.checks.is_empty() && project.reviews.is_empty();
             let report = hannes::verify_project_with_context(
                 project,
@@ -103,7 +109,7 @@ fn execute(cli: Cli) -> Result<i32> {
                 } else {
                     hannes::VerificationMode::AllRules
                 },
-                profil.as_deref(),
+                at.as_deref(),
                 hook_context.as_ref(),
                 &mut |event| {
                     // Progress must be visible before a slow command or Codex call finishes.

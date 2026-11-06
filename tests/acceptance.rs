@@ -164,9 +164,9 @@ fn validation_rejects_invalid_including_disabled() {
             "enabled = true",
             "disabled = false",
         ),
-        ("config.toml", "version = 1", "version = 99"),
-        ("config.toml", "version = 1", "version = 1\nunknown = 1"),
-        ("config.toml", "version = 1", "version = 1\nversion = 1"),
+        ("config.toml", "version = 3", "version = 99"),
+        ("config.toml", "version = 3", "version = 3\nunknown = 1"),
+        ("config.toml", "version = 3", "version = 3\nversion = 3"),
         (
             "config.toml",
             "max_display_files = 5",
@@ -583,6 +583,9 @@ fn symlink_escape_and_unsupported_snapshot_are_not_green() {
         "outside.md",
         "product-consistency.md",
     );
+    assert!(config::load(d.path()).is_err());
+    fs::remove_file(path(d.path(), "reviews/outside.md")).unwrap();
+    symlink(other.path().join("outside.md"), d.path().join("outside.md")).unwrap();
     let r = hannes::verify(d.path(), &Never).unwrap();
     assert_eq!(r.overall, Status::Error);
     assert!(!r.snapshot.complete);
@@ -1334,7 +1337,7 @@ fn progress_numbers_only_enabled_rules_and_announces_one_shared_provider_call() 
     }
     let d = project();
     enable(d.path());
-    fs::write(path(d.path(),"checks/second.toml"),"id = \"second-check\"\ndescription = \"Second deterministic check\"\nenabled = true\ncommand = \"git --version\"\ntimeout_seconds = 30\n").unwrap();
+    fs::write(path(d.path(),"checks/second.toml"),"[[checks]]\nrun_at=['pre-push']\nid = \"second-check\"\ndescription = \"Second deterministic check\"\nenabled = true\ncommand = \"git --version\"\ntimeout_seconds = 30\n").unwrap();
     let original = fs::read_to_string(path(d.path(), "reviews/product-consistency.toml")).unwrap();
     fs::write(
         path(d.path(), "reviews/second.toml"),
@@ -1400,7 +1403,9 @@ fn cli_flushes_rule_start_while_the_check_is_still_running_and_keeps_raw_output_
     use std::process::Stdio;
     let d = project();
     let external = tempdir().unwrap();
-    fs::write(path(d.path(),"checks/always-ok.toml"),r#"id = "always-ok"
+    fs::write(path(d.path(),"checks/always-ok.toml"),r#"[[checks]]
+run_at=['pre-push']
+id = "always-ok"
 description = "Wait for the test release signal"
 enabled = true
 command = "sh -c 'while [ ! -f \"$HANNES_TEST_RELEASE\" ]; do sleep 0.02; done; printf RAW_CHECK_OUTPUT'"
@@ -1814,6 +1819,12 @@ fn checks_only_never_calls_provider_and_counts_only_checks_even_on_failure() {
     for case in ["pass", "fail", "error", "no-checks"] {
         let d = project();
         enable(d.path());
+        replace(
+            d.path(),
+            "reviews/product-consistency.toml",
+            "pre-push",
+            "commit-msg",
+        );
         if case == "fail" {
             replace(
                 d.path(),
@@ -1909,6 +1920,12 @@ fn mach_was_and_geiz_flag_are_scoped_to_verification() {
 fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
     let d = project();
     enable(d.path());
+    replace(
+        d.path(),
+        "reviews/product-consistency.toml",
+        "pre-push",
+        "commit-msg",
+    );
     let fake = tempdir().unwrap();
     let state = tempdir().unwrap();
     let executable = fake.path().join("codex");
@@ -1958,7 +1975,7 @@ fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
         assert!(!marker.exists());
     }
     // The flag is per invocation; the next ordinary run still invokes enabled reviews.
-    let full = run(&["mach", "was"]);
+    let full = run(&["mach", "was", "--at", "commit-msg"]);
     assert_eq!(full.status.code(), Some(2));
     assert!(marker.exists());
     assert!(!report::read(d.path()).unwrap().checks_only);
@@ -2069,7 +2086,7 @@ fn review_context_sections_keep_source_lines_merge_overlap_and_ignore_code_headi
     fs::write(d.path().join("Policy.md"), document).unwrap();
     let metadata = path(d.path(), "reviews/product-consistency.toml");
     let original = fs::read_to_string(&metadata).unwrap();
-    fs::write(&metadata, format!("{original}\nfiles = [\"./Policy.md\"]\n[[context]]\npath = \"./Policy.md\"\nheadings = [\"Scope\", \"Detail\"]\n")).unwrap();
+    fs::write(&metadata, format!("{original}\nfiles = [\"./Policy.md\"]\n[[reviews.context]]\npath = \"./Policy.md\"\nheadings = [\"Scope\", \"Detail\"]\n")).unwrap();
     let p = config::load(d.path()).unwrap();
     assert_eq!(p.reviews[0].files, ["Policy.md"]);
     let excerpts =
@@ -2081,19 +2098,21 @@ fn review_context_sections_keep_source_lines_merge_overlap_and_ignore_code_headi
     // Missing and duplicate real headings fail even for disabled reviews.
     fs::write(
         &metadata,
-        format!("{original}\n[[context]]\npath = \"Policy.md\"\nheadings = [\"Missing\"]\n"),
+        format!(
+            "{original}\n[[reviews.context]]\npath = \"Policy.md\"\nheadings = [\"Missing\"]\n"
+        ),
     )
     .unwrap();
     assert!(config::load(d.path()).is_err());
     fs::write(d.path().join("Policy.md"), "## Scope\nOne\n## Scope\nTwo\n").unwrap();
     fs::write(
         &metadata,
-        format!("{original}\n[[context]]\npath = \"Policy.md\"\nheadings = [\"Scope\"]\n"),
+        format!("{original}\n[[reviews.context]]\npath = \"Policy.md\"\nheadings = [\"Scope\"]\n"),
     )
     .unwrap();
     assert!(config::load(d.path()).is_err());
     // A whole-file entry must not hide an invalid named section in another entry.
-    fs::write(&metadata, format!("{original}\n[[context]]\npath = \"Policy.md\"\n[[context]]\npath = \"Policy.md\"\nheadings = [\"Missing\"]\n")).unwrap();
+    fs::write(&metadata, format!("{original}\n[[reviews.context]]\npath = \"Policy.md\"\n[[reviews.context]]\npath = \"Policy.md\"\nheadings = [\"Missing\"]\n")).unwrap();
     assert!(config::load(d.path()).is_err());
 }
 
@@ -2103,9 +2122,9 @@ fn review_context_rejects_escaping_missing_and_excessive_sources_without_a_provi
         "files = [\"../outside.swift\"]",
         "files = [\"missing.swift\"]",
         "files = [\".hannes\"]",
-        "[[context]]\npath = \"../outside.md\"",
-        "[[context]]\npath = \"missing.md\"",
-        "[[context]]\npath = \"Policy.md\"",
+        "[[reviews.context]]\npath = \"../outside.md\"",
+        "[[reviews.context]]\npath = \"missing.md\"",
+        "[[reviews.context]]\npath = \"Policy.md\"",
     ] {
         let d = project();
         fs::write(d.path().join("Policy.md"), "x".repeat(65537)).unwrap();
@@ -2132,7 +2151,7 @@ fn focused_reviews_exclude_unrelated_paths_and_diff_and_include_untracked_entry_
     .unwrap();
     let metadata = path(d.path(), "reviews/product-consistency.toml");
     let original = fs::read_to_string(&metadata).unwrap();
-    fs::write(metadata, format!("{original}\nfiles = [\"entry[1].swift\", \"new.swift\"]\n[[context]]\npath = \"Policy.md\"\nheadings = [\"Relevant\"]\n")).unwrap();
+    fs::write(metadata, format!("{original}\nfiles = [\"entry[1].swift\", \"new.swift\"]\n[[reviews.context]]\npath = \"Policy.md\"\nheadings = [\"Relevant\"]\n")).unwrap();
     let p = config::load(d.path()).unwrap();
     let snapshot = git_snapshot::capture(d.path()).unwrap();
     let active = [&p.reviews[0]];

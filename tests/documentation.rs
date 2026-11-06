@@ -79,7 +79,6 @@ fn contract<T: Serialize + DeserializeOwned>(sample: &T, text: &str, prefix: &st
                 let defaults = serde_json::to_value(parsed).unwrap();
                 let default = defaults.pointer(&pointer).unwrap();
                 let expected = match (key.as_str(), default) {
-                    ("default_profile", Value::Null) => Some("\"all\"".into()),
                     ("model" | "reasoning_effort", Value::Null) => Some("Codex default".into()),
                     (_, Value::Object(_)) => None, // Child fields are visited recursively.
                     _ => Some(default.to_string()),
@@ -147,8 +146,13 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
         "context.",
     );
     contract(
-        &config::Profile::all(),
-        section(README, "Group rules into profiles"),
+        &config::RuleSet {
+            id: "quality".into(),
+            enabled: true,
+            rules: vec![],
+            run_at: vec![],
+        },
+        section(README, "Group rules into rule sets"),
         "",
     );
 }
@@ -217,39 +221,10 @@ fn readme_examples_validate_and_plan_without_ai_or_check_execution() {
     .unwrap();
     let p = config::load(root.path()).unwrap();
     assert!(planner::build(&p, None, false).unwrap().plan.executable());
-    let file = base.join("config.toml");
+    fs::create_dir_all(base.join("backend")).unwrap();
     fs::write(
-        &file,
-        fs::read_to_string(&file)
-            .unwrap()
-            .replace("version = 1", "version = 2")
-            + "\ndefault_profile = \"local\"\n",
-    )
-    .unwrap();
-    fs::create_dir(base.join("profiles")).unwrap();
-    let profile = base.join("profiles/local.toml");
-    fs::write(
-        &profile,
-        block(section(README, "Group rules into profiles"), "toml"),
-    )
-    .unwrap();
-    let p = config::load(root.path()).unwrap();
-    assert_eq!(
-        planner::build(&p, None, false).unwrap().plan.scheduled[0].id,
-        "unit-tests"
-    );
-    let check = base.join("checks/unit-tests.toml");
-    fs::write(
-        &check,
-        fs::read_to_string(&check).unwrap() + "\ntags = [\"local\"]\n",
-    )
-    .unwrap();
-    fs::write(
-        &profile,
-        fs::read_to_string(&profile)
-            .unwrap()
-            .replace("rules = [\"unit-tests\"]", "rules = []")
-            .replace("include_tags = []", "include_tags = [\"local\"]"),
+        base.join("backend/quality.toml"),
+        block(section(README, "Group rules into rule sets"), "toml"),
     )
     .unwrap();
     let provider = base.join("provider.toml");
@@ -268,7 +243,7 @@ fn readme_examples_validate_and_plan_without_ai_or_check_execution() {
     )
     .unwrap();
     let p = config::load(root.path()).unwrap();
-    let plan = planner::build(&p, None, false).unwrap().plan;
+    let plan = planner::build(&p, Some("check"), false).unwrap().plan;
     assert!(plan.executable());
     assert_eq!(plan.provider.mcp_servers, ["browser", "project-memory"]);
     assert_eq!(plan.scheduled[0].id, "unit-tests");
@@ -306,7 +281,7 @@ fn documented_bounds_and_provider_scaffold_match_the_implementation() {
         format!("at most {MAX_MCP_SERVERS} unique names, each 1–{MAX_MCP_NAME_BYTES}"),
         format!("more than {MAX_DISCOVERED_MCP_SERVERS} discovered servers"),
         format!(
-            "{} KiB per TOML file; up to {MAX_RULES} checks, {MAX_RULES} reviews and {MAX_RULES} profiles",
+            "{} KiB per TOML file; up to {MAX_RULES} configuration documents, {MAX_RULES} rules and {MAX_RULES} rule sets",
             MAX_METADATA_BYTES / 1024
         ),
         format!(

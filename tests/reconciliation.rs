@@ -38,21 +38,22 @@ fn project(mappings: &str) -> TempDir {
     let root = tempfile::tempdir().unwrap();
     ok(git(root.path(), &["init", "--quiet"]));
     config::init(root.path()).unwrap();
-    fs::create_dir(root.path().join(".hannes/profiles")).unwrap();
-    for id in ["first", "second"] {
-        fs::write(
-            root.path().join(format!(".hannes/profiles/{id}.toml")),
-            format!("id = '{id}'\nrules = ['always-ok']\n"),
-        )
-        .unwrap();
-    }
+    let file = root.path().join(".hannes/checks/always-ok.toml");
+    fs::write(
+        &file,
+        fs::read_to_string(&file).unwrap().replace(
+            "[\"pre-push\"]",
+            "['pre-push', 'first', 'second', 'all', 'renamed']",
+        ),
+    )
+    .unwrap();
     mappings_write(root.path(), mappings);
     root
 }
 fn mappings_write(root: &Path, mappings: &str) {
     fs::write(
         root.join(".hannes/config.toml"),
-        format!("version = 2\nproject = 'My_App'\nmax_display_files = 5\n{mappings}\n"),
+        format!("version = 3\nproject = 'My_App'\nmax_display_files = 5\n[execution_points]\ncustom = ['first', 'second', 'all', 'renamed']\n{mappings}\n"),
     )
     .unwrap();
 }
@@ -104,7 +105,7 @@ fn hooked_git(root: &Path, args: &[&str]) -> Output {
 }
 fn checker(root: &Path, script: &str) {
     fs::write(root.join("checker.sh"), script).unwrap();
-    fs::write(root.join(".hannes/checks/always-ok.toml"), "id = 'always-ok'\ndescription = 'Hook checker'\nenabled = true\ncommand = 'sh checker.sh'\ntimeout_seconds = 10\n").unwrap();
+    fs::write(root.join(".hannes/checks/always-ok.toml"), "[[checks]]\nrun_at = ['first', 'second', 'all', 'renamed']\nid = 'always-ok'\ndescription = 'Hook checker'\nenabled = true\ncommand = 'sh checker.sh'\ntimeout_seconds = 10\n").unwrap();
 }
 
 #[test]
@@ -132,14 +133,14 @@ fn configuration_validates_every_mapping_and_preserves_provider_validation() {
         assert!(config::load(root.path()).is_err(), "{mappings}");
         assert!(!hook(root.path(), "pre-commit").exists());
     }
-    for version in [1, 3] {
+    for version in [1, 2] {
         mappings_write(root.path(), "[hooks.git]");
         let path = root.path().join(".hannes/config.toml");
         fs::write(
             &path,
             fs::read_to_string(&path)
                 .unwrap()
-                .replace("version = 2", &format!("version = {version}")),
+                .replace("version = 3", &format!("version = {version}")),
         )
         .unwrap();
         assert!(config::load(root.path()).is_err());
@@ -187,26 +188,16 @@ fn approval_updates_removals_and_idempotency() {
         "[hooks.git]\npre-commit = 'second'\npre-push = 'first'",
     );
     synchronize(root.path());
-    assert!(
-        fs::read_to_string(&path)
-            .unwrap()
-            .contains("--profil 'second'")
-    );
+    assert!(fs::read_to_string(&path).unwrap().contains("--at 'second'"));
     assert!(hook(root.path(), "pre-push").exists());
-    // A profile rename is a mapping update with ordinary configuration validation.
-    fs::write(
-        root.path().join(".hannes/profiles/second.toml"),
-        "id = 'renamed'\nrules = ['always-ok']\n",
-    )
-    .unwrap();
-    assert!(config::load(root.path()).is_err());
+    // Mapping changes retain the existing hook ownership and reconciliation flow.
     mappings_write(root.path(), "[hooks.git]\npre-commit = 'renamed'");
     synchronize(root.path());
     assert!(!hook(root.path(), "pre-push").exists());
     assert!(
         fs::read_to_string(&path)
             .unwrap()
-            .contains("--profil 'renamed'")
+            .contains("--at 'renamed'")
     );
     mappings_write(root.path(), "");
     synchronize(root.path());
@@ -307,10 +298,7 @@ fn unsafe_paths_symlinks_and_foreign_ownership_fail_safely() {
 fn commands_block_checks_on_noninteractive_drift_and_keep_plan_read_only() {
     let root = project("[hooks.git]\npre-commit = 'first'");
     checker(root.path(), "git config --local hannes.executed yes\n");
-    for args in [
-        &["pass", "auf"][..],
-        &["mach", "was", "--profil", "first"][..],
-    ] {
+    for args in [&["pass", "auf"][..], &["mach", "was", "--at", "first"][..]] {
         let output = cli(root.path(), args);
         assert_eq!(output.status.code(), Some(2));
         assert!(String::from_utf8_lossy(&output.stderr).contains("terminal"));
@@ -323,11 +311,11 @@ fn commands_block_checks_on_noninteractive_drift_and_keep_plan_read_only() {
     }
     ok(cli(
         root.path(),
-        &["mach", "was", "--profil", "first", "--plan"],
+        &["mach", "was", "--at", "first", "--plan"],
     ));
     assert!(!hook(root.path(), "pre-commit").exists());
     synchronize(root.path());
-    ok(cli(root.path(), &["mach", "was", "--profil", "first"]));
+    ok(cli(root.path(), &["mach", "was", "--at", "first"]));
     assert!(
         git(root.path(), &["config", "--get", "hannes.executed"])
             .status
@@ -354,11 +342,7 @@ fn real_commit_hooks_forward_message_path_and_preserve_index_and_worktree() {
     );
     assert_eq!(git(root.path(), &["ls-files", "--stage"]).stdout, index);
     assert_eq!(
-        hannes::report::read(root.path())
-            .unwrap()
-            .plan
-            .unwrap()
-            .profile,
+        hannes::report::read(root.path()).unwrap().plan.unwrap().at,
         "second"
     );
     assert!(
@@ -494,7 +478,7 @@ fn invocation_validation_recursion_and_missing_executable_block_commits() {
         )
         .is_err()
     );
-    checker(root.path(), "hannes mach was --profil first\n");
+    checker(root.path(), "hannes mach was --at first\n");
     let output = hooked_git(
         root.path(),
         &["commit", "--allow-empty", "-m", "test: recurse"],
@@ -558,7 +542,7 @@ fn stale_approval_and_interrupted_changes_can_be_recovered() {
         &path,
         fs::read_to_string(&path)
             .unwrap()
-            .replace("--profil 'first'", "--profil 'second'"),
+            .replace("--at 'first'", "--at 'second'"),
     )
     .unwrap();
     assert!(
@@ -570,7 +554,7 @@ fn stale_approval_and_interrupted_changes_can_be_recovered() {
     assert!(
         fs::read_to_string(hook(root.path(), "pre-push"))
             .unwrap()
-            .contains("--profil 'second'")
+            .contains("--at 'second'")
     );
 }
 
@@ -630,7 +614,7 @@ fn actual_terminal_approval_and_rejection_gate_execution() {
     let root = project("[hooks.git]\npre-commit = 'first'");
     checker(root.path(), "git config --local hannes.executed yes\n");
     assert_eq!(
-        terminal(root.path(), &["mach", "was", "--profil", "first"], b"n\n").code(),
+        terminal(root.path(), &["mach", "was", "--at", "first"], b"n\n").code(),
         Some(2)
     );
     assert!(!hook(root.path(), "pre-commit").exists());
@@ -642,7 +626,7 @@ fn actual_terminal_approval_and_rejection_gate_execution() {
     assert!(terminal(root.path(), &["pass", "auf"], b"yes\n").success());
     assert!(hook(root.path(), "pre-commit").exists());
     mappings_write(root.path(), "[hooks.git]\npre-commit = 'second'");
-    assert!(terminal(root.path(), &["mach", "was", "--profil", "first"], b"y\n").success());
+    assert!(terminal(root.path(), &["mach", "was", "--at", "first"], b"y\n").success());
     assert!(
         git(root.path(), &["config", "--get", "hannes.executed"])
             .status

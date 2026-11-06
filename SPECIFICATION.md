@@ -160,6 +160,12 @@ references do not prove an LLM conclusion correct. Invalid types, unknown/duplic
 keys, malformed/missing/duplicate results and incomplete coverage make the batch
 ERROR. The final document is limited to 1 MiB.
 
+Provider schema, wire types and local validation share one response contract and
+limits. The schema constrains requested IDs/count, verdicts, summary length/line
+shape, finding count and positive line numbers before generation. UTF-8 byte
+limits, exact unique ID coverage and real evidence remain local checks. Schema
+compatibility errors are ERROR; constraints are never silently weakened.
+
 Available token counters are saved once per shared invocation, including when the
 verdict is rejected. Total is input plus output; cached input, reasoning output
 and cache writes are subsets. Missing/invalid telemetry remains unavailable,
@@ -271,7 +277,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 | CHK-001 | `tests/acceptance.rs::failing_check_runs_remaining_and_blocks_provider` |
 | REV-001 | `tests/acceptance.rs::lean_review_transport_disables_unlisted_mcp_and_honors_model_profile_and_allowlist` |
 | PREP-001 | `tests/profiles.rs::prepared_input_is_shared_with_the_provider_without_rereading_context` |
-| OUT-001 | `tests/acceptance.rs::malformed_missing_extra_duplicate_ungrounded_provider_outputs_fail_closed` |
+| OUT-001 | `tests/review_contract.rs::review_contract_enforces_boundaries_and_semantic_evidence_locally` |
 | INP-001 | `tests/acceptance.rs::changing_files_during_checks_blocks_pass` |
 | RPT-001 | `tests/profiles.rs::saved_reports_reject_missing_gate_coverage_and_plan_metadata` |
 | REL-001 | `scripts/test-release.py::test_ci_policy_checks_new_messages_without_rejecting_legacy_history` |

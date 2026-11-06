@@ -546,7 +546,8 @@ Hannes asks for exactly one PASS/FAIL/ERROR per requested review, a nonblank one
 summary of at most 120 characters, and up to 20 detailed findings of at most 2000
 bytes each. PASS/FAIL need a verified existing file and a positive line reference.
 Missing, duplicate or malformed results make the batch ERROR. You write criteria,
-not a custom output schema; Hannes handles the structured response.
+not a custom output schema; Hannes sends these response constraints to the provider
+and checks the returned result locally, including evidence and UTF-8 byte limits.
 
 ### Group rules into profiles
 

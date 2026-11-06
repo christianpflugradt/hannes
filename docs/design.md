@@ -98,6 +98,12 @@ outputs. Model/effort are configured separately; new scaffolds use `gpt-6.1-sol`
 and `medium`. Authentication, AGENTS.md and Codex safety settings are retained.
 No user configuration or credentials are copied or rewritten.
 
+`review_contract` owns response wire types, allowed verdicts and the bounded output
+schema sent to Codex. Local parsing retains byte, coverage and evidence checks:
+JSON Schema character limits cannot enforce UTF-8 byte limits or file existence.
+The schema is limited to the provider-supported Structured Outputs subset; an
+incompatible model fails rather than silently dropping constraints.
+
 The provider trait returns a raw final document so tests can inject successful,
 failed or malformed responses without real credentials. Schema-shaped serde types
 reject unknown fields, wrong types, invalid statuses and duplicate object keys.

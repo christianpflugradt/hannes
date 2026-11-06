@@ -1,29 +1,16 @@
+use crate::review_contract::{ReviewResponse, VERDICTS, valid_summary};
 use crate::{
     config::{Project, Review},
     git_snapshot::Snapshot,
     provider::{Provider, Request},
-    report::{Finding, Item, MAX_SUMMARY_CHARS, Status, TokenUsage},
+    report::{Item, MAX_SUMMARY_CHARS, Status, TokenUsage},
 };
 use anyhow::{Result, ensure};
-use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
     time::Instant,
 };
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Response {
-    reviews: Vec<Verdict>,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Verdict {
-    id: String,
-    status: Status,
-    reason: String,
-    findings: Vec<Finding>,
-}
 pub fn parse(
     project: &Project,
     active: &[&Review],
@@ -49,7 +36,7 @@ pub fn parse(
             }
         }
     }
-    let response: Response = serde_json::from_str(json)?;
+    let response: ReviewResponse = serde_json::from_str(json)?;
     let expected: BTreeSet<_> = active.iter().map(|r| r.id.as_str()).collect();
     let mut mapped = BTreeMap::new();
     for verdict in response.reviews {
@@ -58,17 +45,9 @@ pub fn parse(
             "unexpected review ID: {}",
             verdict.id
         );
+        ensure!(VERDICTS.contains(&verdict.status), "invalid review status");
         ensure!(
-            matches!(verdict.status, Status::Pass | Status::Fail | Status::Error),
-            "invalid review status"
-        );
-        ensure!(
-            !verdict.reason.trim().is_empty()
-                && verdict.reason.chars().count() <= MAX_SUMMARY_CHARS
-                && !verdict
-                    .reason
-                    .chars()
-                    .any(|c| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')),
+            valid_summary(&verdict.reason),
             "review reason must be one nonempty line of at most {MAX_SUMMARY_CHARS} characters"
         );
         ensure!(

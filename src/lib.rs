@@ -10,6 +10,7 @@ pub mod provider;
 pub mod quotes;
 pub mod report;
 pub mod review_context;
+pub mod review_contract;
 pub mod review_input;
 pub mod reviews;
 pub mod terminal;

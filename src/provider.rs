@@ -127,19 +127,8 @@ impl Codex {
         }
     }
 }
-pub fn schema() -> serde_json::Value {
-    json!({"type":"object", "additionalProperties":false, "required":["reviews"], "properties":{
-        "reviews":{"type":"array", "items":{"type":"object", "additionalProperties":false,
-            "required":["id","status","reason","findings"], "properties":{
-                "id":{"type":"string"}, "status":{"type":"string","enum":["PASS","FAIL","ERROR"]},
-                "reason":{"type":"string", "description": format!("One short summary line of at most {MAX_SUMMARY_CHARS} characters; detailed evidence belongs in findings")}, "findings":{"type":"array", "items":{
-                    "type":"object", "additionalProperties":false, "required":["message","path","line"],
-                    "properties":{"message":{"type":"string"}, "path":{"type":["string","null"]}, "line":{"type":["integer","null"]}}
-                }}
-            }
-        }}
-    }})
-}
+pub use crate::review_contract::schema;
+
 pub fn prompt(request: &Request<'_>) -> Result<String> {
     let input = request.input;
     let diff = &input.diff;
@@ -184,7 +173,16 @@ impl Codex {
         let temporary = tempfile::tempdir()?;
         let schema_path = temporary.path().join("schema.json");
         let output_path = temporary.path().join("verdict.json");
-        fs::write(&schema_path, serde_json::to_vec(&schema())?)?;
+        fs::write(
+            &schema_path,
+            serde_json::to_vec(&schema(
+                &request
+                    .reviews
+                    .iter()
+                    .map(|r| r.id.as_str())
+                    .collect::<Vec<_>>(),
+            ))?,
+        )?;
         let mut input = tempfile::tempfile()?;
         input.write_all(prompt(request)?.as_bytes())?;
         input.seek(SeekFrom::Start(0))?;

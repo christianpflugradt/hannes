@@ -1,0 +1,5 @@
+id = "06-deploy-tests"
+description = "Test published release installation"
+enabled = true
+command = "python3 scripts/test-deploy.py"
+timeout_seconds = 60

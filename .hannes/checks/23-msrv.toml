@@ -1,0 +1,5 @@
+id = "23-msrv"
+description = "Check minimum supported Rust 1.85"
+enabled = true
+command = "cargo +1.85.0 check --all-targets --locked"
+timeout_seconds = 600

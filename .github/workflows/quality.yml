@@ -19,55 +19,71 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 0
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - name: Validate commits and PR squash title
-        env:
-          COMMIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: python3 scripts/check-commits.py
-      - name: Check documentation links and acceptance references
-        run: |
-          python3 scripts/test-docs.py
-          python3 scripts/check-docs.py
-      - name: Test commit-message policy
-        run: python3 scripts/test-commit-hook.py
+      - uses: ./.github/actions/setup-hannes
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '26'
           package-manager-cache: false
       - run: npm ci --ignore-scripts
-      - name: Test release rules and artifact verification
-        run: |
-          npm test
-          python3 scripts/test-release.py
-          python3 scripts/test-deploy.py
-      - name: Audit release dependencies
-        run: npm audit --audit-level=high
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
           cache: false
-      - name: Validate workflow syntax and expressions
+      - name: Install workflow linter
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          "$(go env GOPATH)/bin/actionlint" -color
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Run tooling quality gate
+        env:
+          COMMIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 scripts/run-gate.py ci-tooling
+      - name: Upload Hannes evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-ci-tooling
+          path: .hannes/reports/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
 
-  rust-audit:
-    name: Rust dependency audit
+  audit:
+    name: Dependency audits
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.15'
+      - uses: ./.github/actions/setup-hannes
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
       - run: rustup toolchain install stable --profile minimal
       - run: cargo +stable install cargo-audit --version 0.22.2 --locked
-      - run: cargo +stable audit
+      - name: Run dependency audit gate
+        run: python3 scripts/run-gate.py ci-audit
+      - name: Upload Hannes evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-ci-audit
+          path: .hannes/reports/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
 
   msrv:
     name: Minimum Rust 1.85
@@ -77,8 +93,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.15'
+      - uses: ./.github/actions/setup-hannes
       - run: rustup toolchain install 1.85.0 --profile minimal
-      - run: cargo +1.85.0 check --all-targets --locked
+      - run: cargo +1.85.0 fetch --locked
+      - name: Run minimum Rust gate
+        run: python3 scripts/run-gate.py ci-msrv
+      - name: Upload Hannes evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-ci-msrv
+          path: .hannes/reports/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
 
   native:
     name: Native / ${{ matrix.target }}
@@ -94,6 +125,8 @@ jobs:
           ]' || '[{"os":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    env:
+      BUILD_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -101,29 +134,32 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - name: Stamp planned release version
+      - uses: ./.github/actions/setup-hannes
+      - name: Stamp planned release version before verification
         if: inputs.release-version != ''
         env:
           RELEASE_VERSION: ${{ inputs.release-version }}
         run: python3 scripts/set-release-version.py "$RELEASE_VERSION"
-      - name: Install stable Rust
-        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
-      - run: rustup target add --toolchain stable ${{ matrix.target }}
-      - name: Check formatting
-        run: cargo +stable fmt --all -- --check
-      - name: Lint all targets
-        run: cargo +stable clippy --all-targets --locked -- -D warnings
-      - name: Unit and acceptance tests (no Codex)
-        run: cargo +stable test --locked
-      - name: Build native release executable
-        run: cargo +stable build --release --locked --target ${{ matrix.target }}
-      - name: Smoke-test native executable
-        run: python3 scripts/smoke.py target/${{ matrix.target }}/release/hannes
-      - name: Package tested release executable
+      - name: Install candidate toolchain and dependencies
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup target add --toolchain stable ${{ matrix.target }}
+          cargo +stable fetch --locked
+      - name: Run native quality gate
+        run: python3 scripts/run-gate.py ci-native
+      - name: Upload Hannes evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-ci-native-${{ matrix.target }}
+          path: .hannes/reports/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Package tested candidate executable
         if: inputs.release-version != ''
         env:
           RELEASE_TAG: v${{ inputs.release-version }}
-          BUILD_TARGET: ${{ matrix.target }}
         run: python3 scripts/package-release.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.release-version != ''

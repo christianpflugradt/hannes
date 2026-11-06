@@ -25,14 +25,14 @@ def verify(version, source_sha, dist=Path("dist")):
         archive = dist / f"{name}.tar.gz"
         metadata = json.loads((dist / "metadata" / f"{target}.json").read_text())
         data = archive.read_bytes()
-        if metadata != dict(version=version, source_sha=source_sha, target=target,
+        if metadata != dict(version=version, source_sha=source_sha, target=target, binary_version=f"hannes {version}",
                             archive_sha256=digest(data), binary_sha256=metadata.get("binary_sha256")):
             raise ValueError(f"Mismatched artifact metadata: {target}")
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as packaged:
             members = packaged.getmembers()
             files = {m.name: m for m in members if m.isfile()}
             wanted = {f"{name}/{file}" for file in ("hannes", "README.md", "LICENSE")}
-            if set(files) != wanted or any(not (m.isfile() or (m.isdir() and m.name == name)) for m in members):
+            if len({m.name for m in members}) != len(members) or set(files) != wanted or any(not (m.isfile() or (m.isdir() and m.name == name)) for m in members):
                 raise ValueError(f"Unexpected archive contents: {target}")
             binary = files[f"{name}/hannes"]
             if not binary.mode & 0o111 or digest(packaged.extractfile(binary).read()) != metadata["binary_sha256"]:

@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -32,7 +33,9 @@ class ReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".githooks").mkdir()
-            (root / ".githooks/commit-msg").write_bytes((SCRIPTS.parent / ".githooks/commit-msg").read_bytes())
+            (root / "scripts").mkdir()
+            (root / "scripts/check-commit-message.sh").write_bytes((SCRIPTS / "check-commit-message.sh").read_bytes())
+            (root / "scripts/check-commits.py").write_bytes((SCRIPTS / "check-commits.py").read_bytes())
             (root / ".githooks/commit-policy").write_bytes((SCRIPTS.parent / ".githooks/commit-policy").read_bytes())
             def git(*args):
                 return subprocess.check_output(["git", *args], cwd=root, text=True, stderr=subprocess.DEVNULL).strip()
@@ -45,7 +48,7 @@ class ReleaseTests(unittest.TestCase):
             git("commit", "--allow-empty", "-m", "feat: valid change")
             def validate(base="", title=""):
                 env = dict(os.environ, COMMIT_BASE=base, COMMIT_HEAD="HEAD", PR_TITLE=title)
-                return subprocess.run([sys.executable, str(SCRIPTS / "check-commits.py")], cwd=root,
+                return subprocess.run([sys.executable, str(root / "scripts/check-commits.py")], cwd=root,
                                       env=env, capture_output=True).returncode
             self.assertEqual(validate(), 0)
             self.assertEqual(validate(base), 0)
@@ -53,7 +56,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertNotEqual(validate(base, "Invalid squash title"), 0)
             git("commit", "--allow-empty", "-m", "Invalid new message")
             self.assertNotEqual(validate(), 0)
-            output = subprocess.run([sys.executable, str(SCRIPTS / "check-commits.py")], cwd=root,
+            output = subprocess.run([sys.executable, str(root / "scripts/check-commits.py")], cwd=root,
                                     env=dict(os.environ, COMMIT_BASE="", COMMIT_HEAD="HEAD", PR_TITLE=""),
                                     capture_output=True, text=True)
             self.assertIn(git("rev-parse", "HEAD"), output.stderr)
@@ -99,7 +102,7 @@ class ReleaseTests(unittest.TestCase):
                         member.mode = 0o755 if file == "hannes" else 0o644
                         member.size = len(data)
                         output.addfile(member, io.BytesIO(data))
-                metadata = dict(version="1.2.3", source_sha="a" * 40, target=target,
+                metadata = dict(version="1.2.3", source_sha="a" * 40, target=target, binary_version="hannes 1.2.3",
                                 archive_sha256=verification.digest(archive.read_bytes()),
                                 binary_sha256=verification.digest(binary))
                 (dist / "metadata" / f"{target}.json").write_text(json.dumps(metadata))
@@ -108,6 +111,32 @@ class ReleaseTests(unittest.TestCase):
             subprocess.run([sys.executable, str(SCRIPTS / "checksums.py")], cwd=root, check=True)
             self.assertEqual((dist / "SHA256SUMS").read_text(), sums)
             verification.verify("1.2.3", "a" * 40, dist)
+            metadata_path = next((dist / "metadata").glob("*.json"))
+            original_metadata = metadata_path.read_text()
+            wrong_version = json.loads(original_metadata)
+            wrong_version["binary_version"] = "hannes 9.9.9"
+            metadata_path.write_text(json.dumps(wrong_version))
+            with self.assertRaisesRegex(ValueError, "Mismatched artifact metadata"):
+                verification.verify("1.2.3", "a" * 40, dist)
+            metadata_path.write_text(original_metadata)
+            # Even checksum-consistent duplicate members are invalid archives.
+            archive_path = dist / f"hannes-v1.2.3-{wrong_version['target']}.tar.gz"
+            original_archive = archive_path.read_bytes()
+            with tarfile.open(fileobj=io.BytesIO(original_archive), mode="r:gz") as source:
+                with tarfile.open(archive_path, "w:gz") as output:
+                    for member in source.getmembers():
+                        output.addfile(member, source.extractfile(member) if member.isfile() else None)
+                    member = source.getmembers()[0]
+                    output.addfile(member, source.extractfile(member))
+            duplicate_metadata = json.loads(original_metadata)
+            duplicate_metadata["archive_sha256"] = verification.digest(archive_path.read_bytes())
+            metadata_path.write_text(json.dumps(duplicate_metadata))
+            (dist / "SHA256SUMS").write_text("".join(f"{verification.digest(p.read_bytes())}  {p.name}\n" for p in sorted(dist.glob("*.tar.gz"))))
+            with self.assertRaisesRegex(ValueError, "Unexpected archive contents"):
+                verification.verify("1.2.3", "a" * 40, dist)
+            archive_path.write_bytes(original_archive)
+            metadata_path.write_text(original_metadata)
+            (dist / "SHA256SUMS").write_text(sums)
             with self.assertRaises(ValueError):
                 verification.verify("1.2.3", "b" * 40, dist)
             with self.assertRaises(ValueError):
@@ -128,6 +157,52 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(len(release), len(verification.TARGETS))
         self.assertIn(dict(os="ubuntu-24.04-arm", target="aarch64-unknown-linux-gnu"), release)
         self.assertEqual(ordinary, [dict(os="ubuntu-24.04", target="x86_64-unknown-linux-gnu")])
+
+    def test_artifact_gate_blocks_missing_corrupt_version_and_source(self):
+        governor = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
+        self.assertTrue(governor, "Install published Hannes with mise deploy")
+        for failure in ("missing", "corrupt", "version", "source"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                subprocess.run(["git", "init", "--quiet", str(root)], check=True)
+                shutil.copytree(SCRIPTS.parent / ".hannes", root / ".hannes", ignore=shutil.ignore_patterns("reports"))
+                shutil.copy2(SCRIPTS.parent / ".hannes-version", root / ".hannes-version")
+                (root / "scripts").mkdir()
+                for name in ("verify-release.py", "check-release-artifacts.py", "run-gate.py"):
+                    shutil.copy2(SCRIPTS / name, root / "scripts" / name)
+                (root / ".gitignore").write_text("dist/\n.hannes/reports/\n")
+                dist = root / "dist"
+                (dist / "metadata").mkdir(parents=True)
+                for file in ("README.md", "LICENSE"):
+                    shutil.copy2(SCRIPTS.parent / file, root / file)
+                for target in verification.TARGETS:
+                    name = f"hannes-v1.2.3-{target}"
+                    data = b"fixture binary already verified on its native runner"
+                    archive = dist / f"{name}.tar.gz"
+                    with tarfile.open(archive, "w:gz") as output:
+                        for filename, content in (("hannes", data), ("README.md", (root / "README.md").read_bytes()), ("LICENSE", (root / "LICENSE").read_bytes())):
+                            member = tarfile.TarInfo(f"{name}/{filename}")
+                            member.size = len(content)
+                            member.mode = 0o755 if filename == "hannes" else 0o644
+                            output.addfile(member, io.BytesIO(content))
+                    metadata = dict(version="1.2.3", source_sha="a" * 40, target=target, binary_version="hannes 1.2.3",
+                                    archive_sha256=verification.digest(archive.read_bytes()), binary_sha256=verification.digest(data))
+                    (dist / "metadata" / f"{target}.json").write_text(json.dumps(metadata))
+                (dist / "SHA256SUMS").write_text("".join(f"{verification.digest(p.read_bytes())}  {p.name}\n" for p in sorted(dist.glob("*.tar.gz"))))
+                archive = next(dist.glob("*.tar.gz"))
+                if failure == "missing":
+                    archive.unlink()
+                elif failure == "corrupt":
+                    archive.write_bytes(b"corrupted archive")
+                env = dict(os.environ, HANNES_EXECUTABLE=governor,
+                           EXPECTED_RELEASE_VERSION="9.9.9" if failure == "version" else "1.2.3",
+                           GITHUB_SHA=("b" if failure == "source" else "a") * 40)
+                result = subprocess.run([sys.executable, "scripts/run-gate.py", "release-artifacts"], cwd=root,
+                                        env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1, result.stderr or result.stdout)
+                report = json.loads((root / ".hannes/reports/last.json").read_text())
+                self.assertEqual(report["overall"], "FAIL")
+                self.assertEqual(report["results"][0]["id"], "30-release-artifacts")
 
     def test_missing_or_extra_archives_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

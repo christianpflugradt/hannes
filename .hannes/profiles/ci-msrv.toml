@@ -1,0 +1,6 @@
+id = "ci-msrv"
+rules = [
+  "23-msrv",
+]
+gate = true
+input = "worktree"

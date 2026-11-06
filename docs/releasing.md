@@ -89,15 +89,17 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
 1. Planning on main selects initial 0.1.0 if no semantic tag exists; otherwise a
    Semantic Release dry run calculates the proposed version. Prepare/publish plugins do
    not run; no tag, commit, changelog update or release is created at this stage.
-2. The quality workflow validates release tooling, dependencies and native builds.
-   Each native runner stamps Cargo.toml/Cargo.lock with that version, runs
-   format/Clippy/tests, builds the target and smoke-tests the actual executable.
+2. The quality workflow installs the published governor pinned in `.hannes-version`.
+   Each native runner stamps Cargo.toml/Cargo.lock before its `ci-native` Hannes
+   gate runs formatting, Clippy, tests, candidate build and executable smoke test.
+   The tooling, MSRV and audit profiles run once on Linux.
 3. Packaging verifies `hannes --version` matches the proposed version. It archives
    the tested executable, README and Unlicense, and records hashes, target and
    source commit as internal artifact metadata.
 4. Only after every quality job passes, publish downloads the four archives,
-   calculates `SHA256SUMS`, and verifies completeness, hashes, permissions,
-   documentation, source commit and the planned version before creating a tag.
+   calculates `SHA256SUMS`, and runs the `release-artifacts` Hannes gate for
+   completeness, hashes, permissions, documentation, source commit and the planned
+   version. Independent publication guards repeat verification before tagging.
 5. For the initial release, GitHub CLI publishes v0.1.0 at the tested source SHA.
    For subsequent releases, Semantic Release updates Cargo.toml/Cargo.lock and CHANGELOG.md, commits them as
    `build(release): VERSION [skip ci]`, tags the release and publishes the archives,
@@ -161,15 +163,9 @@ approved release identity (typically a GitHub App) before using this workflow in
 such a repository; do not disable branch protection or bypass required checks.
 This setup does not create an App or change repository rules automatically.
 
-Run locally before committing workflow/tooling changes:
-
-```sh
-npm ci --ignore-scripts
-npm test
-python3 scripts/test-release.py
-python3 scripts/test-commit-hook.py
-mise run check
-```
+Run `mise check` before committing workflow/tooling changes, after preparing the
+published governor and dependencies. The [quality-gate catalogue](self-governance.md)
+documents every profile, installation, the Renovate-managed pin and report artifacts.
 
 The pipeline also runs actionlint, dependency audits and the minimum-Rust check.
 Do not run `npm run release` locally as a test: it is a publishing command. Local

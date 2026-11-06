@@ -11,20 +11,18 @@ See the [README](README.md#build-locally) for tooling. With mise:
 ```sh
 mise trust
 mise install
+npm ci --ignore-scripts
+cargo +stable fetch --locked
+mise deploy
+export PATH="$HOME/.local/bin:$PATH"
 mise run check
 ```
 
-Or use your existing Rust toolchain and Python 3.11+:
+The governor must be a published release; building the source is a check, never
+how the governor is obtained. See [repository quality gates](docs/self-governance.md)
+for profiles, tool prerequisites, CI pinning and Renovate updates. Local hooks
+use offline dependency mode; prepare dependencies explicitly before running them.
 
-```sh
-cargo fmt --all -- --check
-cargo clippy --all-targets --locked -- -D warnings
-cargo test --locked
-cargo build --release --locked
-python3 scripts/smoke.py target/release/hannes
-```
-
-On Windows, use `python` and `target/release/hannes.exe` for the last command.
 Tests must remain offline and credential-free; mock Codex instead of calling it.
 Keep source, configuration and documentation in English. German CLI phrases are
 intentional. Update relevant docs and focused tests when behavior changes.
@@ -78,9 +76,10 @@ sh scripts/setup-git-hooks.sh
 # Or: mise run hooks:install
 ```
 
-The versioned `.githooks/commit-msg` checks the final message before Git creates
-or amends a commit. `pre-commit` runs before the message is available, so it cannot
-perform this check reliably. Setup changes only this checkout's `core.hooksPath`
+The three versioned hooks delegate to published Hannes profiles. Pre-commit checks
+formatting and documentation; commit-msg checks the final message before Git
+creates or amends a commit; pre-push runs the complete local suite. The shared
+message checker reads `.githooks/commit-policy` and never calls a hook. Setup changes only this checkout's `core.hooksPath`
 and refuses to replace existing custom hooks/configuration. Each clone needs setup;
 Git's `--no-verify` can bypass a local hook. Run `mise run hooks:test` to test the
 policy without committing anything in this repository. Work on `main`.
@@ -92,7 +91,7 @@ In your PR, describe the problem, resulting behavior and actual validation.
 Contributions use the project's [Unlicense](LICENSE). See
 [release instructions](docs/releasing.md) for packaging and publishing.
 
-For release tooling changes, use Node 24.15+ (24.x), run `npm ci --ignore-scripts`,
-`npm test` and `python3 scripts/test-release.py`. CI also validates all proposed
+For release tooling changes, use the Node version in `mise.toml`, prepare npm
+dependencies with `npm ci --ignore-scripts` and run `mise check`. CI also validates all proposed
 commit messages and the PR's squash title. Releases are manually started on main;
 Semantic Release handles versions, tags, release notes and four native archives.

@@ -263,6 +263,21 @@ Unlicense and checksums. Artifacts must match the tested
 version/source. Normal CI is read-only; only release planning/publishing may
 request write permission. Actions are pinned. See [release policy](docs/releasing.md).
 
+This repository governs its quality gates through a published Hannes executable,
+never a binary built from the checked source. `.hannes` defines explicit version-2
+gate profiles, with `pre-push` as default and no reviews. Its command representation
+must match the pinned published governor and CHK-001.
+`.hannes-version` is the sole CI/release pin, updated through Renovate GitHub-release
+PRs without automerge. New gate configuration features require published support.
+
+Local hooks never install tools or access the network. They verify working files,
+not exact staged/pushed trees. The commit-msg gate uses the same standalone policy
+checker as CI. CI runs named profiles and preserves reports on failure, with a
+companion execution record for governor version/digest and checked commit; report
+schema 2 is unchanged. Missing tools, incomplete selection and check errors block
+success. Environment setup and release operations remain outside gate selection.
+See [repository quality gates](docs/self-governance.md) for stage coverage.
+
 Git hooks are explicit opt-in examples, never automatically installed. A bypassable
 local hook verifies working files, not necessarily the pushed commit. Hosted
 Codex authentication is not provisioned and personal tokens are not copied to CI.

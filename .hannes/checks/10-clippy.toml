@@ -1,0 +1,5 @@
+id = "10-clippy"
+description = "Lint Rust with warnings denied"
+enabled = true
+command = "cargo +stable clippy --all-targets --locked -- -D warnings"
+timeout_seconds = 600

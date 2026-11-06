@@ -1,0 +1,5 @@
+id = "20-commit-message"
+description = "Validate the final Git commit message"
+enabled = true
+command = "python3 scripts/check-commits.py --message"
+timeout_seconds = 30

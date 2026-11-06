@@ -1,10 +1,16 @@
-"""Validate CI commit messages and a prospective squash title using the Git hook."""
+"""Validate CI commit messages and a prospective squash title using the standalone policy checker."""
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 
+checker = Path(__file__).with_name("check-commit-message.sh").resolve()
+if sys.argv[1:] == ["--message"]:
+    message = os.environ.get("HANNES_COMMIT_MESSAGE")
+    if not message:
+        sys.exit("Missing HANNES_COMMIT_MESSAGE from the commit-msg hook.")
+    sys.exit(subprocess.run(["sh", str(checker), message]).returncode)
 head = os.environ.get("COMMIT_HEAD") or "HEAD"
 base = os.environ.get("COMMIT_BASE", "")
 if base and set(base) == {"0"}:
@@ -12,7 +18,6 @@ if base and set(base) == {"0"}:
 revision = [f"{base}..{head}"] if base else ["--max-count=1", head]
 commits = subprocess.check_output(
     ["git", "rev-list", *revision, "--"], text=True).splitlines()
-hook = Path(".githooks/commit-msg").resolve()
 with tempfile.TemporaryDirectory(prefix="hannes-commits-") as temporary:
     message = Path(temporary) / "message"
     candidates = [(commit, subprocess.check_output(
@@ -22,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix="hannes-commits-") as temporary:
     invalid = False
     for label, body in candidates:
         message.write_text(body)
-        result = subprocess.run(["sh", str(hook), str(message)], capture_output=True, text=True)
+        result = subprocess.run(["sh", str(checker), str(message)], capture_output=True, text=True)
         if result.returncode:
             invalid = True
             header = body.splitlines()[0] if body.splitlines() else ""

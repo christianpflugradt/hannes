@@ -682,20 +682,27 @@ is listed in the [TODOs](docs/todo/README.md).
 
 ## Development
 
-With mise, `mise check` runs hook-policy tests, formatting checks, Clippy, Rust
-tests, an optimized build and a CLI smoke test. Tests use fake providers, not
-real Codex calls. The toolchain includes Rust with rustfmt/Clippy, Python 3.13
-for scripts and Node 24 for release tooling.
+This repository's deterministic quality gates run through an installed published
+Hannes release. Install development tools with `mise install`, dependencies with
+`npm ci --ignore-scripts` and `cargo +stable fetch --locked`, then the governor
+with `mise deploy`. Ensure its `bin/` directory is on PATH.
 
-`mise docs:check` checks documentation links, specification test references, all
-configuration fields/defaults/limits and executable README examples without AI calls.
-These checks also run in `mise check` and CI.
+`mise check` and `hannes mach was` run the comprehensive local `pre-push` profile:
+formatting, documentation validation, Clippy, Rust tests, release/deployment/hook
+regression tests, an optimized candidate build and smoke test. No reviews or real
+provider calls run. The governor never comes from the candidate build.
 
-Other tasks: `format`, `format:check`, `lint`, `test`, `smoke`, `hooks:install`,
-`hooks:test`. `mise format` formats Rust; built-in `mise fmt` formats `mise.toml`.
-`mise run TASK` works for every project task. Install this repository's optional
-commit-message hook with `mise hooks:install`; accepted types, scopes and release
-effects are in [Contributing](CONTRIBUTING.md#commits).
+`mise docs:check` checks links, specification references, configuration fields and
+executable documentation examples. Individual tasks remain available: `format`,
+`format:check`, `lint`, `test`, `smoke`, `hooks:test`. Install the optional
+pre-commit, commit-msg and pre-push hooks explicitly with `mise hooks:install`.
+Local hooks verify working files; CI checks clean checkouts.
+
+See [repository quality gates](docs/self-governance.md) for setup, every profile,
+the Renovate-managed CI version pin, reports and hook limitations. Accepted commit
+types, scopes and release effects are in [Contributing](CONTRIBUTING.md#commits).
+`mise run TASK` works for every task; `mise format` formats Rust, whereas the
+built-in `mise fmt` formats `mise.toml`.
 
 `mise release` uses an authenticated `gh` CLI to start the release workflow for
 **remote main**, then returns. It does not commit/push local work or wait for

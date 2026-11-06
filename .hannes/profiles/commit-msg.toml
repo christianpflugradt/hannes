@@ -1,0 +1,6 @@
+id = "commit-msg"
+rules = [
+  "20-commit-message",
+]
+gate = true
+input = "worktree"

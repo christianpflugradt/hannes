@@ -1,0 +1,10 @@
+id = "ci-native"
+rules = [
+  "01-format",
+  "10-clippy",
+  "11-rust-tests",
+  "12-native-build",
+  "13-native-smoke",
+]
+gate = true
+input = "worktree"

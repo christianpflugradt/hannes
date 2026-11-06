@@ -1,0 +1,5 @@
+id = "21-commit-range"
+description = "Validate CI commits and pull request title"
+enabled = true
+command = "python3 scripts/check-commits.py"
+timeout_seconds = 60

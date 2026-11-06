@@ -1,0 +1,5 @@
+id = "13-native-smoke"
+description = "Smoke-test the candidate executable"
+enabled = true
+command = "python3 scripts/native-smoke.py"
+timeout_seconds = 120

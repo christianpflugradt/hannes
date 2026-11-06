@@ -34,10 +34,16 @@ def download(url):
         raise ValueError(f"Could not download {url}: {error}. Check network access and {REPOSITORY}/releases for an available release.") from error
 
 
-def deploy():
+def deploy(tag=None, prefix=None):
     target = detect_target()  # Reject unsupported hosts before any network or writes.
-    release = json.loads(download(API))
+    requested_tag = tag
+    if tag is not None and not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag):
+        raise ValueError("Expected an exact stable release tag, such as v0.1.0.")
+    url = API if tag is None else API.removesuffix("latest") + f"tags/{tag}"
+    release = json.loads(download(url))
     tag = release["tag_name"]
+    if requested_tag is not None and tag != requested_tag:
+        raise ValueError(f"Release API returned {tag!r}, expected {requested_tag!r}.")
     if not isinstance(tag, str) or not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag) or release.get("draft") or release.get("prerelease"):
         raise ValueError("Latest release has no supported stable version tag.")
     name = f"hannes-{tag}-{target}"
@@ -58,7 +64,7 @@ def deploy():
         if len(members) != 1 or not members[0].isfile():
             raise ValueError("Release archive must contain one regular hannes executable.")
         binary = archive.extractfile(members[0]).read()
-    prefix = Path(os.environ.get("CARGO_INSTALL_ROOT") or Path.home() / ".local").expanduser()
+    prefix = Path(prefix or os.environ.get("CARGO_INSTALL_ROOT") or Path.home() / ".local").expanduser()
     destination = prefix / "bin" / "hannes"
     destination.parent.mkdir(parents=True, exist_ok=True)
     # Same filesystem for atomic replacement. Never extract archive paths to disk.
@@ -75,6 +81,7 @@ def deploy():
             raise ValueError(f"Release {tag} cannot run on this system ({target}); Linux requires a glibc version compatible with Ubuntu 24.04. Build from source instead. {error}") from error
         os.replace(candidate, destination)
     print(f"Installed hannes {tag[1:]} ({target}) to {destination}")
+    return destination
 
 
 if __name__ == "__main__":

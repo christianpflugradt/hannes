@@ -1,0 +1,5 @@
+id = "04-governance-tests"
+description = "Test repository gates and Renovate declaration"
+enabled = true
+command = "python3 scripts/test-governance.py"
+timeout_seconds = 180

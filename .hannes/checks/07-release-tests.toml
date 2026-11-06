@@ -1,0 +1,5 @@
+id = "07-release-tests"
+description = "Test release integrity and version stamping"
+enabled = true
+command = "python3 scripts/test-release.py"
+timeout_seconds = 120

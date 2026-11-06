@@ -1,0 +1,5 @@
+id = "11-rust-tests"
+description = "Run unit acceptance documentation and compatibility tests"
+enabled = true
+command = "cargo +stable test --locked"
+timeout_seconds = 600

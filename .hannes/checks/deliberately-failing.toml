@@ -1,5 +1,0 @@
-id = "deliberately-failing"
-description = "Disabled example demonstrating failure"
-enabled = false
-command = "git definitely-not-a-subcommand"
-timeout_seconds = 30

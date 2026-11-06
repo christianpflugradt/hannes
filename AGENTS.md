@@ -89,7 +89,7 @@ private projects.
   When present, scope must be one of `checks`, `ci`, `cli`, `config`, `deps`,
   `docs`, `git`, `mise`, `mood`, `profiles`, `provider`, `release`, `report`,
   `reviews`, `snapshot`, `tests`. `.githooks/commit-policy` is the source of truth.
-  See CONTRIBUTING.md. Install the local `commit-msg` hook with
+  See CONTRIBUTING.md. Install the project Git hooks explicitly with
   `sh scripts/setup-git-hooks.sh`; never bypass it to force an invalid message.
 - After completing each coherent change, run the applicable validation, commit it
   on `main` using the allowed commit types, and push `main` to `origin` automatically.

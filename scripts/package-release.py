@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory() as temporary:
     metadata = output / "metadata"
     metadata.mkdir(exist_ok=True)
     (metadata / f"{target}.json").write_text(json.dumps(dict(
-        version=version, source_sha=os.environ["GITHUB_SHA"], target=target,
+        version=version, source_sha=os.environ["GITHUB_SHA"], target=target, binary_version=actual_version,
         archive_sha256=hashlib.sha256(archive_path.read_bytes()).hexdigest(),
         binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
     )) + "\n")

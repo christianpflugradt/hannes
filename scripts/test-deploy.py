@@ -31,6 +31,17 @@ class DeployTests(unittest.TestCase):
                     deploy.deploy()
                 download.assert_not_called()
 
+    def test_pinned_install_never_looks_up_latest_and_rejects_substitution(self):
+        for value in ("latest", "main", "v1.2.3-beta", "../v1.2.3"):
+            with patch.object(deploy, "detect_target", return_value="aarch64-apple-darwin"), patch.object(deploy, "download") as download:
+                with self.assertRaisesRegex(ValueError, "exact stable release"):
+                    deploy.deploy(tag=value)
+                download.assert_not_called()
+        with patch.object(deploy, "detect_target", return_value="aarch64-apple-darwin"), patch.object(deploy, "download", return_value=b'{"tag_name":"v9.9.9"}') as download:
+            with self.assertRaisesRegex(ValueError, "expected 'v1.2.3'"):
+                deploy.deploy(tag="v1.2.3")
+            download.assert_called_once_with(deploy.API.removesuffix("latest") + "tags/v1.2.3")
+
     def test_install_and_failures_preserve_existing_binary(self):
         target = "aarch64-apple-darwin"
         name = f"hannes-v1.2.3-{target}"

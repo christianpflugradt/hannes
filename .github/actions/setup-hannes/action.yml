@@ -1,0 +1,8 @@
+name: Install published Hannes
+description: Install the exact release in .hannes-version without building source
+runs:
+  using: composite
+  steps:
+    - name: Install checksum-verified governor
+      shell: bash
+      run: python3 scripts/install-governor.py

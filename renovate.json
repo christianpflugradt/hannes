@@ -5,5 +5,30 @@
   "semanticCommitScope": "deps",
   "extends": [
     "config:best-practices"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.hannes-version$/"
+      ],
+      "matchStrings": [
+        "(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "christianpflugradt/hannes",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "christianpflugradt/hannes"
+      ],
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "automerge": false
+    }
   ]
 }

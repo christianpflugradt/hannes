@@ -17,7 +17,7 @@ description = "Start the GitHub Release workflow for remote main"
 run = "gh workflow run release.yml --ref main"
 
 [tasks."hooks:install"]
-description = "Install the local Conventional Commit type/scope hook"
+description = "Install the explicit pre-commit, commit-msg and pre-push hooks"
 run = "sh scripts/setup-git-hooks.sh"
 
 [tasks."hooks:test"]
@@ -52,14 +52,5 @@ description = "Check documentation links, configuration reference and executable
 run = ["python3 scripts/test-docs.py", "python3 scripts/check-docs.py", "cargo test --locked --test documentation"]
 
 [tasks.check]
-description = "Run formatting, Clippy, tests, release build and smoke test"
-run = [
-  { task = "hooks:test" },
-  "python3 scripts/test-docs.py",
-  "python3 scripts/test-deploy.py",
-  "python3 scripts/check-docs.py",
-  { task = "format:check" },
-  { task = "lint" },
-  { task = "test" },
-  { task = "smoke" },
-]
+description = "Run the local quality gate with installed published Hannes"
+run = "python3 scripts/run-gate.py pre-push"

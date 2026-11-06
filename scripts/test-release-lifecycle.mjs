@@ -39,6 +39,7 @@ async function testLifecycle() {
     for (const file of ["README.md", "LICENSE", "Cargo.toml", "Cargo.lock"]) copyFileSync(join(source, file), join(cwd, file));
     mkdirSync(join(cwd, "scripts"));
     for (const file of ["verify-release.py", "set-release-version.py"]) copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
+    execFileSync("python3", ["scripts/set-release-version.py", "0.1.0"], { cwd, env });
     writeFileSync(join(cwd, ".gitignore"), "dist/\n");
     git("add", "."); git("commit", "-m", "feat: initialize fixture"); git("push", "--set-upstream", "origin", "main");
     env.GITHUB_SHA = git("rev-parse", "HEAD");
@@ -58,7 +59,7 @@ for target in targets:
         for file,data in [('hannes',binary),('README.md',pathlib.Path('README.md').read_bytes()),('LICENSE',pathlib.Path('LICENSE').read_bytes())]:
             member=tarfile.TarInfo(f'{name}/{file}');member.size=len(data);member.mode=0o755 if file=='hannes' else 0o644
             output.addfile(member,io.BytesIO(data))
-    (dist/'metadata'/f'{target}.json').write_text(json.dumps(dict(version=version,source_sha=os.environ['GITHUB_SHA'],target=target,archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),binary_sha256=hashlib.sha256(binary).hexdigest())))
+    (dist/'metadata'/f'{target}.json').write_text(json.dumps(dict(version=version,source_sha=os.environ['GITHUB_SHA'],target=target,binary_version=f'hannes {version}',archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),binary_sha256=hashlib.sha256(binary).hexdigest())))
 (dist/'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\\n' for p in sorted(dist.glob('*.tar.gz'))))
 `], { cwd, env });
     }

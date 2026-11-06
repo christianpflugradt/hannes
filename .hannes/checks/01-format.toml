@@ -1,0 +1,5 @@
+id = "01-format"
+description = "Verify Rust formatting"
+enabled = true
+command = "cargo +stable fmt --all -- --check"
+timeout_seconds = 120

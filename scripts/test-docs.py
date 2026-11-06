@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("check_docs", Path(__file__).with_name("check-docs.py"))
 checker = importlib.util.module_from_spec(spec)
@@ -24,6 +25,17 @@ class DocumentationTests(unittest.TestCase):
                     checker.check_links(root, [readme])
             readme.write_text("# Setup\n[valid](#setup)\n")
             checker.check_links(root, [readme])
+
+    def test_deleted_tracked_markdown_is_not_read_but_links_to_it_still_fail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "README.md").write_text("# Setup\n")
+            (root / "SPECIFICATION.md").write_text("")
+            with patch.object(checker, "ROOT", root), patch.object(checker.subprocess, "check_output", return_value=b"README.md\0deleted.md\0"):
+                checker.main()
+                (root / "README.md").write_text("[broken](deleted.md)\n")
+                with self.assertRaises(AssertionError):
+                    checker.main()
 
     def test_new_requirements_need_existing_acceptance_references(self):
         with tempfile.TemporaryDirectory() as directory:

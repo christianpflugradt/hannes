@@ -1,3 +1,17 @@
+## [0.4.0](https://github.com/christianpflugradt/hannes/compare/v0.3.0...v0.4.0) (2026-11-06)
+
+### ⚠ BREAKING CHANGES
+
+* **config:** replace profiles with rule sets and execution points
+
+### Features
+
+* **config:** replace profiles with rule sets and execution points ([8a5cd78](https://github.com/christianpflugradt/hannes/commit/8a5cd78ea9afb25a64fa7dab8c04a696bd5505d1))
+
+### Maintenance
+
+* **deps:** pin Hannes governor to v0.3.0 ([94cbb06](https://github.com/christianpflugradt/hannes/commit/94cbb06a583401b2c6142c5e89aeff1d9d6754ab))
+
 ## [0.3.0](https://github.com/christianpflugradt/hannes/compare/v0.2.0...v0.3.0) (2026-11-06)
 
 ### Features

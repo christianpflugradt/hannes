@@ -1,3 +1,24 @@
+## [0.10.1](https://github.com/christianpflugradt/hannes/compare/v0.10.0...v0.10.1) (2026-11-07)
+
+### Bug Fixes
+
+* **checks:** guard direct execution against recursive checks ([9d1628b](https://github.com/christianpflugradt/hannes/commit/9d1628b7eaa8a225c5a35f5ac11a04eb15bbbd64))
+* **cli:** keep JSON plan diagnostics on the current schema ([adaf1cb](https://github.com/christianpflugradt/hannes/commit/adaf1cba3082f4bbe8932a79e710f6a17406cdcb))
+* **provider:** disable the multi-agent feature in reviews ([b1f8465](https://github.com/christianpflugradt/hannes/commit/b1f846543ce0d696636527dce025fc2ec94a2ddd))
+* **release:** download pinned assets without API lookups ([9119026](https://github.com/christianpflugradt/hannes/commit/9119026fa5868b4b5b43efb1ee44a8890e90793d))
+* **release:** prepare all managed push hook dependencies ([55dfae5](https://github.com/christianpflugradt/hannes/commit/55dfae543d0a7f84b30f4789fdd6b971b2aafee4))
+
+### Maintenance
+
+* **checks:** import repository-conventions license rule set ([b21e287](https://github.com/christianpflugradt/hannes/commit/b21e2870a2eb3b6ea3080b2c2bbf29d8c92a17f2))
+* **deps:** update christianpflugradt/hannes digest to b21e287 ([#19](https://github.com/christianpflugradt/hannes/issues/19)) ([c1bedc7](https://github.com/christianpflugradt/hannes/commit/c1bedc737c8d8f0a746cd964923c67ac5d60d976))
+* **deps:** update christianpflugradt/hannes digest to c1bedc7 ([#20](https://github.com/christianpflugradt/hannes/issues/20)) ([4720f11](https://github.com/christianpflugradt/hannes/commit/4720f11f0047c458bc7e03be9e6c7241611d601a))
+* **git:** ignore local IDE files and generated hooks ([9d23526](https://github.com/christianpflugradt/hannes/commit/9d23526d0a8afc5a23fedeca480886ae97655988))
+
+### Code Refactoring
+
+* **checks:** simplify local rules and consolidate Python tests ([f25d34a](https://github.com/christianpflugradt/hannes/commit/f25d34aa2acc83d8c1861a6081ef9bdcc48d9a44))
+
 ## [0.10.0](https://github.com/christianpflugradt/hannes/compare/v0.9.0...v0.10.0) (2026-11-07)
 
 ### Features

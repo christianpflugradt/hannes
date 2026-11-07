@@ -189,7 +189,31 @@ fn load_rules(
         );
         match (kind.as_str(), rule.check, rule.review) {
             ("checks", Some(check), None) => {
-                let entrypoint = check_entrypoint(root, &dir, &check.entrypoint)?;
+                ensure!(
+                    check.entrypoint.is_some() != check.command.is_some(),
+                    "{}: check requires exactly one of entrypoint or command",
+                    path.display()
+                );
+                ensure!(
+                    check.command.is_none() || check.interpreter.is_none(),
+                    "{}: interpreter requires entrypoint and cannot be used with command",
+                    path.display()
+                );
+                if let Some(command) = &check.command {
+                    ensure!(
+                        command
+                            .first()
+                            .is_some_and(|program| !program.trim().is_empty())
+                            && command.iter().all(|argument| !argument.contains('\0')),
+                        "{}: command requires a nonblank executable and arguments without NUL",
+                        path.display()
+                    );
+                }
+                let entrypoint = check
+                    .entrypoint
+                    .as_deref()
+                    .map(|entrypoint| check_entrypoint(root, &dir, entrypoint))
+                    .transpose()?;
                 if let Some(interpreter) = &check.interpreter {
                     ensure!(
                         !interpreter.trim().is_empty() && !interpreter.contains('\0'),
@@ -205,6 +229,7 @@ fn load_rules(
                         enabled: rule.enabled,
                         blocking: rule.blocking,
                         entrypoint,
+                        command: check.command,
                         source_root: root.to_path_buf(),
                         rule_directory: full,
                         interpreter: check.interpreter,
@@ -321,7 +346,8 @@ pub(crate) fn init(root: &Path) -> Result<usize> {
             run_at: vec!["pre-push".into()],
             parameters: Default::default(),
             check: Some(crate::config::CheckDefinition {
-                entrypoint: entrypoint.into(),
+                entrypoint: Some(entrypoint.into()),
+                command: None,
                 interpreter: None,
                 timeout_seconds: 30,
             }),

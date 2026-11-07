@@ -12,7 +12,8 @@ Rule directories; only those definitions are loaded and their IDs enter the reso
 runner; `reviews` validates provider verdicts; `report` persists results; `terminal`
 renders them. There are no alternative configuration loaders or execution engines.
 
-Loaded Checks hold their validated absolute entrypoints, source roots, declaring
+Loaded Checks hold either a literal command argument array or a validated absolute
+entrypoint, plus source roots, declaring
 Rule directories and optional interpreters. Filename entrypoints resolve within
 the Rule directory; paths containing `/` resolve within the source repository root.
 Execution rechecks both paths from that root without following symlinks.
@@ -84,7 +85,8 @@ complete baselines. Binary files up to the same size budget are hashed normally.
 
 ## Execution and reporting
 
-Checks run their entrypoint directly, or pass it to one explicit interpreter.
+Checks run a command argument array directly, run a file entrypoint directly, or
+pass a file entrypoint to one explicit interpreter. All use the same process runner.
 No command-string grammar, implicit shell or language detection is involved.
 The consumer remains the working directory; HANNES_RULE_DIRECTORY supplies the
 absolute Rule directory. Exit 0 is PASS, 1 is FAIL and 2 is ERROR; unexpected

@@ -943,3 +943,135 @@ fn shared_entrypoints_recheck_missing_and_nonregular_files_before_execution() {
         assert!(result.stdout.is_none());
     }
 }
+
+#[test]
+fn commands_validate_without_execution() {
+    for implementation in [
+        "",
+        "command = []",
+        "command = ['']",
+        "command = ['   ']",
+        "command = 'git --version'",
+        "command = ['git', 1]",
+        r#"command = ["git", "\u0000"]"#,
+        "command = ['git']\nentrypoint = 'index.sh'",
+        "command = ['git']\ninterpreter = 'sh'",
+    ] {
+        let d = project();
+        check(
+            d.path(),
+            "invalid",
+            "enabled = false",
+            implementation,
+            "exit 0",
+        );
+        assert!(config::load(d.path()).is_err(), "accepted {implementation}");
+    }
+    let d = project();
+    check(
+        d.path(),
+        "missing",
+        "run_at = ['check']",
+        "command = ['hannes-no-such-command', '']",
+        "exit 0",
+    );
+    check(
+        d.path(),
+        "disabled",
+        "enabled = false",
+        "command = ['hannes-no-such-command']",
+        "exit 0",
+    );
+    let p = config::load(d.path()).unwrap();
+    assert!(p.checks.iter().all(|c| c.entrypoint.is_none()));
+    assert_eq!(
+        planner::build(&p, Some("check"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        1
+    );
+    let report = hannes::verify_project_at(
+        p,
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.results.len(), 1);
+    assert_eq!(report.results[0].status, Status::Error);
+}
+
+#[cfg(unix)]
+#[test]
+fn commands_preserve_literal_arguments_and_rule_context() {
+    for (code, expected) in [
+        (0, Status::Pass),
+        (1, Status::Fail),
+        (2, Status::Error),
+        (7, Status::Fail),
+    ] {
+        let d = project();
+        let literal = "two words; $HOME $(echo expanded) *.md";
+        let script = format!(
+            "test -s README.md || exit 2; cat \"$HANNES_RULE_DIRECTORY/resource\"; printf '\\n<%s>\\n<%s>\\n%s\\n%s' \"$1\" \"$2\" \"$HANNES_PARAM_LABEL\" \"$HANNES_EXECUTION_POINT\"; exit {code}"
+        );
+        let command = serde_json::json!(["sh", "-c", script, "probe", "", literal]);
+        check(
+            d.path(),
+            "native",
+            "run_at = ['check']\nblocking = false\n[parameters.label]\ntype = 'string'\nvalue = 'independent'",
+            &format!("command = {command}"),
+            "exit 2",
+        );
+        write(d.path(), ".hannes/checks/native/resource", "bundled");
+        let p = config::load(d.path()).unwrap();
+        let plan = planner::build(&p, Some("check"), false).unwrap().plan;
+        assert_eq!(plan.scheduled.len(), 1);
+        let result = hannes::checks::execute(&p, &p.checks[0], "check");
+        assert_eq!(result.status, expected, "{}", result.reason);
+        assert!(!result.blocking);
+        assert_eq!(result.exit_code, Some(code));
+        assert_eq!(
+            result.stdout.unwrap().text,
+            format!("bundled\n<>\n<{literal}>\nindependent\ncheck")
+        );
+    }
+}
+
+#[test]
+fn direct_commands_use_the_existing_process_runner() {
+    let d = project();
+    check(
+        d.path(),
+        "native",
+        "run_at = ['check']",
+        "command = ['git', '--version']",
+        "exit 2",
+    );
+    let p = config::load(d.path()).unwrap();
+    let before = planner::build(&p, Some("check"), false)
+        .unwrap()
+        .plan
+        .plan_id;
+    let result = hannes::checks::execute(&p, &p.checks[0], "check");
+    assert_eq!(result.status, Status::Pass);
+    assert!(result.stdout.unwrap().text.starts_with("git version"));
+    check(
+        d.path(),
+        "native",
+        "run_at = ['check']",
+        "command = ['git', '--help']",
+        "exit 2",
+    );
+    let p = config::load(d.path()).unwrap();
+    assert_ne!(
+        before,
+        planner::build(&p, Some("check"), false)
+            .unwrap()
+            .plan
+            .plan_id
+    );
+}

@@ -157,7 +157,22 @@ retain their existing contracts.
 
 ## CHK-001: Deterministic checks
 
-[check] requires entrypoint. A filename such as index.sh resolves in the declaring
+[check] requires exactly one of entrypoint or command, including for disabled
+Rules. command is a nonempty array of strings: executable first, then literal
+arguments. The executable must be nonblank and no element may contain NUL. Empty
+arguments are allowed. Programs resolve through PATH or an explicit executable
+path, with the consumer root as working directory. Hannes performs no shell
+parsing, interpolation, globbing or runtime installation. interpreter is accepted
+only with entrypoint. Command availability is checked only during execution;
+missing executables produce per-rule ERROR and offline plans never launch them.
+Parameters, rule-directory context, timeouts, blocking and results use the same
+execution path for commands and files. Review resolution is unchanged.
+
+Acceptance: `tests/configuration.rs::commands_validate_without_execution`
+and `tests/configuration.rs::commands_preserve_literal_arguments_and_rule_context`
+cover command validation, literal arguments, parameters and per-rule results.
+
+For file entrypoints, a filename such as index.sh resolves in the declaring
 Rule directory. A relative path containing `/`, such as scripts/check.py, resolves
 from the rule-source root: the consumer repository root for local Rules and the
 imported repository root for Git Rules, regardless of the selected Rule Set path.

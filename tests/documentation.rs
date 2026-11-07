@@ -141,7 +141,8 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
         run_at: vec!["pre-push".into()],
         parameters: Default::default(),
         check: Some(config::CheckDefinition {
-            entrypoint: "index.sh".into(),
+            entrypoint: Some("index.sh".into()),
+            command: None,
             interpreter: None,
             timeout_seconds: 30,
         }),

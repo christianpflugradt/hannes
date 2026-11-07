@@ -20,44 +20,55 @@ pub fn execute_with_context(
     let start = Instant::now();
     let mut item = Item::simple(&check.id, "check", Status::Error, String::new());
     item.blocking = check.blocking;
-    let (environment, entrypoint) = match (|| -> anyhow::Result<_> {
+    let prepared = (|| -> anyhow::Result<_> {
         let environment = check.parameters.resolve(&project.root, &check.id)?;
-        let entrypoint = crate::config::source_path(
-            &check.source_root,
-            check.entrypoint.strip_prefix(&check.source_root)?,
-        )
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "Rule {}: missing or unsafe check entrypoint {}: {error:#}",
-                check.id,
-                check.entrypoint.display()
-            )
-        })?;
-        anyhow::ensure!(
-            entrypoint.is_file(),
-            "Rule {}: check entrypoint must be a regular file",
-            check.id
-        );
         let directory = crate::config::source_path(
             &check.source_root,
             check.rule_directory.strip_prefix(&check.source_root)?,
         )?;
         anyhow::ensure!(directory.is_dir(), "Rule directory must be a directory");
-        Ok((environment, entrypoint))
-    })() {
+        let command = match (&check.entrypoint, &check.command) {
+            (Some(path), None) => {
+                let entrypoint = crate::config::source_path(
+                    &check.source_root,
+                    path.strip_prefix(&check.source_root)?,
+                )
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "Rule {}: missing or unsafe check entrypoint {}: {error:#}",
+                        check.id,
+                        path.display()
+                    )
+                })?;
+                anyhow::ensure!(
+                    entrypoint.is_file(),
+                    "Rule {}: check entrypoint must be a regular file",
+                    check.id
+                );
+                if let Some(interpreter) = &check.interpreter {
+                    let mut command = Command::new(interpreter);
+                    command.arg(entrypoint);
+                    command
+                } else {
+                    Command::new(entrypoint)
+                }
+            }
+            (None, Some(arguments)) if !arguments.is_empty() => {
+                let mut command = Command::new(&arguments[0]);
+                command.args(&arguments[1..]);
+                command
+            }
+            _ => anyhow::bail!("Rule {}: expected one check implementation", check.id),
+        };
+        Ok((environment, command))
+    })();
+    let (environment, mut command) = match prepared {
         Ok(prepared) => prepared,
         Err(error) => {
             item.reason = format!("{error:#}");
             item.duration_ms = start.elapsed().as_millis() as u64;
             return item;
         }
-    };
-    let mut command = if let Some(interpreter) = &check.interpreter {
-        let mut command = Command::new(interpreter);
-        command.arg(&entrypoint);
-        command
-    } else {
-        Command::new(&entrypoint)
     };
     crate::parameters::configure(&mut command, &environment);
     command.env("HANNES_RULE_DIRECTORY", &check.rule_directory);

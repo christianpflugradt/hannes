@@ -1869,7 +1869,11 @@ fn shared_entrypoints_execute_each_rule_offline() {
     let shared: Vec<_> = p
         .checks
         .iter()
-        .filter(|c| c.entrypoint.ends_with("scripts/shared.sh"))
+        .filter(|c| {
+            c.entrypoint
+                .as_ref()
+                .is_some_and(|p| p.ends_with("scripts/shared.sh"))
+        })
         .collect();
     assert_eq!(shared.len(), 3);
     assert!(shared.iter().all(|c| c.entrypoint == shared[0].entrypoint));
@@ -1965,4 +1969,43 @@ fn imported_shared_entrypoints_reject_symlink_escapes() {
         f.imports(&[("repository", "main")]);
         assert!(f.load(true).is_err());
     }
+}
+
+#[test]
+fn imported_commands_plan_and_execute_offline() {
+    let f = Fixture::new();
+    write(
+        &f.remote,
+        "repository/checks/required-files/rule.toml",
+        "id = 'required-files'\ndescription = 'Native Git command'\n[check]\ncommand = ['git', '--version']\n",
+    );
+    commit(&f.remote);
+    f.imports(&[("repository", "main"), ("repository", "main")]);
+    f.load(true).unwrap();
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    let p = f.load(false).unwrap();
+    assert_eq!(
+        planner::build(&p, Some("check"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        2
+    );
+    let report = hannes::verify_project_at(
+        p,
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.overall, Status::Pass);
+    assert_eq!(report.results.len(), 2);
+    assert!(
+        report
+            .results
+            .iter()
+            .all(|r| r.stdout.as_ref().unwrap().text.starts_with("git version"))
+    );
 }

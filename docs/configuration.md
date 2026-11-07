@@ -190,9 +190,28 @@ produce a clear startup ERROR.
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `check.entrypoint` | Required | Filename in this Rule directory, or a path containing `/` relative to the rule-source root (see below). |
-| `check.interpreter` | Optional; `null` | Executable used to run the entrypoint. Omitted means direct execution. |
+| `check.entrypoint` | Optional; `null`; required unless `command` is set | Filename in this Rule directory, or a path containing `/` relative to the rule-source root (see below). |
+| `check.command` | Optional; `null`; required unless `entrypoint` is set | Nonempty array: executable followed by literal arguments. Mutually exclusive with `entrypoint` and `interpreter`. |
+| `check.interpreter` | Optional; `null` | Executable used to run a file entrypoint. Omitted means direct execution; forbidden with `command`. |
 | `check.timeout_seconds` | Optional; `30` | Integer `1..3600`; deadline including output capture. |
+
+For an installed tool, use a direct command instead of a script wrapper:
+
+```toml
+[check]
+command = ["cargo", "+stable", "test", "--locked"]
+timeout_seconds = 600
+```
+
+Set exactly one of `command` and `entrypoint`. A command is an executable name
+resolved through `PATH`, or an executable path, followed by separate arguments.
+Arguments are passed unchanged, including empty strings and spaces. There is no
+shell parsing, variable expansion, globbing or automatic interpreter. The
+executable must be nonblank and no array element may contain NUL. Missing tools
+produce execution ERRORs; validation and offline plans do not launch commands.
+Direct commands keep the same parameters, working directory, Rule-directory
+context, timeout, output capture and exit-code contract as file entrypoints.
+`interpreter` is only available with `entrypoint`.
 
 A filename such as `index.sh` resolves inside the declaring Rule directory.
 A path containing `/`, such as `scripts/check-files.py`, resolves from the

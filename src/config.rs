@@ -87,7 +87,8 @@ pub struct Check {
     pub description: String,
     pub enabled: bool,
     pub blocking: bool,
-    pub entrypoint: PathBuf,
+    pub entrypoint: Option<PathBuf>,
+    pub command: Option<Vec<String>>,
     pub source_root: PathBuf,
     pub rule_directory: PathBuf,
     pub interpreter: Option<String>,
@@ -140,7 +141,8 @@ pub struct RuleDefinition {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CheckDefinition {
-    pub entrypoint: String,
+    pub entrypoint: Option<String>,
+    pub command: Option<Vec<String>>,
     pub interpreter: Option<String>,
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,

@@ -627,6 +627,7 @@ fn prompt_marks_evidence_untrusted_and_diff_truncation() {
     input.diff = "malicious untrusted evidence".into();
     input.diff_truncated = true;
     let request = Request {
+        parameters: &Default::default(),
         project: &project,
         reviews: &active,
         snapshot: &snapshot,
@@ -2038,6 +2039,7 @@ fn focused_reviews_exclude_unrelated_paths_and_diff_and_include_untracked_entry_
     let active = [&p.reviews[0]];
     let input = hannes::review_input::PreparedReviewInput::prepare(&p, &active, &snapshot).unwrap();
     let request = Request {
+        parameters: &Default::default(),
         project: &p,
         reviews: &active,
         snapshot: &snapshot,

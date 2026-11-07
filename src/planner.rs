@@ -265,7 +265,12 @@ pub fn build(
         required_ids,
         provider,
         provider_availability_checked: false,
-        planned_model_calls: usize::from(!active.is_empty()),
+        planned_model_calls: active
+            .iter()
+            .filter(|review| review.execution_error.is_none())
+            .filter_map(|review| review.parameters.resolve(&project.root, &review.id).ok())
+            .collect::<BTreeSet<_>>()
+            .len(),
         context,
     };
     // Normalize metadata separately from raw file hashes so TOML formatting and

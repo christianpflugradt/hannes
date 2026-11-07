@@ -19,6 +19,33 @@ pub fn execute_with_context(
     let start = Instant::now();
     let mut item = Item::simple(&check.id, "check", Status::Error, String::new());
     item.blocking = check.blocking;
+    let environment = match (|| -> anyhow::Result<_> {
+        let environment = check.parameters.resolve(&project.root, &check.id)?;
+        let entrypoint = crate::config::source_path(
+            check.entrypoint.parent().unwrap(),
+            std::path::Path::new(check.entrypoint.file_name().unwrap()),
+        )
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "Rule {}: missing or unsafe check entrypoint {}: {error:#}",
+                check.id,
+                check.entrypoint.display()
+            )
+        })?;
+        anyhow::ensure!(
+            entrypoint.is_file(),
+            "Rule {}: check entrypoint must be a regular file",
+            check.id
+        );
+        Ok(environment)
+    })() {
+        Ok(environment) => environment,
+        Err(error) => {
+            item.reason = format!("{error:#}");
+            item.duration_ms = start.elapsed().as_millis() as u64;
+            return item;
+        }
+    };
     let mut command = if let Some(interpreter) = &check.interpreter {
         let mut command = Command::new(interpreter);
         command.arg(&check.entrypoint);
@@ -26,6 +53,7 @@ pub fn execute_with_context(
     } else {
         Command::new(&check.entrypoint)
     };
+    crate::parameters::configure(&mut command, &environment);
     command.env("HANNES_RULE_DIRECTORY", check.entrypoint.parent().unwrap());
     command.current_dir(&project.root).stdin(Stdio::null());
     if let Some(hook) = hook {
@@ -33,7 +61,7 @@ pub fn execute_with_context(
     }
     match process::run(&mut command, Duration::from_secs(check.timeout_seconds)) {
         Ok(output) => {
-            item.status = if output.timed_out || output.status.code() == Some(2) {
+            item.status = if output.timed_out || matches!(output.status.code(), None | Some(2)) {
                 Status::Error
             } else if output.status.success() {
                 Status::Pass
@@ -42,8 +70,15 @@ pub fn execute_with_context(
             };
             item.reason = if output.timed_out {
                 "Command timed out".into()
+            } else if output.status.code().is_none() {
+                "Check terminated by signal; execution could not complete".into()
             } else if item.status == Status::Error {
                 "Check reported an execution error (exit 2)".into()
+            } else if !matches!(output.status.code(), Some(0 | 1)) {
+                format!(
+                    "Unexpected check exit code {}; treated as FAIL (expected 0, 1 or 2)",
+                    output.status
+                )
             } else {
                 format!("Command exited: {}", output.status)
             };

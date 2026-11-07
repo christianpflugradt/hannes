@@ -83,13 +83,14 @@ complete baselines. Binary files up to the same size budget are hashed normally.
 Checks run their entrypoint directly, or pass it to one explicit interpreter.
 No command-string grammar, implicit shell or language detection is involved.
 The consumer remains the working directory; HANNES_RULE_DIRECTORY supplies the
-absolute Rule directory. Exit 2 reports execution ERROR, other nonzero exits FAIL.
+absolute Rule directory. Exit 0 is PASS, 1 is FAIL and 2 is ERROR; unexpected
+numeric exits produce an explicit FAIL diagnostic.
 Only completed FAIL can be non-blocking; ERROR and NOT_RUN always prevent success.
 
 Commands run sequentially without an implicit shell. Both pipes are drained
 concurrently to EOF, retaining only the first 64 KiB each and their complete byte
-totals. Truncation is recorded. Timeouts are ERROR; signal termination/nonzero exit other than 2
-is FAIL; spawn or capture failure is ERROR. POSIX processes run in separate groups
+totals. Truncation is recorded. Timeouts, signal termination, spawn failures and
+capture failures are ERROR. POSIX processes run in separate groups
 and descendants are killed on exit/timeout. Windows uses `taskkill /T /F` for timeout
 cleanup; detached descendants may escape termination. Pipes remaining open beyond
 two seconds produce ERROR. This is not a hostile-process sandbox.
@@ -97,8 +98,8 @@ two seconds produce ERROR. This is not a hostile-process sandbox.
 Reports contain UTC timestamps, repository/project, HEAD, manifest/fingerprint,
 per-item status/duration/evidence/output and overall result. ERROR takes precedence,
 then blocking FAIL; NOT_RUN is blocking but does not replace an existing FAIL with ERROR.
-Provider review durations reflect the shared invocation, not individual model timings;
-do not sum them. Available token usage is recorded once for the shared call;
+Provider review durations reflect their batch invocation, not individual model timings;
+do not sum them. Available token usage is summed across batches;
 missing counters stay unavailable and are never estimated.
 
 JSON is synced to a temporary file in the local reports directory and renamed
@@ -115,8 +116,9 @@ requirement excerpts, manifest hints and the bounded orientation diff. Execution
 passes that exact preparation to the provider. Prompt rendering does no filesystem
 reads or Git work; independent snapshot stability checks still guard execution.
 
-One fresh Codex call receives configured criteria, deduplicated requirement excerpts
-with original line numbers, and bounded orientation data. Exact per-review entry
+Each batch of Reviews sharing a resolved parameter environment receives configured
+criteria, deduplicated requirement excerpts with original line numbers, and bounded
+orientation data. Exact per-review entry
 files focus the initial manifest/diff when every active review is focused; otherwise
 project-wide orientation remains. Markdown sections are selected by unique ATX
 heading, excluding fenced/indented code, with overlaps merged and a strict 64 KiB
@@ -124,7 +126,7 @@ selected-text budget. No context is silently dropped. These are entry points,
 not an evidence boundary; dependencies can be inspected using targeted read-only
 queries. Full working-tree snapshots and file/line evidence validation remain.
 
-Before the single model call, a bounded token-free `codex mcp list --json` reads
+Before each model call, a bounded token-free `codex mcp list --json` reads
 configuration. Each discovered server is explicitly enabled only if named in
 `provider.toml`'s `mcp_servers` allow list (default empty); a blank server table does
 not override merged Codex configuration. Invalid discovery blocks the review.
@@ -145,7 +147,7 @@ failed or malformed responses without real credentials. Schema-shaped serde type
 reject unknown fields, wrong types, invalid statuses and duplicate object keys.
 Semantic checks require exact requested ID coverage, one verdict each, nonempty
 reasons, at most 20 findings per review and real in-manifest file/line references
-for substantive PASS/FAIL. Any invalid combined document makes every active review
+for substantive PASS/FAIL. Any invalid combined document makes every review in that batch
 ERROR, even if another verdict looked valid. ERROR can express model uncertainty.
 Grounded references are necessary, not proof of accurate conclusions.
 
@@ -153,6 +155,15 @@ Hannes inherits trusted local Codex login and applies the documented review over
 and `never` approval settings explicitly. It does not load credentials itself,
 copy tokens to CI, record raw provider traces or repair files. Read-only sandbox
 support depends on Codex and the platform. Unsupported CLI versions fail closed.
+
+Parameter declarations live in the existing Rule schema. Loaded Rules carry a
+binding of those declarations and import-local values. The shared `parameters`
+module resolves and validates only active Rules, and configures child environments.
+The planner counts distinct valid review environments; execution groups Reviews
+by that environment and reuses the prepared context. Inherited parameter variables
+are removed before applying values. No global environment mutations occur.
+Missing check entrypoints and review prompts are retained for per-rule ERROR
+results; disabled Rules need neither implementation nor parameter resolution.
 
 ## External source boundaries
 

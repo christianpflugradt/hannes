@@ -222,13 +222,19 @@ pub fn render_progress(event: &crate::Progress<'_>, color: bool) -> String {
         ),
         Progress::ReviewBatch {
             count,
+            calls,
             timeout_seconds,
         } => format!(
             "{}\n",
             paint(
                 &format!(
-                    "Codex: {count} {} gebündelt in einem Aufruf · Timeout {timeout_seconds} s",
-                    if *count == 1 { "Review" } else { "Reviews" }
+                    "Codex: {count} {} gebündelt {} · Timeout {timeout_seconds} s je Aufruf",
+                    if *count == 1 { "Review" } else { "Reviews" },
+                    if *calls == 1 {
+                        "in einem Aufruf".into()
+                    } else {
+                        format!("in {calls} Aufrufen")
+                    }
                 ),
                 Tone::Accent,
                 color

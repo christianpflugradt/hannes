@@ -102,12 +102,7 @@ pub fn resolve(
             !at.is_empty(),
             "{entity}: run_at: rule set needs at least one execution point"
         );
-        let mut seen = BTreeSet::new();
         for id in &set.rules {
-            ensure!(
-                seen.insert(id),
-                "{entity}: rules: duplicate rule reference {id:?}"
-            );
             ensure!(
                 ids.contains_key(id),
                 "{entity}: rules: unknown rule {id:?}; rule sets may reference rules only, never other rule sets"

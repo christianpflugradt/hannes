@@ -21,6 +21,7 @@ pub struct Request<'a> {
     pub reviews: &'a [&'a Review],
     pub snapshot: &'a Snapshot,
     pub input: &'a crate::review_input::PreparedReviewInput,
+    pub parameters: &'a crate::parameters::Environment,
 }
 pub trait Provider {
     fn review(&self, request: &Request<'_>) -> Result<String>;
@@ -139,6 +140,7 @@ pub fn prompt(request: &Request<'_>) -> Result<String> {
         .map(|review| {
             json!({
                 "id":review.id, "criteria":review.text, "entry_files":review.files,
+                "parameter_environment":request.parameters,
                 "context_files":review.context.iter().map(|source| &source.path).collect::<Vec<_>>()
             })
         })
@@ -199,6 +201,7 @@ impl Codex {
         for value in &overrides {
             command.arg("--config").arg(value);
         }
+        crate::parameters::configure(&mut command, request.parameters);
         command.arg("-");
         command.stdin(input);
         let remaining = Duration::from_secs(request.project.provider.timeout_seconds)
@@ -259,6 +262,7 @@ fn review_overrides(executable: &Path, project: &Project) -> Result<Vec<String>>
         ),
     ];
     let mut discovery = Command::new(executable);
+    crate::parameters::configure(&mut discovery, &Default::default());
     discovery
         .args(["mcp", "list", "--json"])
         .current_dir(&project.root)

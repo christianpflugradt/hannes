@@ -133,34 +133,95 @@ pub fn execute_prepared(
     input: &crate::review_input::PreparedReviewInput,
     provider: &dyn Provider,
 ) -> (Vec<Item>, Option<TokenUsage>) {
-    let start = Instant::now();
-    let response = provider.review_with_usage(&Request {
-        project,
-        reviews: active,
-        snapshot,
-        input,
-    });
-    let result = response
-        .verdict
-        .and_then(|json| parse(project, active, snapshot, &json));
-    let mut items = match result {
-        Ok(mut items) => {
-            for item in &mut items {
-                item.duration_ms = start.elapsed().as_millis() as u64;
+    let mut groups =
+        std::collections::BTreeMap::<crate::parameters::Environment, Vec<&Review>>::new();
+    let mut items = Vec::new();
+    for review in active {
+        let resolved = review
+            .parameters
+            .resolve(&project.root, &review.id)
+            .and_then(|environment| {
+                anyhow::ensure!(
+                    review.execution_error.is_none(),
+                    "Rule {}: {}",
+                    review.id,
+                    review.execution_error.as_deref().unwrap_or_default()
+                );
+                Ok(environment)
+            });
+        match resolved {
+            Ok(environment) => groups.entry(environment).or_default().push(review),
+            Err(error) => {
+                let mut item =
+                    Item::simple(&review.id, "review", Status::Error, format!("{error:#}"));
+                item.blocking = review.blocking;
+                items.push(item);
             }
-            items
         }
-        Err(error) => active
-            .iter()
-            .map(|r| {
-                let mut item = Item::simple(&r.id, "review", Status::Error, format!("{error:#}"));
-                item.duration_ms = start.elapsed().as_millis() as u64;
-                item
-            })
-            .collect(),
-    };
-    for item in &mut items {
-        item.blocking = active.iter().find(|r| r.id == item.id).unwrap().blocking;
     }
-    (items, response.usage)
+    let mut usages = Vec::new();
+    for (parameters, reviews) in groups {
+        // A snapshot check is required before every provider invocation, including
+        // later parameter batches. Never reuse prepared evidence after edits.
+        let stable = crate::git_snapshot::capture(&project.root).is_ok_and(|current| {
+            crate::git_snapshot::compare(snapshot, &current, 0).state == "CURRENT"
+        });
+        let start = Instant::now();
+        let response = if stable {
+            provider.review_with_usage(&Request {
+                project,
+                reviews: &reviews,
+                snapshot,
+                input,
+                parameters: &parameters,
+            })
+        } else {
+            crate::provider::Response {
+                verdict: Err(anyhow::anyhow!(
+                    "Working files changed or snapshot is incomplete; no provider call made"
+                )),
+                usage: None,
+            }
+        };
+        usages.push(response.usage);
+        let result = response
+            .verdict
+            .and_then(|json| parse(project, &reviews, snapshot, &json));
+        let mut results = match result {
+            Ok(items) => items,
+            Err(error) => reviews
+                .iter()
+                .map(|r| Item::simple(&r.id, "review", Status::Error, format!("{error:#}")))
+                .collect(),
+        };
+        for item in &mut results {
+            item.duration_ms = start.elapsed().as_millis() as u64;
+            item.blocking = reviews.iter().find(|r| r.id == item.id).unwrap().blocking;
+        }
+        items.extend(results);
+    }
+    items.sort_by_key(|item| active.iter().position(|r| r.id == item.id).unwrap());
+    (items, combined_usage(&usages))
+}
+
+fn combined_usage(usages: &[Option<TokenUsage>]) -> Option<TokenUsage> {
+    let mut total = usages.first().copied().flatten()?;
+    for usage in &usages[1..] {
+        let usage = (*usage)?;
+        total.input_tokens = total.input_tokens.checked_add(usage.input_tokens)?;
+        total.output_tokens = total.output_tokens.checked_add(usage.output_tokens)?;
+        total.cached_input_tokens = total
+            .cached_input_tokens
+            .checked_add(usage.cached_input_tokens)?;
+        total.reasoning_output_tokens = total
+            .reasoning_output_tokens
+            .zip(usage.reasoning_output_tokens)
+            .and_then(|(a, b)| a.checked_add(b));
+        total.cache_write_input_tokens = total
+            .cache_write_input_tokens
+            .zip(usage.cache_write_input_tokens)
+            .and_then(|(a, b)| a.checked_add(b));
+    }
+    total.total()?;
+    Some(total)
 }

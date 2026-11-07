@@ -61,7 +61,19 @@ fn resource(root: &Path, directory: &Path, filename: &str) -> Result<PathBuf> {
             && !Path::new(filename).is_absolute(),
         "resource must be a filename directly inside its rule directory: {filename:?}"
     );
-    let path = source_path(root, &directory.join(filename))?;
+    let path = match source_path(root, &directory.join(filename)) {
+        Ok(path) => path,
+        // Missing implementations become per-rule execution errors, including
+        // when an interpreter would otherwise turn a missing script into FAIL.
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            return Ok(root.join(directory).join(filename));
+        }
+        Err(error) => return Err(error),
+    };
     ensure!(
         path.is_file(),
         "resource must be a regular file: {}",
@@ -132,6 +144,7 @@ fn load_rules(
                             interpreter: check.interpreter,
                             timeout_seconds: check.timeout_seconds,
                             run_at: rule.run_at.clone(),
+                            parameters: crate::parameters::Binding::local(rule.parameters),
                         },
                     ));
                 }
@@ -143,6 +156,21 @@ fn load_rules(
                             .is_some_and(|e| e == "md"),
                         "review prompt must be Markdown (.md)"
                     );
+                    let (text, execution_error) =
+                        match config::read_bounded(&prompt, MAX_INSTRUCTION_BYTES) {
+                            Ok(text) => (text, None),
+                            Err(error)
+                                if error
+                                    .downcast_ref::<std::io::Error>()
+                                    .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+                            {
+                                (
+                                    String::new(),
+                                    Some(format!("Missing review prompt {}", prompt.display())),
+                                )
+                            }
+                            Err(error) => return Err(error),
+                        };
                     loaded.reviews.push((
                         path.clone(),
                         Review {
@@ -153,7 +181,9 @@ fn load_rules(
                             files: review.files,
                             context: review.context,
                             run_at: rule.run_at.clone(),
-                            text: config::read_bounded(&prompt, MAX_INSTRUCTION_BYTES)?,
+                            text,
+                            execution_error,
+                            parameters: crate::parameters::Binding::local(rule.parameters),
                         },
                     ));
                 }
@@ -222,6 +252,7 @@ pub(crate) fn init(root: &Path) -> Result<usize> {
             enabled,
             blocking: true,
             run_at: vec!["pre-push".into()],
+            parameters: Default::default(),
             check: Some(crate::config::CheckDefinition {
                 entrypoint: entrypoint.into(),
                 interpreter: None,
@@ -236,6 +267,7 @@ pub(crate) fn init(root: &Path) -> Result<usize> {
         enabled: false,
         blocking: true,
         run_at: vec!["pre-push".into()],
+        parameters: Default::default(),
         check: None,
         review: Some(crate::config::ReviewDefinition {
             prompt: "prompt.md".into(),

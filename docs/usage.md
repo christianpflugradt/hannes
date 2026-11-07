@@ -28,8 +28,8 @@ report. Defined but disabled rules do not trigger this message.
 `pass auf` validates all files, even disabled entries, and reconciles declared
 external state after confirmation, without running checks or reviews.
 `mach was` validates, then executes selected enabled checks in ID order, then
-selected active reviews in one call if checks passed. It selects rules assigned
-to the requested execution point. Direct Git-backed points reconcile hooks first;
+selected active reviews in batches sharing parameter environments if checks passed.
+It selects rules assigned to the requested execution point. Direct Git-backed points reconcile hooks first;
 `check` and custom points execute without hook synchronization. Disabled items
 never enter results.
 Any blocking failed check or execution error prevents spending review tokens; those reviews are `NOT_RUN`.
@@ -71,9 +71,9 @@ short summary. Disabled rules are excluded from the total. Skipped reviews get
 NOT_RUN without a running message. Preparation and report-writing phases are
 also shown so snapshot work is not mistaken for a hung check.
 
-All selected reviews share one Codex call. This is explicitly announced;
-the review start lines appear together and individual verdicts arrive when that
-shared call completes. The numbering is rule order, not a percentage or a claim
+Reviews with identical resolved parameter environments share one Codex call. The
+number of planned calls is announced; review start lines appear together and
+verdicts arrive when the review phase completes. The numbering is rule order, not a percentage or a claim
 that Codex reports per-review completion in real time. Raw check output and
 provider traces are not streamed. The final compact report stays on stdout,
 so `hannes mach was > report.txt` keeps progress visible in the terminal.
@@ -110,8 +110,9 @@ See the [configuration reference](configuration.md). A Check lives in
 `.hannes/checks/<name>/` with rule.toml and its entrypoint. Direct execution uses
 the OS; an explicit interpreter receives the absolute entrypoint. The consumer
 root stays the working directory; HANNES_RULE_DIRECTORY locates bundled files.
-Exit 0 is PASS, exit 2 is execution ERROR, other nonzero exits are FAIL. A completed
-non-blocking FAIL permits success; execution errors always block. Checks are
+Exit 0 is PASS, 1 is FAIL and 2 is ERROR. Unexpected numeric codes are explicitly
+reported as FAIL; signals, missing scripts and process-launch failures are ERROR.
+A completed non-blocking FAIL permits success; execution errors always block. Checks are
 trusted code, without process sandboxing. Changing evaluated files prevents PASS.
 
 For an optional Codex review:

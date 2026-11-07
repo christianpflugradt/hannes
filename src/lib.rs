@@ -6,6 +6,7 @@ pub mod external;
 pub mod git_snapshot;
 pub mod limits;
 pub mod mood;
+pub mod parameters;
 pub mod planner;
 pub mod process;
 pub mod provider;
@@ -49,6 +50,7 @@ pub enum Progress<'a> {
     },
     ReviewBatch {
         count: usize,
+        calls: usize,
         timeout_seconds: u64,
     },
 }
@@ -191,6 +193,7 @@ pub fn verify_project_with_context(
         if report::overall(&items) == Status::Pass {
             progress(Progress::ReviewBatch {
                 count: active.len(),
+                calls: plan.planned_model_calls,
                 timeout_seconds: project.provider.timeout_seconds,
             });
             for (offset, review) in active.iter().enumerate() {

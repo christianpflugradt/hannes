@@ -150,6 +150,16 @@ class GovernanceTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(all(v is None for v in json.loads(result.stdout)[1].values()))
 
+    def test_check_launcher_reports_startup_errors_and_preserves_tool_exit_codes(self):
+        launcher = [sys.executable, str(ROOT / "scripts/run-check.py")]
+        for arguments in ([], ["hannes-no-such-executable"]):
+            result = subprocess.run(launcher + arguments, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertTrue(result.stderr)
+        for code in (0, 1, 2, 7):
+            result = subprocess.run(launcher + [sys.executable, "-c", f"raise SystemExit({code})"], capture_output=True, text=True)
+            self.assertEqual(result.returncode, code)
+
     def test_commit_message_checker_consumes_managed_hook_arguments(self):
         with tempfile.TemporaryDirectory() as temporary:
             message = Path(temporary) / "commit message.txt"

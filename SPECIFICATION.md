@@ -44,10 +44,12 @@ require id, description, rules and nonempty run_at; no enabled/blocking/source
 fields are accepted. Set IDs are independently unique.
 
 A present set overrides its rules' own run_at; memberships contribute their union.
-Standalone enabled rules use their own assignments. Enabled rules need an effective
+Standalone enabled rules use their own assignments. Repeated references within
+a Rule Set contribute one membership. Enabled rules need an effective
 point. Disabled rules remain validated but never run. All references must resolve
 within the same scope, including disabled and overridden assignments. A rule runs
-once per point; checks precede reviews, each kind sorted by ID. Built-in points
+once per point within each binding; checks precede reviews, each kind sorted by ID.
+Built-in points
 are pre-commit, commit-msg, pre-push and check. The first three use managed Git
 hooks; check is invoked explicitly and never automatically. Custom names come only
 from the consumer; release has no special behavior.
@@ -56,7 +58,10 @@ The default is pre-push. Empty points succeed without claiming rule PASS.
 ## EXT-001: External Git Rule Sets
 
 Only the consumer's config.toml accepts [[imports]], with git/path/ref
-and optional per-import execution_points mapping.
+and optional per-import execution_points mapping and rule_parameters tables.
+Each import is a separate binding, even when it selects the same source. Values
+never merge across imports. Rule identities distinguish these bindings while
+repeated references within a binding still execute once.
 No Rule overrides or nested imports are supported. Mapping sources are custom
 points used in that import; targets must be consumer-declared custom points.
 Built-ins cannot be sources or targets. Resolve scope-local assignments first,
@@ -86,7 +91,9 @@ echo Git stderr or secret repository selectors.
 One unversioned configuration model uses lowercase .hannes/config.toml, optional
 provider.toml, checks/*/rule.toml, reviews/*/rule.toml and rule-sets/*.toml.
 There is no configuration version field. Unknown fields, duplicate keys/IDs,
-invalid references, missing resources and symlinks fail, including disabled Rules.
+invalid references and unsafe rule resources fail, including disabled Rules.
+Missing check entrypoints or review prompts are execution errors only when
+selected and enabled.
 No recursive TOML discovery or arbitrary definition placement is supported.
 Supporting files inside rule directories are data, never governance documents.
 
@@ -132,11 +139,37 @@ argument parsing occurs. The consuming root stays the working directory and
 HANNES_RULE_DIRECTORY identifies bundled resources. Unix scripts may need an
 installed interpreter on Windows; arbitrary scripts are not universally portable.
 
-Exit 0 is PASS; nonzero is FAIL except exit 2, which explicitly reports an execution
-ERROR. Wrappers map scanner infrastructure errors to 2. Spawn, capture and timeout
-failures are always ERROR. Non-blocking FAIL remains visible and allows success
+Exit 0 is PASS, 1 is FAIL and 2 explicitly reports an execution ERROR.
+Unexpected numeric exit codes remain FAIL with an explicit diagnostic; signal
+termination is ERROR. Wrappers map scanner infrastructure errors to 2. Spawn,
+capture and timeout failures are always ERROR. Non-blocking FAIL remains visible and allows success
 and subsequent Reviews. ERROR is fatal regardless of blocking. Stdout/stderr
 capture, process deadlines and cancellation remain shared in process.rs.
+
+## PARAM-001: Rule parameters
+
+Rules declare named `parameters` tables with `type` (`string` or `file`),
+`required` (default false) and optional `description`. Local declarations provide
+`value` directly. Imported declarations must omit `value`; consumers supply values
+in that import's `rule_parameters.<rule-id>` table. There is no global value table.
+Names use ASCII letters, digits and underscores, starting with a letter; their
+uppercase forms must be unique within a rule. Values must be strings without NUL.
+
+Before an enabled selected rule executes, validate required values, supported
+types and undeclared supplied names. Optional omissions stay absent. Failures
+produce rule-specific ERROR results identifying the parameter and reason, even
+for nonblocking rules. Disabled rules do not resolve parameters or dependencies.
+File values must be repository-root-relative paths to existing regular files;
+absolute paths, parent traversal and symlink traversal are rejected. Deliver
+canonical absolute paths for files and unchanged strings through environment
+variables named `HANNES_PARAM_` plus the uppercase parameter name. Clear inherited
+variables with this prefix so omitted/undeclared values cannot leak into rules.
+Checks and provider subprocesses use the same delivery mechanism. Different review
+environments use separate calls; prepared context remains shared. Rule resources
+continue resolving within their own directories.
+
+Acceptance: `tests/parameters.rs` and parameterized imports in
+`tests/external_rule_sets.rs` exercise loading, binding and execution.
 
 ## REV-001: Reviews and provider isolation
 
@@ -147,8 +180,8 @@ variables are removed; no credentials or raw provider traces are persisted or
 copied into CI. Missing/incompatible CLI, login, timeout or exhausted allowance
 produces ERROR, never PASS or a fabricated policy violation.
 
-All selected reviews share one new, noninteractive, ephemeral Codex invocation,
-with structured output, read-only sandbox and no approvals. A bounded, token-free
+Selected reviews with identical resolved parameter environments share one new,
+noninteractive, ephemeral Codex invocation with structured output, read-only sandbox and no approvals. A bounded, token-free
 `codex mcp list --json` precedes it. Every discovered server is explicitly disabled
 unless in the provider allow list; unknown allowed names, unsafe names, oversized
 or failed discovery block the call. Automatic skills, apps/plugins, subagents and
@@ -197,8 +230,8 @@ shape, finding count and positive line numbers before generation. UTF-8 byte
 limits, exact unique ID coverage and real evidence remain local checks. Schema
 compatibility errors are ERROR; constraints are never silently weakened.
 
-Available token counters are saved once per shared invocation, including when the
-verdict is rejected. Total is input plus output; cached input, reasoning output
+Available token counters are summed across parameter batches, retaining unknown
+counters as unavailable, including when the verdict is rejected. Total is input plus output; cached input, reasoning output
 and cache writes are subsets. Missing/invalid telemetry remains unavailable,
 never fabricated as zero. No monetary estimate or total token budget is enforced.
 
@@ -419,6 +452,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 | ARC-001 | `tests/documentation.rs::documented_provider_scaffold_matches_the_implementation` |
 | DOC-001 | `tests/documentation.rs::every_configuration_field_required_marker_and_default_is_documented` |
 | CLI-001 | `tests/acceptance.rs::all_command_paths_and_standard_help` |
+| PARAM-001 | `tests/parameters.rs::local_parameters_deliver_strings_and_consumer_files_without_changing_rule_resources` |
 | CFG-001 | `tests/configuration.rs::strict_configuration_and_implementation_validation` |
 | SEL-001 | `tests/configuration.rs::checks_only_requires_complete_selection` |
 | CHK-001 | `tests/configuration.rs::direct_and_interpreter_execution_keep_consumer_and_resources` |

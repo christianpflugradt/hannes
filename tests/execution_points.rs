@@ -80,7 +80,6 @@ fn invalid_assignments_are_rejected_even_when_disabled_or_overridden() {
         vec![set("empty", &[], &["a"])],
         vec![set("bad", &["check"], &["missing"])],
         vec![set("nested", &["check"], &["nested"])],
-        vec![set("dup", &["check"], &["a", "a"])],
         vec![set("same", &[], &[]), set("same", &[], &[])],
         vec![set("bad", &["chekc"], &[])],
     ] {
@@ -156,4 +155,16 @@ fn four_reserved_points_and_ordinary_custom_points() {
         .is_err()
     );
     assert!(rules::resolve(&points(), &[assignment("a", true, &["release"])], &[]).is_ok());
+}
+
+#[test]
+fn repeated_references_resolve_to_one_effective_rule() {
+    let resolved = rules::resolve(
+        &points(),
+        &[assignment("a", true, &[])],
+        &[set("repeated", &["check"], &["a", "a"])],
+    )
+    .unwrap();
+    assert_eq!(resolved.rules.len(), 1);
+    assert_eq!(resolved.rules["a"].execution_points.len(), 1);
 }

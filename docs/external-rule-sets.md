@@ -103,6 +103,13 @@ map the same source differently; multiple sources may share one target. Mapping
 never edits source/cache files or changes import identity, and works offline.
 See the [complete three-import example](../README.md#import-rule-sets-from-git).
 
+Each import's `rule_parameters.<rule-id>` tables supply only that binding's
+values. External declarations omit `value`. File parameters refer to existing
+files in the consumer; bundled assets still belong to the source rule. Repeated
+imports execute separately and retain distinguishable IDs in plans and reports;
+repeated references within one binding execute once. See
+[parameter declarations and delivery](../README.md#rule-parameters).
+
 ## Refresh, storage and provenance
 
 Host Git fetches exact selectors into shared bare object storage and resolves them
@@ -137,8 +144,11 @@ executable flags before use; partially populated revisions are never published.
 Receipts detect accidental corruption, not an attacker who can rewrite both
 contents and receipts. State and reports are local, unsigned evidence.
 
-Imported IDs have the form `git:IMPORT_DIGEST:DIRECTORY:ORIGINAL_ID`. The digest
-includes repository selector, ref and normalized directory. Local IDs are
+Imported IDs have the form `git:BINDING_DIGEST:DIRECTORY:OCCURRENCE:ORIGINAL_ID`.
+The binding digest includes the repository selector, ref, normalized directory
+and per-import parameter values. Repeated identical bindings have separate
+one-based occurrence numbers. Execution-point mappings do not enter the digest.
+Definition resolution and cached checkouts remain shared across bindings. Local IDs are
 unchanged. Plan/report origins retain the configured ref and full resolved commit
 without internal cache paths. Saved input freshness compares the consuming working
 tree; inspect provenance to see which external revision a report evaluated.

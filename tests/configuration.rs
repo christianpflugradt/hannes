@@ -184,7 +184,7 @@ fn strict_configuration_and_implementation_validation() {
 }
 
 #[test]
-fn resources_and_definitions_are_required_including_disabled_rules() {
+fn definitions_are_required_but_disabled_implementations_may_be_missing() {
     let d = project();
     fs::create_dir_all(d.path().join(".hannes/checks/readme")).unwrap();
     assert!(error(d.path()).contains("rule.toml"));
@@ -195,13 +195,13 @@ fn resources_and_definitions_are_required_including_disabled_rules() {
         "entrypoint = 'missing.sh'",
         "exit 0",
     );
-    assert!(config::load(d.path()).is_err());
+    assert!(config::load(d.path()).is_ok());
     fs::remove_dir_all(d.path().join(".hannes/checks")).unwrap();
     fs::create_dir_all(d.path().join(".hannes/reviews/design")).unwrap();
     assert!(error(d.path()).contains("rule.toml"));
     review(d.path(), "enabled = false");
     fs::remove_file(d.path().join(".hannes/reviews/design/prompt.md")).unwrap();
-    assert!(config::load(d.path()).is_err());
+    assert!(config::load(d.path()).is_ok());
 }
 
 #[test]
@@ -746,6 +746,7 @@ fn prepared_input_is_shared_without_rereading_resources() {
     assert!(input.excerpts[0].text.contains("My_App"));
     assert_eq!(p.reviews[0].text, "Inspect documented expectations.\n");
     let rendered = hannes::provider::prompt(&Request {
+        parameters: &Default::default(),
         project: &p,
         reviews: &[&p.reviews[0]],
         snapshot: &prepared.snapshot,

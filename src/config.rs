@@ -2,7 +2,7 @@ use crate::limits::*;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Read,
     path::{Component, Path, PathBuf},
@@ -79,7 +79,7 @@ pub struct ReviewContext {
     #[serde(default)]
     pub headings: Vec<String>,
 }
-/// A loaded check with its validated, absolute entrypoint.
+/// A loaded check with an absolute entrypoint, checked for existence before execution.
 #[derive(Debug, Clone, Serialize)]
 pub struct Check {
     pub id: String,
@@ -90,6 +90,7 @@ pub struct Check {
     pub interpreter: Option<String>,
     pub timeout_seconds: u64,
     pub run_at: Vec<String>,
+    pub parameters: crate::parameters::Binding,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Review {
@@ -101,6 +102,8 @@ pub struct Review {
     pub context: Vec<ReviewContext>,
     pub run_at: Vec<String>,
     pub text: String,
+    pub parameters: crate::parameters::Binding,
+    pub execution_error: Option<String>,
 }
 pub(crate) fn default_true() -> bool {
     true
@@ -124,6 +127,8 @@ pub struct RuleDefinition {
     pub blocking: bool,
     #[serde(default)]
     pub run_at: Vec<String>,
+    #[serde(default)]
+    pub parameters: BTreeMap<String, crate::parameters::Declaration>,
     pub check: Option<CheckDefinition>,
     pub review: Option<ReviewDefinition>,
 }
@@ -408,7 +413,9 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
                     nonempty(heading, "context heading")?;
                 }
             }
-            nonempty(&review.text, "instructions")?;
+            if review.execution_error.is_none() {
+                nonempty(&review.text, "instructions")?;
+            }
             instruction_bytes += review.text.len();
             ensure!(
                 instruction_bytes <= MAX_TOTAL_INSTRUCTION_BYTES,

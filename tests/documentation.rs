@@ -127,6 +127,7 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
             path: "repository".into(),
             reference: "main".into(),
             execution_points: Default::default(),
+            rule_parameters: Default::default(),
         },
         section(README, "Import rule sets from Git"),
         "",
@@ -137,6 +138,7 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
         enabled: true,
         blocking: true,
         run_at: vec!["pre-push".into()],
+        parameters: Default::default(),
         check: Some(config::CheckDefinition {
             entrypoint: "index.sh".into(),
             interpreter: None,
@@ -158,6 +160,16 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
         section(README, "Add a review")
     );
     contract(&rule, &shared, "");
+    contract(
+        &hannes::parameters::Declaration {
+            kind: "file".into(),
+            required: true,
+            description: Some("Allowed scopes".into()),
+            value: Some(toml::Value::String(".commit-scopes".into())),
+        },
+        section(README, "Rule parameters"),
+        "parameters.<name>.",
+    );
     contract(
         &p.provider,
         section(README, "Configure the AI provider"),

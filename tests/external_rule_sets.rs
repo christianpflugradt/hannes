@@ -332,10 +332,13 @@ fn repository_root_is_a_governance_root() {
 }
 
 #[test]
-fn duplicate_imports_and_consumer_overrides_are_rejected() {
+fn repeated_imports_are_separate_bindings_and_consumer_overrides_are_rejected() {
     let f = Fixture::new();
     f.imports(&[("repository", "main"), ("./repository/", "main")]);
-    assert!(format!("{:#}", f.load(true).unwrap_err()).contains("duplicate"));
+    let p = f.load(true).unwrap();
+    let plan = planner::build(&p, Some("check"), false).unwrap().plan;
+    assert_eq!(plan.scheduled.len(), 2);
+    assert_ne!(plan.scheduled[0].id, plan.scheduled[1].id);
     f.imports(&[("repository", "main")]);
     let path = f.root.join(".hannes/config.toml");
     let text = fs::read_to_string(&path).unwrap();
@@ -1308,4 +1311,181 @@ fn explicit_points_execute_imported_rules_offline_with_missing_and_outdated_hook
         }
     }
     assert!(!f.root.join(".github").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn import_parameters_preserve_bindings_mappings_resources_and_reference_deduplication() {
+    let f = Fixture::new();
+    write(
+        &f.remote,
+        "repository/config.toml",
+        "id = 'quality'\ndescription = 'Parameterized checks and reviews'\nrules = ['required-files', 'required-files', 'parameter-review']\nrun_at = ['lint', 'test']\n",
+    );
+    let check_path = f.remote.join("repository/checks/required-files/rule.toml");
+    let declarations = "\n[parameters.scopes_file]\ntype = 'file'\nrequired = true\n[parameters.label]\ntype = 'string'\nrequired = true\n[parameters.optional]\ntype = 'file'\n";
+    fs::write(
+        &check_path,
+        format!("{}{declarations}", fs::read_to_string(&check_path).unwrap()),
+    )
+    .unwrap();
+    write(
+        &f.remote,
+        "repository/checks/required-files/resource",
+        "bundled\n",
+    );
+    write(
+        &f.remote,
+        "repository/checks/required-files/index.sh",
+        r#"
+test "$(cat "$HANNES_RULE_DIRECTORY/resource")" = bundled || exit 1
+test "${HANNES_PARAM_OPTIONAL+x}" != x || exit 1
+test "$(cat "$HANNES_PARAM_SCOPES_FILE")" = "$HANNES_PARAM_LABEL" || exit 1
+printf '%s:%s\n' "$HANNES_PARAM_LABEL" "$HANNES_PARAM_SCOPES_FILE"
+"#,
+    );
+    write(
+        &f.remote,
+        "repository/reviews/parameter-review/rule.toml",
+        &format!(
+            "id = 'parameter-review'\ndescription = 'Imported parameter review'\n[review]\nprompt = 'prompt.md'\n{declarations}"
+        ),
+    );
+    write(
+        &f.remote,
+        "repository/reviews/parameter-review/prompt.md",
+        "Inspect the configured scope file.",
+    );
+    commit(&f.remote);
+    write(&f.root, "frontend/scopes.txt", "frontend\n");
+    write(&f.root, "backend/scopes.txt", "backend\n");
+    let binding = |label: &str| {
+        format!(
+            "[imports.execution_points]\nlint = 'verify'\ntest = 'verify'\n[imports.rule_parameters.required-files]\nlabel = {label:?}\nscopes_file = '{label}/scopes.txt'\n[imports.rule_parameters.parameter-review]\nlabel = {label:?}\nscopes_file = '{label}/scopes.txt'\n"
+        )
+    };
+    mapped_imports(
+        &f,
+        &[
+            ("repository", &binding("frontend")),
+            ("repository", &binding("backend")),
+        ],
+        &["verify"],
+    );
+    let p = f.load(true).unwrap();
+    let plan = planner::build(&p, Some("verify"), false).unwrap().plan;
+    assert_eq!(plan.scheduled.len(), 4);
+    assert_eq!(plan.planned_model_calls, 2);
+    let ids: std::collections::BTreeSet<_> = plan.scheduled.iter().map(|r| &r.id).collect();
+    assert_eq!(ids.len(), 4);
+    assert!(
+        plan.scheduled
+            .iter()
+            .all(|r| r.origin.as_ref().unwrap().external.is_some())
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&f.state()).unwrap()["resolutions"]
+            .as_object()
+            .unwrap()
+            .len(),
+        1
+    );
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    struct ParameterReview;
+    impl Provider for ParameterReview {
+        fn review(&self, request: &Request<'_>) -> anyhow::Result<String> {
+            let label = &request.parameters["HANNES_PARAM_LABEL"];
+            let path = &request.parameters["HANNES_PARAM_SCOPES_FILE"];
+            assert!(Path::new(path).starts_with(&request.project.root));
+            assert_eq!(fs::read_to_string(path).unwrap().trim(), label);
+            Ok(serde_json::json!({"reviews":request.reviews.iter().map(|r| serde_json::json!({"id":r.id, "status":"PASS", "reason":"Scope file inspected", "findings":[{"message":"Scopes available", "path":format!("{label}/scopes.txt"), "line":1}]})).collect::<Vec<_>>()}).to_string())
+        }
+    }
+    let report = hannes::verify_project_at(
+        f.load(false).unwrap(),
+        &ParameterReview,
+        hannes::VerificationMode::AllRules,
+        Some("verify"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.overall, Status::Pass);
+    assert_eq!(report.results.len(), 4);
+    let outputs: Vec<_> = report
+        .results
+        .iter()
+        .filter_map(|i| i.stdout.as_ref().map(|s| s.text.as_str()))
+        .collect();
+    assert!(outputs.iter().any(|o| o.starts_with("frontend:")));
+    assert!(outputs.iter().any(|o| o.starts_with("backend:")));
+    hannes::report::read(&f.root).unwrap();
+}
+
+#[test]
+fn import_parameter_values_cannot_leak_to_other_imports_or_undeclared_names() {
+    let f = Fixture::new();
+    let path = f.remote.join("repository/checks/required-files/rule.toml");
+    fs::write(
+        &path,
+        format!(
+            "{}\n[parameters.label]\ntype = 'string'\nrequired = true\n",
+            fs::read_to_string(&path).unwrap()
+        ),
+    )
+    .unwrap();
+    commit(&f.remote);
+    mapped_imports(
+        &f,
+        &[
+            (
+                "repository",
+                "[imports.rule_parameters.required-files]\nlabel = 'first'",
+            ),
+            ("repository", ""),
+        ],
+        &[],
+    );
+    let p = f.load(true).unwrap();
+    let report = hannes::verify_project_at(
+        p,
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.overall, Status::Error);
+    assert_eq!(
+        report
+            .results
+            .iter()
+            .filter(|r| r.status == Status::Pass)
+            .count(),
+        1
+    );
+    let error = report
+        .results
+        .iter()
+        .find(|r| r.status == Status::Error)
+        .unwrap();
+    assert!(error.reason.contains("label") && error.reason.contains("missing"));
+    mapped_imports(
+        &f,
+        &[(
+            "repository",
+            "[imports.rule_parameters.required-files]\nlabel = 'first'\nundeclared = 'secret'",
+        )],
+        &[],
+    );
+    let report = hannes::verify_project_at(
+        f.load(false).unwrap(),
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.overall, Status::Error);
+    assert!(report.results[0].reason.contains("undeclared"));
+    assert!(report.results[0].reason.contains("not declared"));
 }

@@ -5,7 +5,7 @@ use std::{io::Write, path::Path};
 
 pub use crate::limits::MAX_SUMMARY_CHARS;
 
-/// Provider-reported counters for the single bundled review invocation.
+/// Provider-reported counters summed across review invocations.
 /// Cache and reasoning counters are subsets, never added to the total again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

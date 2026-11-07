@@ -31,8 +31,9 @@ files such as `checks/secrets/gitleaks.toml` are data and are never parsed by Ha
 Definitions cannot be placed arbitrarily or nested in other directories.
 
 Unknown fields, duplicate keys/IDs and invalid references fail validation, even
-for disabled rules. Text uses UTF-8; required text must be nonblank and contain no
-NUL. Resource filenames must name regular files directly inside their own rule
+for disabled rules. Missing implementations become execution errors only for
+enabled selected rules. Text uses UTF-8; required text must be nonblank and contain
+no NUL. Resource filenames must name regular files directly inside their own rule
 directory: no empty names, separators, absolute paths, parent traversal or symlinks.
 Rule directories, definitions and configuration paths also reject symlinks.
 
@@ -78,8 +79,60 @@ points in the consumer, including unmapped custom points used by imports.
 | `enabled` | Optional; `true` | False rules are validated but never executed or included in results. Plans list them under `disabled_rules`. |
 | `blocking` | Optional; `true` | A completed FAIL prevents success when true. ERROR is always fatal. |
 | `run_at` | Optional; `[]` | Own execution points; overridden by membership in Rule Sets. Enabled rules need an effective assignment. |
+| `parameters` | Optional; `{}` | Named parameter declarations; see below. |
 | `check` | Optional; `null` | Check implementation; required for a check rule and mutually exclusive with `review`. |
 | `review` | Optional; `null` | Review implementation; required for a review rule and mutually exclusive with `check`. |
+
+### Rule parameters
+
+Checks and reviews use the same parameters. Declare each parameter in its rule's
+`rule.toml`. For a local commit-message check, for example:
+
+```toml
+id = "commit-message"
+description = "Validate Conventional Commits"
+run_at = ["commit-msg"]
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+
+[parameters.scopes_file]
+type = "file"
+required = true
+description = "Allowed commit scopes"
+value = ".commit-scopes"
+```
+
+| Field | Required / default | Meaning |
+| --- | --- | --- |
+| `parameters.<name>.type` | Required | `"string"` for an arbitrary string or `"file"` for an existing consumer file. |
+| `parameters.<name>.required` | Optional; `false` | Whether a value must be supplied before execution. |
+| `parameters.<name>.description` | Optional; `null` | Explanation for the consumer. |
+| `parameters.<name>.value` | Optional; `null` | Local value. Imported declarations must omit this field; the consumer supplies it per import. |
+
+Parameter names use ASCII letters, digits and underscores, starting with a letter.
+Uppercase names must be unique within a rule. Values are strings without NUL;
+there are no default values. Omitted optional parameters remain absent.
+
+A `file` value resolves from the consuming Git repository root: `.commit-scopes`
+and `conventions/commit-scopes.txt` both work. The target must be an existing
+regular file. Absolute paths, parent traversal and symlink components are rejected.
+Rule scripts, prompts and bundled assets still resolve inside the rule directory.
+
+Hannes delivers values as environment variables: `scopes_file` becomes
+`HANNES_PARAM_SCOPES_FILE`. File values become absolute paths; strings stay unchanged.
+A check can read `"$HANNES_PARAM_SCOPES_FILE"` in shell or
+`os.environ["HANNES_PARAM_SCOPES_FILE"]` in Python. Reviews receive the same variables
+in their provider subprocess, and their criteria data lists this environment.
+Inherited `HANNES_PARAM_*` variables are cleared before applying declared values.
+Reviews sharing identical resolved environments share a call; different environments
+use separate calls with the same prepared context. Provider timeout applies per call.
+
+Missing required values, unsupported types, undeclared supplied names and invalid
+files produce **ERROR**, identifying the rule and parameter. ERROR blocks success
+even with `blocking = false`. Disabled rules do not resolve parameter values or
+require their implementations to exist.
 
 ### Add a check
 
@@ -139,9 +192,12 @@ root as their working directory. `HANNES_RULE_DIRECTORY` is the absolute directo
 of the check, for bundled resources such as a scanner configuration or helper.
 For example, Python can read `Path(os.environ["HANNES_RULE_DIRECTORY"]) / "config.json"`.
 
-Exit 0 is PASS; nonzero is FAIL except **exit 2**, which explicitly reports an
-execution ERROR. A wrapper around a scanner must map its infrastructure failures
-to exit 2. Spawn, capture and timeout failures are always ERROR. A non-blocking
+Exit **0 = PASS**, **1 = FAIL**, **2 = ERROR**. Unexpected numeric codes produce
+FAIL with an explicit diagnostic. Signal termination, missing entrypoints,
+process-launch, capture and timeout failures are ERROR. Wrap external tools to
+translate their own exit-code contracts: a scanner's exit 2 may mean a violation,
+so map that to 1 and map actual execution problems to 2. Hannes does not parse
+shell error messages to classify startup failures. A non-blocking
 FAIL remains visible and permits reviews and overall success; an ERROR remains
 fatal regardless of blocking. Output capture and process cleanup are shared
 across direct and interpreter execution.
@@ -185,16 +241,16 @@ tool_output_token_limit = 2000
 | Field | Required / default | Meaning |
 | --- | --- | --- |
 | `provider` | Required | Exactly `"codex-cli"`. |
-| `timeout_seconds` | Required | Integer `1..3600`: total seconds for MCP discovery and the model call. Discovery itself is capped at 10 seconds. |
+| `timeout_seconds` | Required | Integer `1..3600`: seconds per batch for MCP discovery and the model call. Discovery itself is capped at 10 seconds. |
 | `model` | Optional; Codex default | Model identifier passed as `--model`. Generated files select GPT-6.1 Sol (`gpt-6.1-sol`); alternatives must be supported by your CLI/account. |
 | `mcp_servers` | Optional; `[]` | Names of Codex MCP servers allowed for reviews. Empty or omitted disables all of them. See below. |
-| `review_profile` | Optional table | Settings for the shared AI call. These settings apply to all reviews. |
+| `review_profile` | Optional table | Settings for every AI batch. These settings apply to all reviews. |
 | `review_profile.reasoning_effort` | Optional; Codex default | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`. Actual support depends on the model/CLI. |
 | `review_profile.tool_output_token_limit` | Optional; `2000` | Integer `256..16384`: tokens retained per tool output in Codex history. This is not a limit on total tokens or cost. |
 
 Omitting `model` or `reasoning_effort` uses the corresponding Codex default.
 Unsupported models or settings produce ERROR; Hannes does not silently substitute
-another model. The configuration applies to all selected reviews in their shared call.
+another model. The configuration applies to every selected review batch.
 
 **MCP integrations.** MCP (Model Context Protocol) servers give Codex access to
 additional tools or data, such as a project knowledge graph. Define server commands,
@@ -293,12 +349,13 @@ rules = ["repository-readme", "architecture-review"]
 | `id` | Required | Unique set ID: 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Independent of rule IDs. |
 | `description` | Required | Nonblank explanation. |
 | `run_at` | Required | Nonempty list of known execution points. |
-| `rules` | Required | Unique rule IDs defined in the same scope. Empty is allowed; set references are unsupported. |
+| `rules` | Required | Rule IDs defined in the same scope; repeated references execute once. Empty is allowed; set references are unsupported. |
 
 Present sets always apply; they have no enabled, blocking or source attributes.
 Remove a set or its rule references to stop using it. Set membership overrides a
 rule's own assignments; multiple memberships contribute their union. Each rule
-runs at most once at a point. Standalone enabled rules use their own `run_at`.
+runs at most once at a point within each import binding. Standalone enabled rules
+use their own `run_at`.
 Disabled rules never execute. All references, even overridden ones, are validated.
 
 ```sh
@@ -353,6 +410,7 @@ report = "verify"
 | `path` | Required | Selected directory, or `"."` for repository root; no parents or symlinks. |
 | `ref` | Required | Exact branch, tag or full commit hash, 1–1024 bytes. |
 | `execution_points` | Optional; `{}` | Per-import table mapping external custom names to consumer-declared custom names. |
+| `rule_parameters` | Optional; `{}` | Per-import tables of rule IDs to parameter names and string values. |
 
 The table belongs only to the immediately preceding `[[imports]]`. Sources must
 be custom names used by that imported Rule Set; targets must already appear in
@@ -360,6 +418,33 @@ the consumer's `execution_points.custom`. Names follow the same syntax and limit
 as custom declarations. Built-ins are forbidden on both sides. Unknown names,
 empty/invalid names and structures other than a table of strings fail validation.
 Unmapped points keep their names and must be known to the consumer.
+
+Supply imported parameter values in tables belonging to that specific import.
+The external rule declares `parameters.scopes_file` as above, omitting `value`:
+
+```toml
+[[imports]]
+git = "https://github.com/example/governance.git"
+path = "repository"
+ref = "v1.0.0"
+
+[imports.rule_parameters.commit-message]
+scopes_file = "frontend/scopes.txt"
+
+[[imports]]
+git = "https://github.com/example/governance.git"
+path = "repository"
+ref = "v1.0.0"
+
+[imports.rule_parameters.commit-message]
+scopes_file = "backend/scopes.txt"
+```
+
+These imports execute as two distinct bindings. Values never merge, and there is
+no global parameter table. Results use distinct imported IDs and retain source
+provenance. Repeated references to a rule within one binding execute it once per
+point, including when multiple source points map to the same target. Repeating
+an identical import also creates a separate binding.
 
 Mappings apply after scope-local Rule Set inheritance. Multiple source points may
 map to one target; a Rule runs once there. Separate imports may map the same source

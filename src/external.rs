@@ -25,6 +25,8 @@ pub struct Import {
     pub reference: String,
     #[serde(default)]
     pub execution_points: BTreeMap<String, String>,
+    #[serde(default)]
+    pub rule_parameters: BTreeMap<String, BTreeMap<String, toml::Value>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -149,13 +151,12 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
     for import in &mut imports {
         import.validate(&root)?;
     }
-    imports.sort_by_key(Import::key);
-    ensure!(
-        !imports
-            .windows(2)
-            .any(|pair| pair[0].key() == pair[1].key()),
-        "duplicate external rule-set import"
-    );
+    imports.sort_by_key(|import| {
+        (
+            import.key(),
+            serde_json::to_string(&import.rule_parameters).unwrap(),
+        )
+    });
     ensure!(
         imports.len() <= MAX_RULES,
         "at most {MAX_RULES} external rule sets"
@@ -248,6 +249,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
     };
     let mut resolved: BTreeMap<(String, String), String> = BTreeMap::new();
     let mut checkouts: BTreeMap<(String, String), PathBuf> = BTreeMap::new();
+    let mut bindings: BTreeMap<String, usize> = BTreeMap::new();
     for import in imports {
         let repository = import.repository();
         let key = import.key();
@@ -383,11 +385,37 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
                 import.reference
             );
         }
-        let prefix = format!("git:{key}:{}:", import.path);
+        // Resolution identifies immutable definitions. Execution identifies the
+        // import binding, independently of custom execution-point mappings.
+        let binding = hash(serde_json::to_vec(&(&key, &import.rule_parameters)).unwrap());
+        let occurrence = bindings.entry(binding.clone()).or_default();
+        let prefix = format!("git:{binding}:{}:{}:", import.path, *occurrence + 1);
+        *occurrence += 1;
+        for id in import.rule_parameters.keys() {
+            ensure!(
+                external.effective.rules.contains_key(id),
+                "import {:?}: rule {id:?}: rule_parameters names an unknown rule",
+                import.path
+            );
+        }
         for check in &mut external.checks {
+            check.parameters.bind_import(
+                import
+                    .rule_parameters
+                    .get(&check.id)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
             check.id = format!("{prefix}{}", check.id);
         }
         for review in &mut external.reviews {
+            review.parameters.bind_import(
+                import
+                    .rule_parameters
+                    .get(&review.id)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
             review.id = format!("{prefix}{}", review.id);
         }
         for set in &mut external.rule_sets {

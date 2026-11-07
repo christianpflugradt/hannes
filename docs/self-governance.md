@@ -5,7 +5,7 @@ Builds under target/ are candidates under test and never become the governor.
 The repository uses local Check definitions and a pinned external commit-message
 Rule Set, with no reviews or provider calls.
 
-The exact governor pin in [.hannes-version](../.hannes-version) is v0.8.0. This
+The exact governor pin in [.hannes-version](../.hannes-version) is v0.9.0. This
 published release supports the repository configuration, execution points and
 shared external Rule references and pass auf --auto-approve for unattended hook
 reconciliation.

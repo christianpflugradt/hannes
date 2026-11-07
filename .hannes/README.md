@@ -18,7 +18,7 @@ hannes mach was --at pre-commit --plan
 mise check
 ```
 
-The governor is pinned to published Hannes v0.8.0, which supports --auto-approve.
+The governor is pinned to published Hannes v0.9.0, which supports --auto-approve.
 Do not use a candidate built from this checkout as the governor.
 
 See [repository self-integration](../docs/self-governance.md) for setup, required

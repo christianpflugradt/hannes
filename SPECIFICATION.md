@@ -333,7 +333,7 @@ The governor is an installed, previously published binary outside the checkout;
 local candidate builds never govern the source being checked. `.hannes-version`
 is the sole exact release pin, consumed by the shared CI setup action and updated
 by Renovate GitHub-release PRs without automerge. CI never resolves latest.
-The governor is pinned to published v0.8.0. Repository rules use the unversioned,
+The governor is pinned to published v0.9.0. Repository rules use the unversioned,
 self-contained Rule model and fixed Git-hook execution points.
 
 The three Git-backed built-in points serve Git hooks. Explicit custom points ci-native,

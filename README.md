@@ -870,7 +870,7 @@ is listed in the [TODOs](docs/todo/README.md).
 
 ## Development
 
-The governor is pinned to published Hannes v0.8.0. See
+The governor is pinned to published Hannes v0.9.0. See
 [repository self-integration](docs/self-governance.md) for setup and coverage.
 
 This repository's deterministic quality checks run through an installed published

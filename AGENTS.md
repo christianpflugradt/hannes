@@ -41,6 +41,15 @@ Consistency and no AI slop are the highest quality priorities for every change.
   Never tag, publish, install hooks or change other remote services unless explicitly
   requested. Do not run real Codex reviews without an explicit request.
 
+## Workflow runs
+
+- Never monitor, poll, watch or wait for GitHub Actions or other remote workflow
+  runs unless the user explicitly asks for monitoring.
+- If further work depends on a workflow finishing, pause and ask the user to let
+  you know when it has finished. Continue after the user provides that update.
+- Apply this rule in every session, including fresh contexts. A request to run,
+  validate, commit or push changes does not authorize workflow monitoring.
+
 ## Code discovery
 
 Prefer codebase-memory-mcp when available. At session start, confirm the nearest

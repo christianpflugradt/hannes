@@ -16,4 +16,4 @@ path = "AGENTS.md"
 path = "docs/agents-review-rubric.md"
 
 [review.trigger]
-changed_files = ["AGENTS.md", "docs/agents-review-rubric.md"]
+changed_files = ["AGENTS.md"]

@@ -391,6 +391,7 @@ pub fn build(
                             environment,
                             (project.review_provider(review).provider == "cli")
                                 .then(|| review.id.clone()),
+                            review.include_diff,
                         )
                     })
             })

@@ -80,7 +80,7 @@ points in the consumer, including unmapped custom points used by imports.
 | `name` | Optional; `null` | Short display label; defaults to the original rule ID. 1–80 characters, no control characters or surrounding whitespace. |
 | `description` | Required | Nonblank explanation. |
 | `enabled` | Optional; `true` | False rules are validated but never executed or included in results. Plans list them under `disabled_rules`. |
-| `blocking` | Optional; `true` | A completed FAIL prevents success when true. ERROR is always fatal. |
+| `blocking` | Optional; `true` | FAIL and provider/review ERROR prevent success when true. Check, parameter and missing-prompt errors are always fatal. |
 | `run_at` | Optional; `[]` | Own execution points; overridden by membership in Rule Sets. Enabled rules need an effective assignment. |
 | `parameters` | Optional; `{}` | Named parameter declarations; see below. |
 | `check` | Optional; `null` | Check implementation; required for a check rule and mutually exclusive with `review`. |
@@ -139,8 +139,7 @@ Reviews sharing identical resolved environments share a call; different environm
 use separate calls with the same prepared context. Provider timeout applies per call.
 
 Missing required values, unsupported types, undeclared supplied names and invalid
-files produce **ERROR**, identifying the rule and parameter. ERROR blocks success
-even with `blocking = false`. Disabled rules do not resolve parameter values or
+files produce **ERROR**, identifying the rule and parameter. Parameter errors block success even with `blocking = false`. Disabled rules do not resolve parameter values or
 require their implementations to exist.
 
 ### Add a check
@@ -253,9 +252,9 @@ execution prevent PASS.
 ### Configure the AI provider
 
 
-The **provider** runs the AI requests. Hannes currently supports only **Codex CLI**
-and uses its existing local login. Install and authenticate Codex before enabling
-a review. In the same terminal or environment that will run Hannes, check:
+The **provider** runs AI requests through built-in **Codex CLI** or a generic
+external CLI. The default Codex provider uses its existing local login. Install
+and authenticate Codex before enabling a Codex review. In the same terminal or environment that will run Hannes, check:
 
 ```sh
 command -v codex
@@ -264,8 +263,8 @@ codex login
 ```
 
 Hannes starts the executable named `codex` through its inherited PATH, from the
-project root. Shell aliases, functions and startup files are not loaded. There
-is no configurable executable path. IDEs and Git hooks must also have the Codex
+project root. Shell aliases, functions and startup files are not loaded. The built-in Codex executable path is fixed. Generic CLI providers configure their
+own command. IDEs and Git hooks must also have the Codex
 installation directory on PATH.
 
 Generated `.hannes/provider.toml`:
@@ -283,9 +282,14 @@ tool_output_token_limit = 2000
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `provider` | Required | Exactly `"codex-cli"`. |
-| `timeout_seconds` | Required | Integer `1..3600`: seconds per batch for MCP discovery and the model call. Discovery itself is capped at 10 seconds. |
-| `model` | Optional; Codex default | Model identifier passed as `--model`. Generated files select GPT-6.1 Sol (`gpt-6.1-sol`); alternatives must be supported by your CLI/account. |
+| `provider` | Required | `"codex-cli"` or `"cli"`. |
+| `command` | Optional; `null` | Required for `cli`: executable name or path; nonblank, no NUL. Unsupported for Codex. |
+| `args` | Optional; `[]` | Literal CLI arguments, including empty arguments; no NUL. Unsupported for Codex. |
+| `requirements` | Optional table | Runtime prerequisites for this provider; omitted lists are empty. |
+| `requirements.env` | Optional; `[]` | Nonempty child environment variables required at execution. Names use ASCII letters, digits and underscores, starting with a letter or underscore. |
+| `requirements.executables` | Optional; `[]` | Required executable names or paths; nonblank, no NUL. |
+| `timeout_seconds` | Required | Integer `1..3600` (CLI also accepts `0` for no overall deadline): seconds per invocation, including stdin delivery. Codex includes MCP discovery, itself capped at 10 seconds. |
+| `model` | Optional; Codex default | Model identifier passed as `--model` for Codex or child environment variable `HANNES_MODEL` for CLI; nonblank, no NUL. Generated files select GPT-6.1 Sol (`gpt-6.1-sol`); alternatives must be supported by your CLI/account. |
 | `mcp_servers` | Optional; `[]` | Names of Codex MCP servers allowed for reviews. Empty or omitted disables all of them. See below. |
 | `review_profile` | Optional table | Settings for batches using this provider configuration. |
 | `review_profile.reasoning_effort` | Optional; Codex default | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`. Actual support depends on the model/CLI. |
@@ -352,12 +356,77 @@ permit local overrides. Repeated imports of the same immutable provider file
 share its definition. No provider dependencies are downloaded automatically.
 Existing offline cache integrity and atomic resolution guarantees apply.
 
-Only `codex-cli` executes. Reviews batch together only when their provider
-reference and resolved parameter environment match. Different references use
+Codex reviews batch together only when their provider reference and resolved
+parameter environment match. Generic CLI reviews execute individually. Different references use
 separate invocations, even if their settings match. Plans and saved reports record
 each explicit reference and its effective configuration. Provider files accept
-no credential fields; use the existing Codex login. Additional transports,
-credential management and runtime requirements are unsupported.
+no credential fields. Codex uses its existing login; generic tools inherit
+credentials from the execution environment. Hannes never records their values.
+
+**Generic CLI.** The repository's Gemini REST adapter uses Python's standard
+library and the existing CLI transport:
+
+```toml
+# .hannes/providers/gemini.toml
+provider = "cli"
+command = "python3"
+args = ["scripts/gemini-review.py"]
+model = "gemini-3.8-flash"
+timeout_seconds = 0
+
+[requirements]
+env = ["GEMINI_API_KEY"]
+executables = ["python3"]
+```
+
+The adapter reads the complete prompt from stdin and selects the configured model
+through `HANNES_MODEL`. It sends one generateContent request and extracts the first
+completed candidate's text. Hannes validates the unchanged review JSON. See the
+[Gemini adapter policy](agents-quality-review.md#provider-and-local-execution)
+for HTTP retries, request timeouts and safe diagnostics. No Gemini CLI is needed.
+For tools that already accept stdin and return Hannes JSON, configure their
+executable directly and put model flags in `args` instead of using `model`.
+
+Commands run directly from the consumer root. Arguments are literal: no shell
+operators, variable expansion, globbing, interpolation or substitution. Use an
+explicit executable path or inherited PATH. Prompt delivery uses a pipe, without
+a temporary prompt file. The prompt includes review instructions, prepared project
+context, evidence rules and the JSON response schema. Return one verdict for the
+requested review ID, with no fences, extra text or envelope:
+
+```json
+{"reviews":[{"id":"architecture-review","status":"PASS","reason":"Criteria satisfied","findings":[{"message":"Boundary is explicit","path":"src/main.rs","line":1}]}]}
+```
+
+The ID must match the prompt. PASS and FAIL require real in-manifest file/line
+evidence; ERROR expresses unavailable evidence or uncertainty. The existing
+[response contract](../SPECIFICATION.md#out-001-structured-review-outcomes) applies.
+Malformed, incomplete or ungrounded responses are ERROR. Nonzero exits, missing
+commands and timeouts are ERROR regardless of output. Stdout and stderr are
+drained with bounded captures; stdout beyond 64 KiB is rejected. Raw output and
+invalid response details are excluded from diagnostics. Generic token usage is
+unavailable. Process trees use the same cleanup as checks; this is not a sandbox.
+
+Requirements are syntax-checked even for unused providers. Availability is checked
+only after point selection, deterministic checks and review parameter resolution,
+for the providers that will execute. Missing/empty variables or missing executables
+produce review ERROR; an unused provider never requires its credentials. Offline
+plans and `pass auf` do not check runtime availability. Executable requirements
+use the child's PATH or explicit paths relative to the consumer root. Environment
+values stay outside TOML and must be supplied to the terminal, CI or hook process.
+
+Generic providers cannot use Codex MCP controls or custom review profiles; omit
+those settings. They inherit the execution environment, rule parameters and
+`HANNES_EXECUTION_POINT`; omitted `model` clears inherited `HANNES_MODEL`.
+Codex keeps its MCP allow list, model/effort, login policy and batching unchanged.
+
+Trust executable providers as you trust checks. Imported provider commands follow
+the existing [external source trust model](external-rule-sets.md#source-resources-and-trust):
+explicitly imported, validated, immutable cached definitions, without local
+overrides. Imported programs execute with your permissions. Hannes supplies no
+generic tool sandbox; read-only settings and authentication belong to the chosen
+tool or wrapper. The repository Gemini adapter owns HTTP transport and retries; Hannes retains
+selection, prompt assembly and verdict validation.
 
 ### Add a review
 
@@ -390,6 +459,7 @@ consumer through the existing shared provider call, after deterministic checks.
 | `review.provider` | Optional; `null` (omitted in TOML) | Named provider ID; omission uses the legacy project provider. |
 | `review.trigger` | Optional; `null` (omitted in TOML) | Select this review only for matching changed files. |
 | `review.trigger.changed_files` | Required | 1–64 repository-relative patterns, each at most 1024 UTF-8 bytes; any match selects the review. |
+| `review.include_diff` | Optional; `true` | Include the Git orientation diff in the prompt; independent of file triggers and context. Different settings use separate provider batches. |
 | `review.prompt` | Required | Nonblank UTF-8 `.md` filename in the review directory. |
 | `review.files` | Optional; `[]` | Up to 64 unique existing consumer-relative source files; exact paths, not globs. Starting points, not an evidence boundary. |
 | `review.context` | Optional; `[]` | Up to 32 document selections as `[[review.context]]`. |

@@ -113,6 +113,7 @@ pub struct Check {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Review {
+    pub include_diff: bool,
     pub trigger: Option<ReviewTrigger>,
     pub provider: Option<String>,
     pub id: String,
@@ -167,6 +168,8 @@ pub struct CheckDefinition {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReviewDefinition {
+    #[serde(default = "default_true")]
+    pub include_diff: bool,
     pub trigger: Option<ReviewTrigger>,
     pub provider: Option<String>,
     pub prompt: String,
@@ -504,7 +507,9 @@ pub(crate) fn validate_provider(provider: &ProviderConfig) -> Result<()> {
             "invalid required executable"
         );
     }
-    timeout(provider.timeout_seconds)?;
+    if provider.provider != "cli" || provider.timeout_seconds != 0 {
+        timeout(provider.timeout_seconds)?;
+    }
     if let Some(model) = &provider.model {
         nonempty(model, "model")?;
         ensure!(!model.contains('\0'), "model must contain no NUL");

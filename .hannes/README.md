@@ -5,7 +5,7 @@ external commit-message and Security Rule Sets at six execution points, plus
 the unpinned repository-conventions Rule Set at check and pre-push. Its only
 Rule compares LICENSE against the bundled license references byte-for-byte.
 A conditional AGENTS.md quality Review runs only at check through a named Gemini
-CLI provider. Git hooks and release-build points select checks only.
+REST adapter through the CLI transport. Git hooks and release-build points select checks only.
 
 `checks/*/rule.toml` defines 16 local Rules using direct command arrays or Python
 file entrypoints with an explicit interpreter. Cargo, Python helper and JavaScript

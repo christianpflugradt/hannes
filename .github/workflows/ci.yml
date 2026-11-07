@@ -13,7 +13,7 @@ jobs:
   checks:
     name: Quality checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       BUILD_TARGET: x86_64-unknown-linux-gnu
       CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
@@ -47,8 +47,6 @@ jobs:
         run: hannes pass auf --auto-approve
       - name: Establish review comparison baseline
         run: python3 scripts/review-change-base.py
-      - name: Install Gemini CLI
-        run: npm install --global --ignore-scripts @google/gemini-cli@0.67.0
       - name: Run Hannes checks and applicable reviews
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

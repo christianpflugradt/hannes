@@ -69,7 +69,7 @@ fn terminate_tree(child: &mut std::process::Child) {
 }
 
 pub fn run(command: &mut Command, timeout: Duration) -> Result<Output> {
-    run_observed(command, timeout, None, None)
+    run_observed(command, timeout, None, None, None)
 }
 
 /// Observe stdout while draining it, including bytes beyond the retained capture.
@@ -79,7 +79,7 @@ pub fn run_with_stdout_observer(
     timeout: Duration,
     observer: impl FnMut(&[u8]) + Send + 'static,
 ) -> Result<Output> {
-    run_observed(command, timeout, Some(Box::new(observer)), None)
+    run_observed(command, timeout, Some(Box::new(observer)), None, None)
 }
 
 /// Deliver stdin concurrently with output capture under the same process deadline.
@@ -90,7 +90,31 @@ pub fn run_with_input(
     observer: impl FnMut(&[u8]) + Send + 'static,
 ) -> Result<Output> {
     command.stdin(Stdio::piped());
-    run_observed(command, timeout, Some(Box::new(observer)), Some(input))
+    run_observed(
+        command,
+        timeout,
+        Some(Box::new(observer)),
+        Some(input),
+        None,
+    )
+}
+
+/// Observe safe adapter diagnostics without retaining arbitrary stderr as a verdict.
+pub fn run_with_input_diagnostics(
+    command: &mut Command,
+    timeout: Duration,
+    input: Vec<u8>,
+    observer: impl FnMut(&[u8]) + Send + 'static,
+    diagnostics: impl FnMut(&[u8]) + Send + 'static,
+) -> Result<Output> {
+    command.stdin(Stdio::piped());
+    run_observed(
+        command,
+        timeout,
+        Some(Box::new(observer)),
+        Some(input),
+        Some(Box::new(diagnostics)),
+    )
 }
 
 fn run_observed(
@@ -98,6 +122,7 @@ fn run_observed(
     timeout: Duration,
     mut observer: Option<Observer>,
     input: Option<Vec<u8>>,
+    mut diagnostics: Option<Observer>,
 ) -> Result<Output> {
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(unix)]
@@ -127,7 +152,11 @@ fn run_observed(
         (false, Box::new(err) as Box<dyn Read + Send>),
     ] {
         let sender = sender.clone();
-        let observer = if is_out { observer.take() } else { None };
+        let observer = if is_out {
+            observer.take()
+        } else {
+            diagnostics.take()
+        };
         thread::spawn(move || {
             let _ = sender.send((is_out, drain(stream, observer)));
         });

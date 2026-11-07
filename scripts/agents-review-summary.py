@@ -22,7 +22,7 @@ def outcome(report):
             raise ValueError("Unknown verdict")
         return status, item["reason"], item["findings"]
     if not results and any(item["rule"]["id"] == REVIEW and item["reason"] == "trigger_not_matched" for item in report["plan"]["omitted"]):
-        return "SKIP", "Neither AGENTS.md nor its evaluation rubric changed.", []
+        return "SKIP", "AGENTS.md did not change.", []
     raise ValueError("Review outcome unavailable")
 
 

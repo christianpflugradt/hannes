@@ -67,6 +67,25 @@ fn repository_review_uses_complete_context_and_triggered_cli() {
         ] {
             write(root.path(), path, text);
         }
+        // Exercise the new configuration only inside the candidate acceptance fixture.
+        // The repository's active governance must remain compatible with v0.11.0.
+        let review_path = root.path().join(".hannes/reviews/agents-quality/rule.toml");
+        fs::write(
+            &review_path,
+            fs::read_to_string(&review_path).unwrap().replace(
+                "prompt = \"prompt.md\"",
+                "prompt = \"prompt.md\"\ninclude_diff = false",
+            ),
+        )
+        .unwrap();
+        let provider_path = root.path().join(".hannes/providers/gemini-flash.toml");
+        fs::write(
+            &provider_path,
+            fs::read_to_string(&provider_path)
+                .unwrap()
+                .replace("timeout_seconds = 180", "timeout_seconds = 0"),
+        )
+        .unwrap();
         git(root.path(), &["add", "."]);
         git(
             root.path(),
@@ -109,20 +128,17 @@ fn repository_review_uses_complete_context_and_triggered_cli() {
         fs::write(tools.path().join("expected.json"), expected.to_string()).unwrap();
         write(
             tools.path(),
-            "gemini",
+            "http-fixture",
             r#"#!/usr/bin/env python3
 import json, os, pathlib, sys
 here = pathlib.Path(__file__).parent
 (here / 'called').write_text('yes')
-args = sys.argv
-assert args[args.index('--model')+1] == 'gemini-2.5-flash'
-assert args[args.index('--output-format')+1] == 'json'
-assert '--prompt' in args and '--policy' in args
-assert 'decision = "deny"' in pathlib.Path(args[args.index('--policy')+1]).read_text()
-assert not (pathlib.Path.cwd() / 'AGENTS.md').exists()
+assert os.environ['HANNES_MODEL'] == 'gemini-3.8-flash'
 assert os.environ['GEMINI_API_KEY'] == 'offline-fixture'
 prompt = sys.stdin.read()
 assert 'response schema' in prompt
+assert '<untrusted_diff>' not in prompt
+assert 'inspect the listed entry files' not in prompt
 line = next(x for x in prompt.splitlines() if x.startswith('Shared requirement excerpts,'))
 excerpts = json.loads(line.split('(JSON data): ', 1)[1])
 actual = {x['path']: x['text'] for x in excerpts}
@@ -132,14 +148,38 @@ status = 'FAIL' if 'TEST_fail' in actual['AGENTS.md'] else 'PASS'
 response = json.dumps({'reviews':[{'id':'agents-quality','status':status,'reason':'Guidance evaluated','findings':[{'message':'Concrete guidance evaluated','path':'AGENTS.md','line':1}]}]})
 if 'TEST_malformed' in actual['AGENTS.md']:
     response = '```json\n' + response + '\n```'
-print(json.dumps({'response':response,'stats':{}}))
+import importlib.util
+# Import the adapter without creating new files in the verified fixture.
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location('adapter', 'scripts/gemini-review.py')
+adapter = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(adapter)
+class Response:
+    status = 200
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def read(self, limit):
+        return json.dumps({'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':response}]}}]}).encode()
+class Opener:
+    def open(self, request, timeout):
+        assert timeout == 600
+        assert json.loads(request.data)['contents'][0]['parts'][0]['text'] == prompt
+        return Response()
+adapter.build_opener = lambda *args: Opener()
+print(adapter.run(prompt))
 "#,
         );
         fs::set_permissions(
-            tools.path().join("gemini"),
+            tools.path().join("http-fixture"),
             fs::Permissions::from_mode(0o755),
         )
         .unwrap();
+        let provider_path = root.path().join(".hannes/providers/gemini-flash.toml");
+        let provider_text = fs::read_to_string(&provider_path).unwrap().replace(
+            "command = \"python3\"",
+            &format!("command = {:?}", tools.path().join("http-fixture")),
+        );
+        fs::write(provider_path, provider_text).unwrap();
         let path = std::env::join_paths(
             std::iter::once(tools.path().to_path_buf())
                 .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
@@ -158,7 +198,6 @@ print(json.dumps({'response':response,'stats':{}}))
         let output = command.output().unwrap();
         let saved = report::read(root.path()).unwrap();
         let expected_status = match mode {
-            "malformed" | "credential" => Status::Error,
             "gate" => Status::Fail,
             _ => Status::Pass,
         };
@@ -174,10 +213,10 @@ print(json.dumps({'response':response,'stats':{}}))
         );
         assert_eq!(
             tools.path().join("called").exists(),
-            !matches!(mode, "credential" | "gate" | "skip"),
+            !matches!(mode, "credential" | "gate" | "skip" | "rubric"),
             "{mode}"
         );
-        if mode == "skip" {
+        if matches!(mode, "skip" | "rubric") {
             assert!(
                 saved
                     .plan

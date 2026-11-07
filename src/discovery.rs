@@ -294,6 +294,7 @@ fn load_rules(
                 loaded.reviews.push((
                     path.clone(),
                     Review {
+                        include_diff: review.include_diff,
                         trigger: review.trigger,
                         provider: review.provider,
                         id: rule.id.clone(),
@@ -395,6 +396,7 @@ pub(crate) fn init(root: &Path) -> Result<usize> {
         parameters: Default::default(),
         check: None,
         review: Some(crate::config::ReviewDefinition {
+            include_diff: true,
             trigger: None,
             provider: None,
             prompt: "prompt.md".into(),

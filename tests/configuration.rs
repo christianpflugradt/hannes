@@ -468,9 +468,9 @@ fn reviews_preserve_provider_contract_and_nonblocking_failures() {
         ("", "PASS", Status::Pass),
         ("", "FAIL", Status::Fail),
         ("blocking = false", "FAIL", Status::Pass),
-        ("blocking = false", "ERROR", Status::Error),
-        ("blocking = false", "unavailable", Status::Error),
-        ("blocking = false", "invalid", Status::Error),
+        ("blocking = false", "ERROR", Status::Pass),
+        ("blocking = false", "unavailable", Status::Pass),
+        ("blocking = false", "invalid", Status::Pass),
     ] {
         let d = project();
         review(d.path(), &format!("run_at = ['pre-push']\n{attributes}"));

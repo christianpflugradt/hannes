@@ -210,7 +210,6 @@ fn cli_configuration_is_strict_and_legacy_provider_remains_compatible() {
     let valid = fs::read_to_string(&path).unwrap();
     for invalid in [
         valid.replace("command = './tool'", "command = ''"),
-        valid.replace("timeout_seconds = 1", "timeout_seconds = 0"),
         valid.replace("provider = 'cli'", "provider = 'http'"),
         format!("{valid}\n[requirements]\nenv = ['BAD=NAME']\n"),
         format!("{valid}\n[review_profile]\nreasoning_effort = 'low'\n"),
@@ -219,6 +218,18 @@ fn cli_configuration_is_strict_and_legacy_provider_remains_compatible() {
         fs::write(&path, invalid).unwrap();
         assert!(config::load(root.path()).is_err());
     }
+    fs::write(
+        &path,
+        valid.replace("timeout_seconds = 1", "timeout_seconds = 0"),
+    )
+    .unwrap();
+    assert_eq!(
+        config::load(root.path())
+            .unwrap()
+            .review_provider(&config::load(root.path()).unwrap().reviews[0])
+            .timeout_seconds,
+        0
+    );
     fs::write(path, valid).unwrap();
     let project = config::load(root.path()).unwrap();
     assert_eq!(project.provider.provider, "codex-cli");
@@ -232,7 +243,7 @@ fn cli_configuration_is_strict_and_legacy_provider_remains_compatible() {
     assert_eq!(config::load(root.path()).unwrap().provider.provider, "cli");
 }
 #[test]
-fn completed_fail_respects_nonblocking_and_error_is_always_blocking() {
+fn completed_fail_and_error_respect_review_blocking() {
     let root = fixture();
     tool(root.path());
     provider(root.path(), "first", "fail", "");
@@ -246,6 +257,26 @@ fn completed_fail_respects_nonblocking_and_error_is_always_blocking() {
     )
     .unwrap();
     assert_eq!(execute(root.path()).overall, Status::Pass);
-    provider(root.path(), "first", "error", "");
+    for mode in ["error", "nonzero", "malformed", "timeout"] {
+        provider(root.path(), "first", mode, "");
+        let result = execute(root.path());
+        assert_eq!(result.overall, Status::Pass);
+        assert_eq!(
+            result
+                .results
+                .iter()
+                .find(|r| r.kind == "review")
+                .unwrap()
+                .status,
+            Status::Error
+        );
+    }
+    fs::write(
+        &path,
+        fs::read_to_string(&path)
+            .unwrap()
+            .replace("blocking = false", "blocking = true"),
+    )
+    .unwrap();
     assert_eq!(execute(root.path()).overall, Status::Error);
 }

@@ -61,12 +61,17 @@ pub struct Item {
     pub kind: String,
     pub status: Status,
     pub blocking: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub configuration_error: bool,
     pub duration_ms: u64,
     pub reason: String,
     pub findings: Vec<Finding>,
     pub exit_code: Option<i32>,
     pub stdout: Option<Capture>,
     pub stderr: Option<Capture>,
+}
+fn is_false(value: &bool) -> bool {
+    !value
 }
 impl Item {
     pub fn simple(id: &str, kind: &str, status: Status, reason: String) -> Self {
@@ -75,6 +80,7 @@ impl Item {
             kind: kind.into(),
             status,
             blocking: true,
+            configuration_error: false,
             duration_ms: 0,
             reason,
             findings: vec![],
@@ -105,7 +111,9 @@ pub struct Report {
     pub plan: crate::planner::Plan,
 }
 pub fn overall(items: &[Item]) -> Status {
-    if items.iter().any(|x| x.status == Status::Error) {
+    if items.iter().any(|x| {
+        x.status == Status::Error && (x.kind != "review" || x.blocking || x.configuration_error)
+    }) {
         Status::Error
     } else if items.iter().any(|x| x.status == Status::Fail && x.blocking) {
         Status::Fail
@@ -213,6 +221,11 @@ pub fn read(root: &Path) -> Result<Report> {
                 .iter()
                 .any(|item| item.id == rule.id && item.blocking == rule.blocking)),
         "inconsistent report rule metadata"
+    );
+    ensure!(
+        report.results.iter().all(|item| !item.configuration_error
+            || (item.kind == "review" && item.status == Status::Error)),
+        "inconsistent review configuration error"
     );
     let required: std::collections::BTreeSet<_> = plan.required_ids.iter().collect();
     ensure!(

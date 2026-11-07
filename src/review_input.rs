@@ -48,11 +48,15 @@ impl PreparedReviewInput {
             .take(MAX_MANIFEST_HINTS)
             .cloned()
             .collect();
-        let (diff, diff_truncated) = git_snapshot::bounded_diff_for_paths(
-            &project.root,
-            snapshot.head.is_some(),
-            focused_paths.as_deref(),
-        )?;
+        let (diff, diff_truncated) = if reviews.iter().any(|r| r.include_diff) {
+            git_snapshot::bounded_diff_for_paths(
+                &project.root,
+                snapshot.head.is_some(),
+                focused_paths.as_deref(),
+            )?
+        } else {
+            (String::new(), false)
+        };
         Ok(Self {
             excerpts,
             focused_paths,

@@ -27,11 +27,11 @@ sets, required IDs, input identity, bounded context and declared provider settin
 Each review with an explicit provider reference also records `provider` (the named
 ID) and `provider_config` (its complete effective settings). Absent fields select
 the plan's legacy project provider. Model calls count distinct provider references
-and resolved parameter environments for Codex; CLI reviews each count one call.
+and resolved parameter environments and include_diff settings for Codex; CLI reviews each count one call.
 No check, Codex request, network access or reconciliation occurs during preview.
 Incomplete snapshots or context preparation block execution. Preview does not
 certify a later source state. Reports use schema 4 and plans use schema 3. Blocking metadata distinguishes
-completed advisory failures from fatal errors; disabled Rules are listed separately.
+advisory FAIL/review ERROR from blocking failures and check/integrity errors; disabled Rules are listed separately.
 
 Triggered reviews require an explicit `HANNES_CHANGE_BASE` commit/ref, resolved to
 `change_base` in the plan. Net commit-to-worktree changes include committed and

@@ -399,6 +399,8 @@ fn reviews_validate_and_batch_by_resolved_environment_and_nonblocking_fail_conti
     assert_eq!(invalid.status, Status::Error);
     assert!(invalid.reason.contains("required"));
     assert!(!invalid.blocking);
+    assert!(invalid.configuration_error);
+    report::read(root.path()).unwrap();
 }
 
 #[test]
@@ -565,6 +567,7 @@ fn missing_and_disabled_review_prompts_produce_execution_errors_only_when_select
     assert_eq!(report.overall, Status::Error);
     assert_eq!(report.results[0].id, "missing");
     assert!(report.results[0].reason.contains("prompt"));
+    assert!(report.results[0].configuration_error);
     let path = root.path().join(".hannes/reviews/missing/rule.toml");
     fs::write(
         &path,

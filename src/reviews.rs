@@ -141,6 +141,7 @@ pub fn execute_prepared(
             Option<String>,
             crate::parameters::Environment,
             Option<String>,
+            bool,
         ),
         Vec<&Review>,
     >::new();
@@ -164,6 +165,7 @@ pub fn execute_prepared(
                     review.provider.clone(),
                     environment,
                     (project.review_provider(review).provider == "cli").then(|| review.id.clone()),
+                    review.include_diff,
                 ))
                 .or_default()
                 .push(review),
@@ -171,12 +173,13 @@ pub fn execute_prepared(
                 let mut item =
                     Item::simple(&review.id, "review", Status::Error, format!("{error:#}"));
                 item.blocking = review.blocking;
+                item.configuration_error = true;
                 items.push(item);
             }
         }
     }
     let mut usages = Vec::new();
-    for ((_, parameters, _), reviews) in groups {
+    for ((_, parameters, _, _), reviews) in groups {
         // A snapshot check is required before every provider invocation, including
         // later parameter batches. Never reuse prepared evidence after edits.
         let stable = crate::git_snapshot::capture(&project.root).is_ok_and(|current| {

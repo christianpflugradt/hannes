@@ -96,8 +96,8 @@ Hannes must preserve this distinction rather than presenting all verification re
 Hannes should support quality gates that prevent progression when required conditions have not been satisfied.
 
 Every selected rule must execute. Rules explicitly declare whether completed
-violations block success; the default is blocking. An inability to complete
-verification always prevents a successful overall result.
+violations block success; the default is blocking. An inability to complete a blocking review or any deterministic check prevents a
+successful overall result; advisory review errors remain visible.
 
 Hannes must distinguish actual violations from technical verification failures.
 

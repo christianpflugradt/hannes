@@ -204,7 +204,10 @@ Both installers download the pinned release's assets directly, without a GitHub
 Releases API request. Missing tags, assets or valid checksums fail installation;
 there is no fallback to latest. These installation steps need no GitHub token.
 
-The pinned governor supports the repository's named CLI provider and file triggers. Candidate binaries remain confined to disposable acceptance fixtures and
+The active configuration remains compatible with the v0.11.0 pin: it omits
+review.include_diff and retains the existing 180-second CLI deadline. Enabling
+include_diff = false and timeout_seconds = 0 is deferred until a supporting release
+is published and adopted. Candidate binaries remain confined to disposable acceptance fixtures and
 smoke tests; they never govern this checkout.
 
 The initial Action was published on main at
@@ -246,5 +249,5 @@ whole-document rubric evaluation, named Gemini provider, local execution and CI
 summary. The existing check point runs both checks and triggered reviews; the
 execution wrapper's --reviews option enables full execution there. Its default
 remains checks-only for hooks and native release points. CI sets an event baseline,
-installs Gemini CLI and supplies its optional secret only during execution.
-A semantic FAIL is non-blocking; a technical ERROR fails the job.
+uses the Python REST adapter and supplies its optional secret only during execution.
+The review remains non-blocking for FAIL and ERROR; both stay visible.

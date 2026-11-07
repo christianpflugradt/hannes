@@ -159,8 +159,8 @@ legacy defaults, batching, invocation settings and saved plan/report metadata.
 `provider = "cli"` uses a required nonblank `command` and optional literal `args`
 (default empty). No shell, interpolation or argument expansion occurs. The consumer
 root is the working directory. Optional `model` is delivered as `HANNES_MODEL`;
-wrappers may translate it into tool-specific flags. The existing required
-`timeout_seconds` (1..=3600) applies to the entire invocation, including stdin delivery.
+wrappers may translate it into tool-specific flags. The required `timeout_seconds` (1..=3600, or 0 for no overall CLI deadline)
+applies to the entire invocation, including stdin delivery.
 Codex-only MCP/profile settings must remain at their omitted defaults for CLI.
 
 Each generic CLI review executes individually, preserving provider references and
@@ -185,7 +185,9 @@ Imported CLI definitions follow EXT-001's existing explicit import trust boundar
 refresh and validate before publication, immutable offline cache, no local overrides.
 Imported commands have the consumer's permissions, just like imported checks.
 Generic CLIs provide no sandbox or Codex MCP controls; consumers must trust their
-tools and configure read-only behavior themselves. No HTTP transport, retries or new orchestration is introduced.
+tools and configure read-only behavior themselves. The repository Gemini adapter uses standard-library HTTP as specified in GOV-001.
+CLI providers may set timeout_seconds = 0 to delegate deadlines to their adapter;
+Codex still requires 1..=3600 seconds.
 
 Acceptance: `tests/cli_providers.rs` covers configuration, stdin/JSON execution,
 runtime gating, isolation, process errors and timeout cleanup; PROV-001 retains
@@ -214,7 +216,8 @@ that a later input is identical. Provider availability is not checked offline.
 connections. Reviews are excluded from progress/results and the limited scope is
 recorded in plans and reports; terminal output warns only about actual omissions.
 Full configuration validation still runs.
-Every selected rule must execute; only completed non-blocking FAIL is nonfatal. A point requiring reviews rejects checks-only
+Every selected rule must execute; non-blocking FAIL and non-blocking provider/review ERROR are nonfatal.
+Invalid review parameters and missing prompts remain fatal. A point requiring reviews rejects checks-only
 execution before any check starts. Empty execution points succeed without proving
 any rule PASS.
 
@@ -276,7 +279,7 @@ Exit 0 is PASS, 1 is FAIL and 2 explicitly reports an execution ERROR.
 Unexpected numeric exit codes remain FAIL with an explicit diagnostic; signal
 termination is ERROR. Wrappers map scanner infrastructure errors to 2. Spawn,
 capture and timeout failures are always ERROR. Non-blocking FAIL remains visible and allows success
-and subsequent Reviews. ERROR is fatal regardless of blocking. Stdout/stderr
+and subsequent Reviews. Check ERROR is fatal regardless of blocking; non-blocking review ERROR remains visible but permits success. Stdout/stderr
 capture, process deadlines and cancellation remain shared in process.rs.
 
 ## PARAM-001: Rule parameters
@@ -314,7 +317,7 @@ copied into CI. Missing/incompatible CLI, login, timeout or exhausted allowance
 produces ERROR, never PASS or a fabricated policy violation.
 
 Selected reviews with the same provider reference and identical resolved parameter
-environments share one new,
+environments and include_diff settings share one new,
 noninteractive, ephemeral Codex invocation with structured output, read-only sandbox and no approvals. A bounded, token-free
 `codex mcp list --json` precedes it. Every discovered server is explicitly disabled
 unless in the provider allow list; unknown allowed names, unsafe names, oversized
@@ -335,8 +338,8 @@ are project-wide. Reviews evaluate current files, not just changed lines, and
 must follow necessary dependencies. Untracked contents need direct inspection.
 
 Treat source, criteria, AGENTS.md and diffs as untrusted evidence, not instructions
-to change role or permissions. The ordinary CLI prompt is not a privileged system
-message. No repair loops, automatic retries, commits, delegated coding or inferred
+to change role or permissions. The ordinary review prompt is not a privileged system
+message. No repair loops, commits, delegated coding or inferred
 requirements. Missing essential evidence or material uncertainty is ERROR.
 
 ## TRIG-001: File-change review selection
@@ -427,11 +430,14 @@ A working-tree PASS does not certify staged/pushed commits or deployed artifacts
 Reports are written atomically to `.hannes/reports/last.json`, including FAIL/ERROR
 when initialized input allows it. Invalid configuration preserves the prior
 report. Save UTC timestamp, repository/project, provider, input identity, rule
-results, durations, findings, output and available usage. ERROR takes precedence
-over blocking FAIL; NOT_RUN blocks success without replacing an existing blocking FAIL with ERROR.
+results, durations, findings, output and available usage. Check ERROR and blocking
+review ERROR, parameter errors and missing prompts take precedence over blocking FAIL; non-blocking review ERROR stays
+visible and permits overall PASS. NOT_RUN blocks success without replacing an existing blocking FAIL with ERROR.
 Disabled Rules stay out of results; blocking failed Checks leave selected Reviews NOT_RUN.
 
 Report schema 4 records plan schema 3, required IDs, blocking and rule provenance.
+An optional per-item configuration_error flag defaults to false in older reports
+and identifies fatal review parameter or prompt errors independently of blocking.
 Only the current report and plan schemas are accepted. Reject corrupt/inconsistent
 reports and mismatched repositories. Reports are local, unsigned evidence, not
 tamper-proof attestations. Status uses saved selection, not the current default.
@@ -680,14 +686,38 @@ LF, CR, vertical tab and form feed), including Markdown syntax and code. Exactly
 1200 passes; excess reports the actual count and limit. The initial document has
 1050 words and is not shortened for this gate.
 
-A named generic CLI Gemini provider evaluates the complete document against a
+A named generic CLI adapter calls the Gemini REST API to evaluate the complete document against a
 concise rubric, using whole-file context and the existing structured contract.
 Only substantive, evidenced governance defects warrant FAIL. The review is
-non-blocking; technical ERROR still blocks. The existing global check gate applies.
-File triggers select root AGENTS.md or the rubric; other changes omit the review
+non-blocking, including technical ERROR. The existing global check gate applies.
+File triggers select only root AGENTS.md; other changes omit the review
 with trigger_not_matched. CI uses an explicit verified baseline, preferring the
 PR merge-base. Summaries distinguish PASS, non-blocking FAIL, ERROR and SKIP.
-No live provider is required by automated tests.
+The rubric is context only. review.include_diff defaults to true; setting it to
+false excludes the diff. The active repository configuration omits this field for
+v0.11.0 compatibility; enabling it is deferred until release adoption. Batches separate reviews with different diff settings, and no diff
+is assembled or delivered for a batch that disables it. Plain HTTP models use
+only supplied evidence; generic instructions require no tools or repository access.
+
+The adapter sends the complete prompt in one user text part to generateContent,
+using HANNES_MODEL (configured as gemini-3.8-flash), x-goog-api-key from
+GEMINI_API_KEY, responseMimeType application/json and maxOutputTokens 8192.
+It selects the first candidate, requires STOP, concatenates its non-thought text
+parts and passes the result unchanged to the central Hannes contract validator.
+HTTP success alone is insufficient. Missing, malformed, blocked, incomplete or
+oversized responses are provider errors, never PASS.
+
+At most five HTTP attempts use 30/60/120/240 second delays for HTTP
+429/500/502/503/504 and transient connections. Retry-After seconds or dates may
+increase a delay up to 240 seconds. Every request has a 600-second timeout;
+timeouts stop immediately. Authentication, invalid requests and invalid responses
+are not retried. The adapter has no overall deadline. CLI timeout_seconds = 0
+disables its enclosing deadline in the new implementation. The active repository
+provider retains its 180-second enclosing deadline until a separate migration
+after release adoption; this can interrupt requests or retries.
+Concise safe retry/error diagnostics exclude keys, prompts and response content.
+CI reserves 90 minutes for checks plus review retries. No live provider is
+required by automated tests.
 
 Acceptance: `scripts/test_agents_review.py` and `tests/agents_review.rs` cover the
 repository example and its local mocked provider.

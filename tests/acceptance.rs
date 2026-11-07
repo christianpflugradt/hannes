@@ -699,8 +699,22 @@ fn prompt_marks_evidence_untrusted_and_diff_truncation() {
     let text = hannes::provider::prompt(&request).unwrap();
     assert!(text.contains("Truncated: true"));
     assert!(text.contains("untrusted evidence"));
-    assert!(text.contains("ordinary CLI prompt, not a privileged system message"));
+    assert!(text.contains("ordinary review prompt, not a privileged system message"));
     assert!(text.contains("product-consistency"));
+    let mut without_diff = project.reviews[0].clone();
+    without_diff.include_diff = false;
+    let active = [&without_diff];
+    let prepared =
+        hannes::review_input::PreparedReviewInput::prepare(&project, &active, &snapshot).unwrap();
+    assert!(prepared.diff.is_empty());
+    // Even shared preparation containing a diff must not leak it to this batch.
+    let request = Request {
+        reviews: &active,
+        ..request
+    };
+    let text = hannes::provider::prompt(&request).unwrap();
+    assert!(!text.contains("malicious untrusted evidence"));
+    assert!(!text.contains("<untrusted_diff>"));
 }
 
 #[test]

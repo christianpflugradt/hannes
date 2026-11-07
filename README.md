@@ -260,8 +260,10 @@ output is saved instead of flooding the terminal.
 | `ERROR` | Verification could not be completed, for example because of a timeout, missing executable, invalid AI output or missing evidence. |
 | `NOT_RUN` | A review was skipped because checks failed. It has no review verdict. |
 
-A run succeeds only if its required results pass and its input remains stable.
-Check failures and errors prevent overall PASS. A review's one-line explanation
+A run succeeds if no blocking failure exists and its input remains stable.
+Non-blocking FAIL and provider/review ERROR remain visible and permit overall PASS.
+Invalid parameters and missing review prompts still prevent success.
+Check ERROR and integrity errors always prevent success. A review's one-line explanation
 appears even when it passes. Read more without running anything again:
 
 ```sh
@@ -465,7 +467,7 @@ points in the consumer, including unmapped custom points used by imports.
 | `name` | Optional; `null` | Short display label; defaults to the original rule ID. 1–80 characters, no control characters or surrounding whitespace. |
 | `description` | Required | Nonblank explanation. |
 | `enabled` | Optional; `true` | False rules are validated but never executed or included in results. Plans list them under `disabled_rules`. |
-| `blocking` | Optional; `true` | A completed FAIL prevents success when true. ERROR is always fatal. |
+| `blocking` | Optional; `true` | FAIL and provider/review ERROR prevent success when true. Check, parameter and missing-prompt errors are always fatal. |
 | `run_at` | Optional; `[]` | Own execution points; overridden by membership in Rule Sets. Enabled rules need an effective assignment. |
 | `parameters` | Optional; `{}` | Named parameter declarations; see below. |
 | `check` | Optional; `null` | Check implementation; required for a check rule and mutually exclusive with `review`. |
@@ -524,8 +526,7 @@ Reviews sharing identical resolved environments share a call; different environm
 use separate calls with the same prepared context. Provider timeout applies per call.
 
 Missing required values, unsupported types, undeclared supplied names and invalid
-files produce **ERROR**, identifying the rule and parameter. ERROR blocks success
-even with `blocking = false`. Disabled rules do not resolve parameter values or
+files produce **ERROR**, identifying the rule and parameter. Parameter errors block success even with `blocking = false`. Disabled rules do not resolve parameter values or
 require their implementations to exist.
 
 ### Add a check
@@ -681,7 +682,7 @@ tool_output_token_limit = 2000
 | `requirements` | Optional table | Runtime prerequisites for this provider; omitted lists are empty. |
 | `requirements.env` | Optional; `[]` | Nonempty child environment variables required at execution. Names use ASCII letters, digits and underscores, starting with a letter or underscore. |
 | `requirements.executables` | Optional; `[]` | Required executable names or paths; nonblank, no NUL. |
-| `timeout_seconds` | Required | Integer `1..3600`: seconds per invocation, including stdin delivery. Codex includes MCP discovery, itself capped at 10 seconds. |
+| `timeout_seconds` | Required | Integer `1..3600` (CLI also accepts `0` for no overall deadline): seconds per invocation, including stdin delivery. Codex includes MCP discovery, itself capped at 10 seconds. |
 | `model` | Optional; Codex default | Model identifier passed as `--model` for Codex or child environment variable `HANNES_MODEL` for CLI; nonblank, no NUL. Generated files select GPT-6.1 Sol (`gpt-6.1-sol`); alternatives must be supported by your CLI/account. |
 | `mcp_servers` | Optional; `[]` | Names of Codex MCP servers allowed for reviews. Empty or omitted disables all of them. See below. |
 | `review_profile` | Optional table | Settings for batches using this provider configuration. |
@@ -756,30 +757,29 @@ each explicit reference and its effective configuration. Provider files accept
 no credential fields. Codex uses its existing login; generic tools inherit
 credentials from the execution environment. Hannes never records their values.
 
-**Generic CLI.** For example, a local wrapper can translate a Gemini CLI response
-into Hannes JSON. This wrapper configuration illustrates the interface; Gemini
-integration has not been verified:
+**Generic CLI.** The repository's Gemini REST adapter uses Python's standard
+library and the existing CLI transport:
 
 ```toml
 # .hannes/providers/gemini.toml
 provider = "cli"
-command = "./scripts/gemini-review"
-args = []
-model = "gemini-2.5-flash"
-timeout_seconds = 120
+command = "python3"
+args = ["scripts/gemini-review.py"]
+model = "gemini-3.8-flash"
+timeout_seconds = 0
 
 [requirements]
 env = ["GEMINI_API_KEY"]
-executables = ["gemini"]
+executables = ["python3"]
 ```
 
-The project supplies `scripts/gemini-review`. It reads the full prompt from stdin,
-uses `HANNES_MODEL` to select its model, configures the tool for read-only review,
-and emits the verdict document below on stdout. Tool progress belongs on stderr.
-The wrapper must translate any tool envelope into this exact contract. Hannes
-does not parse provider-specific prose or install tools. For tools that already
-accept stdin and return Hannes JSON, configure the executable directly and put
-model flags in `args` instead of using `model`.
+The adapter reads the complete prompt from stdin and selects the configured model
+through `HANNES_MODEL`. It sends one generateContent request and extracts the first
+completed candidate's text. Hannes validates the unchanged review JSON. See the
+[Gemini adapter policy](docs/agents-quality-review.md#provider-and-local-execution)
+for HTTP retries, request timeouts and safe diagnostics. No Gemini CLI is needed.
+For tools that already accept stdin and return Hannes JSON, configure their
+executable directly and put model flags in `args` instead of using `model`.
 
 Commands run directly from the consumer root. Arguments are literal: no shell
 operators, variable expansion, globbing, interpolation or substitution. Use an
@@ -819,8 +819,8 @@ the existing [external source trust model](docs/external-rule-sets.md#source-res
 explicitly imported, validated, immutable cached definitions, without local
 overrides. Imported programs execute with your permissions. Hannes supplies no
 generic tool sandbox; read-only settings and authentication belong to the chosen
-tool or wrapper. HTTP transport, automatic retries, file triggers and execution
-orchestration remain outside this increment.
+tool or wrapper. The repository Gemini adapter owns HTTP transport and retries; Hannes retains
+selection, prompt assembly and verdict validation.
 
 ### Add a review
 
@@ -853,6 +853,7 @@ consumer through the existing shared provider call, after deterministic checks.
 | `review.provider` | Optional; `null` (omitted in TOML) | Named provider ID; omission uses the legacy project provider. |
 | `review.trigger` | Optional; `null` (omitted in TOML) | Select this review only for matching changed files. |
 | `review.trigger.changed_files` | Required | 1–64 repository-relative patterns, each at most 1024 UTF-8 bytes; any match selects the review. |
+| `review.include_diff` | Optional; `true` | Include the Git orientation diff in the prompt; independent of file triggers and context. Different settings use separate provider batches. |
 | `review.prompt` | Required | Nonblank UTF-8 `.md` filename in the review directory. |
 | `review.files` | Optional; `[]` | Up to 64 unique existing consumer-relative source files; exact paths, not globs. Starting points, not an evidence boundary. |
 | `review.context` | Optional; `[]` | Up to 32 document selections as `[[review.context]]`. |

@@ -250,7 +250,8 @@ noninteractive, ephemeral Codex invocation with structured output, read-only san
 `codex mcp list --json` precedes it. Every discovered server is explicitly disabled
 unless in the provider allow list; unknown allowed names, unsafe names, oversized
 or failed discovery block the call. Automatic skills, apps/plugins, subagents and
-web search are disabled for the child process. User Codex configuration is not
+web search are disabled for the child process, including when multi-agent support
+is enabled in the user's configuration. User Codex configuration is not
 rewritten. Allowed integrations and local Codex configuration remain trusted;
 read-only execution is not a new sandbox for MCP capabilities.
 

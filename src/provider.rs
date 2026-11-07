@@ -261,7 +261,7 @@ fn review_overrides(
         "features.skill_mcp_dependency_install=false".into(),
         "features.apps=false".into(),
         "features.plugins=false".into(),
-        "agents.enabled=false".into(),
+        "features.multi_agent=false".into(),
         "web_search=\"disabled\"".into(),
         format!(
             "tool_output_token_limit={}",

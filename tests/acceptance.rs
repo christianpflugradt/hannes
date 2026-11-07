@@ -2069,10 +2069,15 @@ if [ "${{1:-}}" = mcp ]; then
 fi
 printf '%s\n' "$@" > '{}'
 output=''
+multi_agent=true
 while [ $# -gt 0 ]; do
- case "$1" in --output-last-message) shift; output=$1;; esac
+ case "$1" in
+  --output-last-message) shift; output=$1;;
+  --config) shift; case "$1" in features.multi_agent=false) multi_agent=false;; esac;;
+ esac
  shift
 done
+[ "$multi_agent" = false ] || exit 2
 cat > '{}'
 printf '%s' '{}' > "$output"
 "#,
@@ -2091,7 +2096,7 @@ printf '%s' '{}' > "$output"
         "skills.include_instructions=false",
         "features.plugins=false",
         "features.apps=false",
-        "agents.enabled=false",
+        "features.multi_agent=false",
         "model_reasoning_effort=\"medium\"",
         "tool_output_token_limit=2000",
         "mcp_servers.memory.enabled=false",

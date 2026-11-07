@@ -139,7 +139,8 @@ not override merged Codex configuration. Invalid discovery blocks the review.
 Inline child-only overrides disable automatic skill context/search, skill-driven
 MCP installation, apps/plugins, subagents and web search, and bound retained tool
 outputs. Model/effort are configured separately; new scaffolds use `gpt-6.1-sol`
-and `medium`. Authentication, AGENTS.md and Codex safety settings are retained.
+and `medium`. Subagents are disabled through `features.multi_agent=false`, overriding
+the inherited feature setting. Authentication, AGENTS.md and Codex safety settings are retained.
 No user configuration or credentials are copied or rewritten.
 
 `review_contract` owns response wire types, allowed verdicts and the bounded output

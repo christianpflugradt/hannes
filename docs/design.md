@@ -219,3 +219,15 @@ only when a review omits its reference. Each Codex request resolves its batch's
 configuration, rejects mixed references and applies that configuration to discovery
 and execution. Optional per-rule plan fields preserve named settings in reports
 without changing the interpretation of older schema 3/4 documents.
+
+Generic CLI providers reuse named `ProviderConfig` definitions and the shared
+prompt and verdict validator. The production dispatcher selects Codex or CLI from
+the resolved request; no registry is introduced. CLI reviews run individually,
+while Codex groups still share a provider reference and parameter environment.
+Planning uses the same grouping distinction. A concurrent stdin writer shares the
+process runner deadline with output capture, so an unread pipe cannot block the
+caller. CLI stdout is the final JSON document; raw diagnostics are discarded.
+Runtime requirements inspect the effective child environment immediately before
+execution, after deterministic gating. Imported executable definitions retain the
+same explicit source trust boundary as checks. Generic tool sandboxing and wire
+envelope translation belong to the configured tool/wrapper, not Hannes.

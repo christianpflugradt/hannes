@@ -411,3 +411,47 @@ else:
         2
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn imported_cli_commands_follow_existing_explicit_import_trust() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = project();
+    let remote = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "--quiet", "--initial-branch=main"]);
+    set(remote.path(), "quality", &["rules/reviews/external"]);
+    review(remote.path(), "rules", "external", Some("central"), "");
+    write(
+        remote.path(),
+        "quality/providers/central.toml",
+        "provider = 'cli'\ncommand = './tool'\nmodel = 'central-model'\ntimeout_seconds = 5\n[requirements]\nenv = ['HANNES_MODEL']\nexecutables = ['./tool']\n",
+    );
+    commit(remote.path());
+    imports(root.path(), remote.path(), &["quality"]);
+    // Refresh validates configuration without executing imported commands or requirements.
+    assert!(external::load(root.path(), true, Some(cache.path())).is_ok());
+    write(
+        root.path(),
+        "tool",
+        r#"#!/usr/bin/env python3
+import json, os, sys
+assert os.environ['HANNES_MODEL'] == 'central-model'
+prompt = sys.stdin.read()
+line = next(line for line in prompt.splitlines() if line.startswith('Configured reviews (JSON data): '))
+id = json.loads(line.split(': ', 1)[1])[0]['id']
+print(json.dumps({'reviews':[{'id':id,'status':'PASS','reason':'Evidence inspected','findings':[{'message':'Evidence','path':'evidence','line':1}]}]}))
+"#,
+    );
+    fs::set_permissions(root.path().join("tool"), fs::Permissions::from_mode(0o755)).unwrap();
+    let p = external::load(root.path(), false, Some(cache.path())).unwrap();
+    let result = hannes::verify_project_at(
+        p,
+        &hannes::provider::Configured::default(),
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(result.overall, Status::Pass, "{:?}", result.results);
+}

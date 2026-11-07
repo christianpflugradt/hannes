@@ -153,6 +153,171 @@ impl Codex {
         }
     }
 }
+/// Dispatch uses the already resolved named configuration; Codex remains independent.
+#[derive(Default)]
+pub struct Configured {
+    codex: Codex,
+}
+impl Provider for Configured {
+    fn review(&self, request: &Request<'_>) -> Result<String> {
+        self.review_with_usage(request).verdict
+    }
+    fn review_with_usage(&self, request: &Request<'_>) -> Response {
+        match request.provider_config() {
+            Ok(config) if config.provider == "cli" => Response {
+                verdict: cli_review(request),
+                usage: None,
+            },
+            Ok(_) => self.codex.review_with_usage(request),
+            Err(error) => Response {
+                verdict: Err(error),
+                usage: None,
+            },
+        }
+    }
+}
+
+fn child_env(command: &Command, name: &std::ffi::OsStr) -> Option<std::ffi::OsString> {
+    command
+        .get_envs()
+        .find(|(key, _)| *key == name)
+        .map(|(_, value)| value.map(ToOwned::to_owned))
+        .unwrap_or_else(|| std::env::var_os(name))
+}
+
+fn executable_available(command: &Command, root: &Path, executable: &str) -> bool {
+    let path = Path::new(executable);
+    let executable_file = |path: PathBuf| {
+        let path = if path.is_absolute() {
+            path
+        } else {
+            root.join(path)
+        };
+        let Ok(metadata) = fs::metadata(path) else {
+            return false;
+        };
+        if !metadata.is_file() {
+            return false;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            metadata.permissions().mode() & 0o111 != 0
+        }
+        #[cfg(not(unix))]
+        {
+            true
+        }
+    };
+    if path.components().count() > 1 || path.is_absolute() {
+        return executable_file(path.to_owned());
+    }
+    child_env(command, std::ffi::OsStr::new("PATH")).is_some_and(|paths| {
+        std::env::split_paths(&paths).any(|directory| {
+            let candidate = directory.join(path);
+            if executable_file(candidate.clone()) {
+                return true;
+            }
+            #[cfg(windows)]
+            {
+                return child_env(command, std::ffi::OsStr::new("PATHEXT"))
+                    .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into())
+                    .to_string_lossy()
+                    .split(';')
+                    .any(|extension| {
+                        executable_file(PathBuf::from(format!(
+                            "{}{}",
+                            candidate.display(),
+                            extension
+                        )))
+                    });
+            }
+            #[cfg(not(windows))]
+            {
+                false
+            }
+        })
+    })
+}
+
+fn requirements(command: &Command, request: &Request<'_>) -> Result<()> {
+    let config = request.provider_config()?;
+    for name in &config.requirements.env {
+        ensure!(
+            child_env(command, std::ffi::OsStr::new(name)).is_some_and(|value| !value.is_empty()),
+            "required environment variable is missing or empty: {name}"
+        );
+    }
+    for executable in &config.requirements.executables {
+        ensure!(
+            executable_available(command, &request.project.root, executable),
+            "required executable is unavailable: {executable}"
+        );
+    }
+    Ok(())
+}
+
+fn cli_review(request: &Request<'_>) -> Result<String> {
+    ensure!(
+        request.reviews.len() == 1,
+        "cli providers execute one review per invocation"
+    );
+    let config = request.provider_config()?;
+    let mut command = Command::new(config.command.as_deref().context("cli command missing")?);
+    command
+        .args(&config.args)
+        .current_dir(&request.project.root);
+    crate::parameters::configure(&mut command, request.parameters);
+    command.env("HANNES_EXECUTION_POINT", request.execution_point);
+    command.env_remove("HANNES_MODEL");
+    if let Some(model) = &config.model {
+        command.env("HANNES_MODEL", model);
+    }
+    requirements(&command, request)?;
+    let ids: Vec<_> = request
+        .reviews
+        .iter()
+        .map(|review| review.id.as_str())
+        .collect();
+    let input = format!(
+        "{}\nReturn only JSON matching this response schema (no fences or envelope): {}\n",
+        prompt(request)?,
+        serde_json::to_string(&schema(&ids))?
+    );
+    let bytes = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&bytes);
+    let output = crate::process::run_with_input(
+        &mut command,
+        Duration::from_secs(config.timeout_seconds),
+        input.into_bytes(),
+        move |chunk| {
+            let mut bytes = captured.lock().unwrap();
+            let remaining = crate::process::OUTPUT_LIMIT - bytes.len();
+            bytes.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+        },
+    )
+    .map_err(|_| {
+        anyhow::anyhow!(
+            "CLI process failed; check executable, PATH and stdin support; raw output is not stored"
+        )
+    })?;
+    ensure!(
+        !output.timed_out,
+        "CLI review timed out; no verdict accepted"
+    );
+    ensure!(
+        output.status.success(),
+        "CLI exited unsuccessfully ({}); raw output is not stored",
+        output.status
+    );
+    ensure!(
+        !output.stdout.truncated,
+        "CLI response exceeds stdout capture limit"
+    );
+    String::from_utf8(std::mem::take(&mut *bytes.lock().unwrap()))
+        .map_err(|_| anyhow::anyhow!("CLI response must be UTF-8 JSON"))
+}
+
 pub use crate::review_contract::schema;
 
 pub fn prompt(request: &Request<'_>) -> Result<String> {
@@ -218,6 +383,16 @@ impl Codex {
         let mut input = tempfile::tempfile()?;
         input.write_all(prompt(request)?.as_bytes())?;
         input.seek(SeekFrom::Start(0))?;
+        let mut runtime = command_with_executable(
+            &self.executable,
+            &request.project.root,
+            &schema_path,
+            &output_path,
+            config.model.as_deref(),
+        );
+        crate::parameters::configure(&mut runtime, request.parameters);
+        runtime.env("HANNES_EXECUTION_POINT", request.execution_point);
+        requirements(&runtime, request)?;
         let started = Instant::now();
         let overrides = review_overrides(
             &self.executable,

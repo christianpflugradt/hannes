@@ -29,6 +29,9 @@ impl ProviderConfig {
             timeout_seconds: 180,
             model: Some("gpt-6.1-sol".into()),
             mcp_servers: vec![],
+            command: None,
+            args: vec![],
+            requirements: RuntimeRequirements::default(),
             review_profile: ReviewProfile {
                 reasoning_effort: Some("medium".into()),
                 ..ReviewProfile::default()
@@ -51,12 +54,24 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct ProviderConfig {
     pub provider: String,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub requirements: RuntimeRequirements,
     pub timeout_seconds: u64,
     pub model: Option<String>,
     #[serde(default)]
     pub mcp_servers: Vec<String>,
     #[serde(default)]
     pub review_profile: ReviewProfile,
+}
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RuntimeRequirements {
+    pub env: Vec<String>,
+    pub executables: Vec<String>,
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -429,13 +444,54 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
 /// Shared validation for legacy and named configurations.
 pub(crate) fn validate_provider(provider: &ProviderConfig) -> Result<()> {
     ensure!(
-        provider.provider == "codex-cli",
-        "unsupported provider: {}; expected codex-cli",
+        matches!(provider.provider.as_str(), "codex-cli" | "cli"),
+        "unsupported provider: {}; expected codex-cli or cli",
         provider.provider
     );
+    if provider.provider == "cli" {
+        let command = provider.command.as_deref().unwrap_or_default();
+        ensure!(
+            !command.trim().is_empty() && !command.contains('\0'),
+            "cli command must be nonblank and contain no NUL"
+        );
+        ensure!(
+            provider.args.iter().all(|arg| !arg.contains('\0')),
+            "cli args must contain no NUL"
+        );
+        ensure!(
+            provider.mcp_servers.is_empty()
+                && provider.review_profile.reasoning_effort.is_none()
+                && provider.review_profile.tool_output_token_limit == DEFAULT_TOOL_OUTPUT_TOKENS,
+            "cli providers do not support Codex MCP or review profile settings"
+        );
+    } else {
+        ensure!(
+            provider.command.is_none() && provider.args.is_empty(),
+            "command and args require provider cli"
+        );
+    }
+    for name in &provider.requirements.env {
+        ensure!(
+            !name.is_empty()
+                && name
+                    .bytes()
+                    .enumerate()
+                    .all(|(i, b)| b.is_ascii_alphabetic()
+                        || b == b'_'
+                        || (i > 0 && b.is_ascii_digit())),
+            "invalid required environment variable name"
+        );
+    }
+    for executable in &provider.requirements.executables {
+        ensure!(
+            !executable.trim().is_empty() && !executable.contains('\0'),
+            "invalid required executable"
+        );
+    }
     timeout(provider.timeout_seconds)?;
     if let Some(model) = &provider.model {
         nonempty(model, "model")?;
+        ensure!(!model.contains('\0'), "model must contain no NUL");
     }
     let profile = &provider.review_profile;
     ensure!(

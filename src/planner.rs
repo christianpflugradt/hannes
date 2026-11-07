@@ -345,7 +345,14 @@ pub fn build(
                     .parameters
                     .resolve(&project.root, &review.id)
                     .ok()
-                    .map(|environment| (review.provider.clone(), environment))
+                    .map(|environment| {
+                        (
+                            review.provider.clone(),
+                            environment,
+                            (project.review_provider(review).provider == "cli")
+                                .then(|| review.id.clone()),
+                        )
+                    })
             })
             .collect::<BTreeSet<_>>()
             .len(),

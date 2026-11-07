@@ -3,7 +3,7 @@ use clap::{CommandFactory, Parser, error::ErrorKind};
 use hannes::{
     cli::{Cli, Ist, Mach, Pass, Was, Words},
     config, git_snapshot, mood,
-    provider::Codex,
+    provider::Configured,
     report,
     terminal::{self, Tone},
 };
@@ -112,7 +112,7 @@ fn execute(cli: Cli) -> Result<i32> {
             let no_rules = project.checks.is_empty() && project.reviews.is_empty();
             let report = hannes::verify_project_with_context(
                 project,
-                &Codex::default(),
+                &Configured::default(),
                 if geiz_ist_geil {
                     hannes::VerificationMode::ChecksOnly
                 } else {

@@ -203,7 +203,11 @@ helpers and SSH configuration remain trusted integrations.
 
 Checks execute with the Hannes user's permissions. Resource confinement does not
 prevent scripts from accessing other paths, credentials or the network. Import
-executable Rules only from trusted sources. There is no process sandbox.
+executable Rules only from trusted sources. Imported generic CLI provider commands
+use this same trust boundary and execute from the consumer root with its inherited
+environment. They may reference installed programs or consumer-provided wrappers;
+Hannes does not resolve provider commands as confined Rule resources. Review every
+imported provider definition before approving source refresh. There is no process sandbox.
 
 ## Recovery and limits
 

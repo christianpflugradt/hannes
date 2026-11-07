@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::{
-    io::Read,
+    io::{Read, Write},
     process::{Command, ExitStatus, Stdio},
     sync::mpsc,
     thread,
@@ -69,7 +69,7 @@ fn terminate_tree(child: &mut std::process::Child) {
 }
 
 pub fn run(command: &mut Command, timeout: Duration) -> Result<Output> {
-    run_observed(command, timeout, None)
+    run_observed(command, timeout, None, None)
 }
 
 /// Observe stdout while draining it, including bytes beyond the retained capture.
@@ -79,13 +79,25 @@ pub fn run_with_stdout_observer(
     timeout: Duration,
     observer: impl FnMut(&[u8]) + Send + 'static,
 ) -> Result<Output> {
-    run_observed(command, timeout, Some(Box::new(observer)))
+    run_observed(command, timeout, Some(Box::new(observer)), None)
+}
+
+/// Deliver stdin concurrently with output capture under the same process deadline.
+pub fn run_with_input(
+    command: &mut Command,
+    timeout: Duration,
+    input: Vec<u8>,
+    observer: impl FnMut(&[u8]) + Send + 'static,
+) -> Result<Output> {
+    command.stdin(Stdio::piped());
+    run_observed(command, timeout, Some(Box::new(observer)), Some(input))
 }
 
 fn run_observed(
     command: &mut Command,
     timeout: Duration,
     mut observer: Option<Observer>,
+    input: Option<Vec<u8>>,
 ) -> Result<Output> {
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(unix)]
@@ -97,6 +109,16 @@ fn run_observed(
     let mut child = command
         .spawn()
         .context("cannot start command; check executable and PATH")?;
+    let input_result = input.map(|input| {
+        let mut stdin = child.stdin.take().expect("piped stdin");
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let result = stdin.write_all(&input);
+            drop(stdin);
+            let _ = sender.send(result);
+        });
+        receiver
+    });
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
     let (sender, receiver) = mpsc::channel();
@@ -142,6 +164,14 @@ fn run_observed(
                 terminate_tree(&mut child);
                 bail!("output capture incomplete: descendant kept a pipe open");
             }
+        }
+    }
+    if !timed_out {
+        if let Some(receiver) = input_result {
+            receiver
+                .recv_timeout(Duration::from_secs(2))
+                .context("stdin delivery incomplete")?
+                .context("cannot deliver complete stdin")?;
         }
     }
     Ok(Output {

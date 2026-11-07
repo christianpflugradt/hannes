@@ -144,7 +144,7 @@ only after all explicit imports are loaded, independently of import order, befor
 publishing resolution state. Unknown references fail even for disabled reviews.
 Unreferenced reviews continue using the consumer's `provider.toml`, or its scaffold
 defaults when omitted. Named configurations never become an implicit default.
-Only `codex-cli` is supported. Batches require the same provider reference and
+`codex-cli` and generic `cli` providers are supported. Codex batches require the same provider reference and
 resolved parameter environment; each invocation uses its resolved model, timeout,
 review profile and MCP allow list. Plans and saved reports retain the reference
 and effective named configuration per review; existing schema 3/4 documents
@@ -153,6 +153,44 @@ credential fields; authentication remains in the existing Codex login.
 
 Acceptance: `tests/named_providers.rs` covers local/imported resolution, conflicts,
 legacy defaults, batching, invocation settings and saved plan/report metadata.
+
+## PROV-002: Generic CLI execution and runtime requirements
+
+`provider = "cli"` uses a required nonblank `command` and optional literal `args`
+(default empty). No shell, interpolation or argument expansion occurs. The consumer
+root is the working directory. Optional `model` is delivered as `HANNES_MODEL`;
+wrappers may translate it into tool-specific flags. The existing required
+`timeout_seconds` (1..=3600) applies to the entire invocation, including stdin delivery.
+Codex-only MCP/profile settings must remain at their omitted defaults for CLI.
+
+Each generic CLI review executes individually, preserving provider references and
+parameter isolation. Stdin receives the complete shared review prompt plus the JSON
+response schema; stdout must be exactly the existing structured verdict document.
+No envelopes, Markdown fences or natural-language extraction are supported. Output
+is bounded by the shared 64 KiB capture limit. Malformed, incomplete, oversized or
+ungrounded verdicts, missing commands, nonzero exits and timeouts produce ERROR.
+Raw stdout/stderr and invalid-response details are never persisted as diagnostics.
+The shared process runner drains both pipes and cleans up process trees.
+
+Both provider kinds accept optional `[requirements]` with `env` and `executables`
+arrays (default empty). Names are validated during configuration loading, but
+availability is checked only for selected, enabled reviews after deterministic
+gating and parameter resolution, immediately before their invocation. Environment
+requirements use the child environment and must be nonempty. Executables resolve
+through that environment's PATH or explicit paths relative to the consumer root.
+No credential values are configured, discovered or logged. Generic tools inherit
+the execution environment; Codex retains its login-only credential policy.
+
+Imported CLI definitions follow EXT-001's existing explicit import trust boundary:
+refresh and validate before publication, immutable offline cache, no local overrides.
+Imported commands have the consumer's permissions, just like imported checks.
+Generic CLIs provide no sandbox or Codex MCP controls; consumers must trust their
+tools and configure read-only behavior themselves. No HTTP transport, retries,
+file triggers or new orchestration is introduced.
+
+Acceptance: `tests/cli_providers.rs` covers configuration, stdin/JSON execution,
+runtime gating, isolation, process errors and timeout cleanup; PROV-001 retains
+Codex compatibility coverage.
 
 ## SEL-001: Selection and offline plans
 
@@ -270,8 +308,7 @@ Acceptance: `tests/parameters.rs` and parameterized imports in
 
 ## REV-001: Reviews and provider isolation
 
-Only the Codex CLI provider is currently supported. Integration boundaries must
-allow future providers without introducing speculative adapters. Codex resolves
+The built-in Codex CLI and generic CLI providers execute reviews. Codex resolves
 through inherited PATH and uses the existing local login. API-key environment
 variables are removed; no credentials or raw provider traces are persisted or
 copied into CI. Missing/incompatible CLI, login, timeout or exhausted allowance
@@ -615,6 +652,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
+| PROV-002 | `tests/cli_providers.rs::stdin_results_and_provider_isolation` |
 | PROV-001 | `tests/named_providers.rs::named_references_load_without_changing_legacy_defaults` |
 | EXT-001 | `tests/external_rule_sets.rs::shared_rules_are_reused_across_sets_and_points_offline` |
 | RULE-001 | `tests/execution_points.rs::resolution_obeys_membership_override_union_and_disabled_rules` |

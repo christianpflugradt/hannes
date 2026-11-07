@@ -23,7 +23,7 @@ class ActionTests(unittest.TestCase):
         self.path_file = self.root / "github-path"
         self.env = dict(os.environ, PATH=str(self.tools) + os.pathsep + os.environ["PATH"],
                         RUNNER_TEMP=str(self.root), RUNNER_OS="Linux", RUNNER_ARCH="X64",
-                        HANNES_VERSION="v0.14.0", HANNES_RUN="false", GITHUB_PATH=str(self.path_file),
+                        HANNES_VERSION="v0.14.1", HANNES_RUN="false", GITHUB_PATH=str(self.path_file),
                         ASSETS=str(self.assets))
         curl = self.tools / "curl"
         curl.write_text('#!/bin/bash\nset -eu\nurl="${@: -3:1}"\ncp "$ASSETS/${url##*/}" "${@: -1}"\n')
@@ -31,7 +31,7 @@ class ActionTests(unittest.TestCase):
         self.archive("x86_64-unknown-linux-gnu")
 
     def archive(self, target):
-        name = f"hannes-v0.14.0-{target}"
+        name = f"hannes-v0.14.1-{target}"
         data = b'#!/bin/sh\nprintf "%s\\n" "$@" > "$INVOCATION"\nexit "${RESULT:-0}"\n'
         with tarfile.open(self.assets / f"{name}.tar.gz", "w:gz") as archive:
             info = tarfile.TarInfo(f"{name}/hannes")
@@ -80,7 +80,7 @@ class ActionTests(unittest.TestCase):
 
     def test_invalid_inputs_and_platforms_fail_before_installation(self):
         for env in ({"HANNES_VERSION": ""}, {"HANNES_VERSION": "latest"},
-                    {"HANNES_VERSION": "v0.14.0;echo injected"}, {"HANNES_RUN": "yes"},
+                    {"HANNES_VERSION": "v0.14.1;echo injected"}, {"HANNES_RUN": "yes"},
                     {"RUNNER_OS": "macOS"}, {"RUNNER_ARCH": "other"}):
             with self.subTest(env=env):
                 result = self.install(**env)
@@ -89,7 +89,7 @@ class ActionTests(unittest.TestCase):
                 self.assertFalse(self.path_file.exists())
 
     def test_download_and_checksum_failures_do_not_export_path(self):
-        for sums in ("", "0" * 64 + "  hannes-v0.14.0-x86_64-unknown-linux-gnu.tar.gz\n"):
+        for sums in ("", "0" * 64 + "  hannes-v0.14.1-x86_64-unknown-linux-gnu.tar.gz\n"):
             (self.assets / "SHA256SUMS").write_text(sums)
             result = self.install()
             self.assertNotEqual(result.returncode, 0)

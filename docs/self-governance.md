@@ -78,7 +78,7 @@ security and license Rules.
 
 The 16 local [checks](../.hannes/checks) use string commands. Python scripts run
 as `python3 scripts/<name>.py`, relative to the consuming repository root.
-The published v0.14.0 governor supports these commands and explicit path
+The published v0.14.1 governor supports these commands and explicit path
 references for the four imported Checks. There are no local index.sh launchers.
 Local Rule directories and IDs use descriptive names without numeric prefixes.
 The local commit-message Rule and the imported Rule have distinct identities:
@@ -217,8 +217,8 @@ Both installers download the pinned release's assets directly, without a GitHub
 Releases API request. Missing tags, assets or valid checksums fail installation;
 there is no fallback to latest. These installation steps need no GitHub token.
 
-The repository uses published Hannes v0.14.0 for both local hooks and CI.
-All public Action references pin the v0.14.0 source commit; their version input
+The repository uses published Hannes v0.14.1 for both local hooks and CI.
+All public Action references pin the v0.14.1 source commit; their version input
 continues to come from `.hannes-version`.
 The AGENTS.md review sets include_diff = false and its Gemini provider sets
 timeout_seconds = 0, leaving request deadlines and retries to the REST adapter.

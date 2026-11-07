@@ -103,7 +103,7 @@ Contributions use the project's [Unlicense](LICENSE). See
 
 Native reconciliation tests use temporary repositories and real Git commits/pushes;
 they run with the Rust suite at pre-push. Keep tests offline and never
-change developer/global Git configuration. The repository integration uses published Hannes v0.14.0 with `--auto-approve`.
+change developer/global Git configuration. The repository integration uses published Hannes v0.14.1 with `--auto-approve`.
 Do not substitute a candidate built from this checkout.
 
 For release tooling changes, use the Node version in `mise.toml`, prepare npm

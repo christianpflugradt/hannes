@@ -272,7 +272,7 @@ these checks do not eliminate concurrent filesystem replacement races.
 Path references require Hannes v0.14.0 or later; v0.13.0 supports string commands
 but does not resolve references. Upgrade the published governor before migrating
 shared rules, and keep older consumers pinned to compatible legacy revisions.
-This repository uses published v0.14.0 and pins its external string-command Rules
+This repository uses published v0.14.1 and pins its external string-command Rules
 to full Git commits.
 
 String commands use this grammar **after TOML decoding**:
@@ -310,7 +310,7 @@ context, timeout, output capture and exit codes are shared with file entrypoints
 
 String commands require Hannes v0.13.0 or later; explicit path references require
 v0.14.0. This repository uses string commands for all 16 local and four imported
-Checks, with published v0.14.0 for Git hooks and CI. Older consumers must retain
+Checks, with published v0.14.1 for Git hooks and CI. Older consumers must retain
 compatible external revisions until their governors are upgraded.
 
 A filename such as `index.sh` resolves inside the declaring Rule directory.

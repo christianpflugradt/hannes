@@ -285,7 +285,7 @@ requiring existence. Existing filesystem race and trust boundaries remain;
 references provide no sandbox.
 
 Path references require Hannes v0.14.0 or later; published v0.13.0 does not
-resolve them. The repository uses published v0.14.0 with all external imports
+resolve them. The repository uses published v0.14.1 with all external imports
 pinned to migrated string-command revisions.
 
 Acceptance: `tests/configuration.rs::local_path_references_execute_with_consumer_working_directory`,
@@ -296,7 +296,7 @@ cached shared scripts. Invalid syntax and legacy behavior retain the tests below
 
 String commands require Hannes v0.13.0 or later; path references require v0.14.0.
 All 16 local and four imported repository Checks use string commands with the
-published v0.14.0 governor. Imported shell scripts use @rule/index.sh; the shared
+published v0.14.1 governor. Imported shell scripts use @rule/index.sh; the shared
 license script uses @source/scripts/file-reference.py. Older consumers retain
 compatible legacy revisions until they upgrade. Legacy support remains unchanged.
 
@@ -537,7 +537,7 @@ An executable plan exits 0; a blocked/invalid plan exits 2.
 
 The root `action.yml` is a public composite GitHub Action for GitHub-hosted
 Ubuntu 24.04 x64 and ARM64 runners. Required `version` is an exact stable release
-tag such as `v0.14.0`. Optional `execution-point` defaults to `check`; `run` defaults
+tag such as `v0.14.1`. Optional `execution-point` defaults to `check`; `run` defaults
 to `true` and accepts only `true` or `false`. Installation downloads the matching
 native archive and SHA256SUMS, verifies the checksum, and adds the executable to
 PATH for subsequent steps. With `run: true` it executes
@@ -761,7 +761,7 @@ with trigger_not_matched. CI uses an explicit verified baseline, preferring the
 PR merge-base. Summaries distinguish PASS, non-blocking FAIL, ERROR and SKIP.
 The rubric is context only. review.include_diff defaults to true; setting it to
 false excludes the diff. The active repository Review sets include_diff = false
-using published Hannes v0.14.0. Batches separate reviews with different diff
+using published Hannes v0.14.1. Batches separate reviews with different diff
 settings, and no diff is assembled or delivered for a batch that disables it.
 Plain HTTP models use only supplied evidence; generic instructions require no tools or repository access.
 

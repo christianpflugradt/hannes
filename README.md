@@ -313,19 +313,19 @@ For GitHub-hosted Ubuntu 24.04 (x64 or ARM64), use the public composite Action:
 ```yaml
 steps:
   - uses: actions/checkout@v7
-  - uses: christianpflugradt/hannes@c11bbad96a1806df308f8e7bafa6ed247116997f # v0.14.0
+  - uses: christianpflugradt/hannes@eedbc1dbb227110667a8b40bdcf8603bddb33726 # v0.14.1
     with:
-      version: v0.14.0
+      version: v0.14.1
       execution-point: check
 ```
 
-The example pins the Action to the published v0.14.0 source commit for
+The example pins the Action to the published v0.14.1 source commit for
 reproducibility. The Action revision and installed CLI version are independent. See [repository self-integration](docs/self-governance.md#ci-pinning-and-renovate)
 for Hannes' own immutable pin.
 
 | Input | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `version` | Yes | None | Exact stable release tag, including `v`, such as `v0.14.0`. |
+| `version` | Yes | None | Exact stable release tag, including `v`, such as `v0.14.1`. |
 | `execution-point` | No | `check` | Point passed to `hannes mach was --at`. |
 | `run` | No | `'true'` | Set to `'false'` to install only. |
 
@@ -658,7 +658,7 @@ these checks do not eliminate concurrent filesystem replacement races.
 Path references require Hannes v0.14.0 or later; v0.13.0 supports string commands
 but does not resolve references. Upgrade the published governor before migrating
 shared rules, and keep older consumers pinned to compatible legacy revisions.
-This repository uses published v0.14.0 and pins its external string-command Rules
+This repository uses published v0.14.1 and pins its external string-command Rules
 to full Git commits.
 
 String commands use this grammar **after TOML decoding**:
@@ -696,7 +696,7 @@ context, timeout, output capture and exit codes are shared with file entrypoints
 
 String commands require Hannes v0.13.0 or later; explicit path references require
 v0.14.0. This repository uses string commands for all 16 local and four imported
-Checks, with published v0.14.0 for Git hooks and CI. Older consumers must retain
+Checks, with published v0.14.1 for Git hooks and CI. Older consumers must retain
 compatible external revisions until their governors are upgraded.
 
 A filename such as `index.sh` resolves inside the declaring Rule directory.

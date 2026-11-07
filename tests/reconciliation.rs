@@ -290,8 +290,16 @@ fn unsafe_paths_symlinks_and_foreign_ownership_fail_safely() {
 #[test]
 fn commands_block_checks_on_noninteractive_drift_and_keep_plan_read_only() {
     let root = project("[hooks.git]\npre-commit = 'first'");
-    checker(root.path(), "git config --local hannes.executed yes\n");
-    for args in [&["pass", "auf"][..], &["mach", "was", "--at", "first"][..]] {
+    support::check(
+        root.path(),
+        "always-ok",
+        &["pre-push"],
+        "git config --local hannes.executed yes\n",
+    );
+    for args in [
+        &["pass", "auf"][..],
+        &["mach", "was", "--at", "pre-push"][..],
+    ] {
         let output = cli(root.path(), args);
         assert_eq!(output.status.code(), Some(2));
         assert!(String::from_utf8_lossy(&output.stderr).contains("terminal"));
@@ -304,11 +312,11 @@ fn commands_block_checks_on_noninteractive_drift_and_keep_plan_read_only() {
     }
     ok(cli(
         root.path(),
-        &["mach", "was", "--at", "first", "--plan"],
+        &["mach", "was", "--at", "pre-push", "--plan"],
     ));
     assert!(!hook(root.path(), "pre-commit").exists());
     synchronize(root.path());
-    ok(cli(root.path(), &["mach", "was", "--at", "first"]));
+    ok(cli(root.path(), &["mach", "was", "--at", "pre-push"]));
     assert!(
         git(root.path(), &["config", "--get", "hannes.executed"])
             .status
@@ -604,9 +612,14 @@ fn actual_terminal_approval_and_rejection_gate_execution() {
         status
     }
     let root = project("[hooks.git]\npre-commit = 'first'");
-    checker(root.path(), "git config --local hannes.executed yes\n");
+    support::check(
+        root.path(),
+        "always-ok",
+        &["pre-push"],
+        "git config --local hannes.executed yes\n",
+    );
     assert_eq!(
-        terminal(root.path(), &["mach", "was", "--at", "first"], b"n\n").code(),
+        terminal(root.path(), &["mach", "was", "--at", "pre-push"], b"n\n").code(),
         Some(2)
     );
     assert!(!hook(root.path(), "pre-commit").exists());
@@ -618,7 +631,7 @@ fn actual_terminal_approval_and_rejection_gate_execution() {
     assert!(terminal(root.path(), &["pass", "auf"], b"yes\n").success());
     assert!(hook(root.path(), "pre-commit").exists());
     mappings_write(root.path(), "[hooks.git]\npre-commit = 'second'");
-    assert!(terminal(root.path(), &["mach", "was", "--at", "first"], b"y\n").success());
+    assert!(terminal(root.path(), &["mach", "was", "--at", "pre-push"], b"y\n").success());
     assert!(
         git(root.path(), &["config", "--get", "hannes.executed"])
             .status
@@ -768,4 +781,54 @@ fn required_hook_assignments_cannot_be_redirected_or_automate_check() {
     .unwrap();
     synchronize(root.path());
     assert!(!hook(root.path(), "pre-commit").exists());
+}
+
+#[test]
+fn explicit_points_execute_noninteractively_without_inspecting_or_changing_hooks() {
+    let root = project("[hooks.git]\npre-commit = 'first'");
+    support::check(
+        root.path(),
+        "always-ok",
+        &["check", "first"],
+        "git --version\n",
+    );
+    // A declared hook is missing: execution must not ask to install it.
+    for point in ["check", "first"] {
+        let output = cli(root.path(), &["mach", "was", "--at", point]);
+        ok(output);
+        assert!(!hook(root.path(), "pre-commit").exists());
+        assert!(!hook(root.path(), "pre-push").exists());
+        assert_eq!(hannes::report::read(root.path()).unwrap().results.len(), 1);
+    }
+    ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
+    let file = hook(root.path(), "pre-commit");
+    let stale = fs::read_to_string(&file)
+        .unwrap()
+        .replace("--at 'first'", "--at 'second'");
+    fs::write(&file, &stale).unwrap();
+    assert!(
+        !reconciliation::inspect(&config::load(root.path()).unwrap())
+            .unwrap()
+            .synchronized()
+    );
+    let permissions = fs::metadata(&file).unwrap().permissions().mode();
+    for point in ["check", "first"] {
+        ok(cli(root.path(), &["mach", "was", "--at", point]));
+        assert_eq!(fs::read_to_string(&file).unwrap(), stale);
+        assert_eq!(
+            fs::metadata(&file).unwrap().permissions().mode(),
+            permissions
+        );
+        assert!(!hook(root.path(), "pre-push").exists());
+    }
+    // Even hook locations that reconciliation rejects are irrelevant to direct execution.
+    ok(git(
+        root.path(),
+        &["config", "core.hooksPath", ".hannes/config.toml"],
+    ));
+    for point in ["check", "first"] {
+        ok(cli(root.path(), &["mach", "was", "--at", point]));
+    }
+    assert_eq!(fs::read_to_string(&file).unwrap(), stale);
+    assert!(!root.path().join(".github").exists());
 }

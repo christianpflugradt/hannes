@@ -25,7 +25,7 @@ and documentation are English; the intentional German command phrases are:
 | --- | --- |
 | `hannes fang an` | Create missing `.hannes/` files, preserve edits, install no hooks and make no commits. |
 | `hannes pass auf` | Validate configuration and reconcile declared external state after confirmation, without checks or provider calls. |
-| `hannes mach was` | Validate, reconcile, select rules, execute checks before reviews and save results. |
+| `hannes mach was` | Validate, select rules, execute checks before reviews and save results; reconcile hooks only for Git-backed points. |
 | `hannes was ist phase` | Read saved results and compare input freshness, without rerunning rules. `--details` shows full findings and captured output. |
 | `hannes so hilf mir doch` | Show help listing exactly the five complete command phrases. |
 
@@ -317,8 +317,14 @@ result cache or additional input/provider implementation is in current scope.
 ## REC-001: Declarative reconciliation and Git hooks
 
 Configuration validation, desired-state reconciliation and quality-check execution
-are separate responsibilities. Both `pass auf` and execution through `mach was`
-use Validate -> Inspect -> Plan -> Confirm -> Apply -> Verify before any checks.
+are separate responsibilities. `pass auf` and direct execution of Git-backed
+points through `mach was` use Validate -> Inspect -> Plan -> Confirm -> Apply ->
+Verify before any checks. Direct execution of `check` and custom points validates
+and resolves Rules, then executes without inspecting or reconciling Git hooks.
+Missing, outdated or unsafe hook paths do not block these explicit points; they
+never prompt for hook synchronization or modify hook files. Repository recursion
+protection still applies. A custom point invoked by a managed hook still validates
+that hook context read-only.
 No discrepancy means no prompt or write. Rejection, unavailable terminal, conflict
 or failure exits 2 and preserves the previous report. `--plan` remains read-only
 and does not reconcile. No provider is called by reconciliation.
@@ -330,7 +336,8 @@ state checks, rollback and final verification still apply. It creates, updates o
 removes only declared managed integration state, never governed project files,
 and executes no checks or reviews. Repeating it on synchronized state performs no
 writes. Without the flag, noninteractive drift still exits 2. CI can run this
-command once before `mach was --at NAME`; execution itself has no auto-approval.
+command once before Git-backed execution; explicit points such as `check` need
+no hook setup in CI. Execution itself has no auto-approval.
 Acceptance: `tests/reconciliation.rs::auto_approve_reconciles_noninteractively_without_executing_rules`.
 
 Project configuration optionally maps hooks.git keys pre-commit, commit-msg, pre-push to

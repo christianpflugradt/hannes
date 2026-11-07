@@ -20,12 +20,16 @@ Plan schema 3 and report schema 4 describe output formats, independently of conf
 
 Configuration validation describes valid desired state; `reconciliation` compares
 it with external state and builds an ordered plan. The CLI owns confirmation;
-both `pass auf` and executing `mach was` share inspection/application/verification.
+`pass auf` and direct Git-backed `mach was` points share
+inspection/application/verification. Direct `check` and custom points retain the
+repository recursion guard, then execute without inspecting hook locations or
+synchronizing hooks. Managed hook invocations still validate hook context and
+synchronization read-only, including when mapped to a custom point.
 The CLI exposes explicit unattended approval through `pass auf --auto-approve`;
 it uses the same inspection, application and verification path as interactive
 confirmation, including recursion protection and conflict detection.
-The rule engine starts only after that prerequisite. Offline execution previews
-remain read-only and do not synchronize. No generic domain registry is needed:
+For Git-backed points the rule engine starts only after that prerequisite.
+Offline execution previews remain read-only and do not synchronize. No generic domain registry is needed:
 Git hooks are the sole current reconciliation domain.
 
 The plan records before/after hook bytes and modes. Application rechecks the

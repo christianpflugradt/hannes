@@ -196,7 +196,7 @@ The command phrases are German and must be entered as shown, without quotes:
 | --- | --- |
 | `hannes fang an` | Create missing configuration files, preserving existing files. |
 | `hannes pass auf` | Validate configuration and reconcile declared state after confirmation; run no checks or reviews. |
-| `hannes mach was` | Validate and reconcile first, then run selected rules and save results. |
+| `hannes mach was` | Validate, run selected rules and save results; Git-backed points reconcile hooks first. |
 | `hannes was ist phase` | Show the last saved report and whether it still matches the working files. |
 | `hannes so hilf mir doch` | Show help. |
 
@@ -301,9 +301,11 @@ Optional `[hooks.git]` mappings can connect events to other known points, except
 available. Hannes delegates message validation to your configured checker.
 
 `hannes pass auf` validates configuration, inspects actual state, plans changes,
-asks for confirmation, applies the approved plan and verifies it. `mach was` does
-the same before executing its execution point. Synchronized repositories need no prompt
-or writes. Declining, conflicts, failed reconciliation or a required confirmation
+asks for confirmation, applies the approved plan and verifies it. Direct execution
+of `pre-commit`, `commit-msg` or `pre-push` through `mach was` does the same first.
+Direct `check` and custom points execute without inspecting or synchronizing hooks,
+even when required hooks are missing or outdated. Synchronized repositories need
+no prompt or writes. Declining, conflicts, failed reconciliation or a required confirmation
 without a terminal exit 2 before checks; run `hannes pass auf` interactively.
 `mach was --plan` remains a read-only execution preview and does not synchronize.
 
@@ -326,9 +328,16 @@ assignments or explicit mappings lose only managed content. Generated hooks veri
 `hannes pass auf` on drift. Local hooks are bypassable and verify working files,
 which may differ from staged or pushed commits. See
 [Git integration and recovery](docs/usage.md#optional-git-hook).
-A CI job can run the same command against a clean checkout. Checks-only runs need
-no AI credentials. Hannes does not provision Codex login on hosted runners, and
-personal login credentials should not be copied into CI.
+For explicit governance execution in a fresh CI checkout, no hook setup is needed:
+
+```sh
+hannes mach was --at check
+```
+
+Custom points such as `release` behave the same way. These commands work locally
+or from any workflow; Hannes neither generates nor validates CI workflows.
+Checks-only runs need no AI credentials. Hannes does not provision Codex login on
+hosted runners, and personal login credentials should not be copied into CI.
 
 ## Configuration
 

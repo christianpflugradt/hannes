@@ -27,8 +27,11 @@ report. Defined but disabled rules do not trigger this message.
 
 `pass auf` validates all files, even disabled entries, and reconciles declared
 external state after confirmation, without running checks or reviews.
-`mach was` validates and reconciles first, then executes selected enabled checks in ID order, then
-selected active reviews in one call if checks passed. It selects rules assigned to the requested execution point. Disabled items never enter results.
+`mach was` validates, then executes selected enabled checks in ID order, then
+selected active reviews in one call if checks passed. It selects rules assigned
+to the requested execution point. Direct Git-backed points reconcile hooks first;
+`check` and custom points execute without hook synchronization. Disabled items
+never enter results.
 Any blocking failed check or execution error prevents spending review tokens; those reviews are `NOT_RUN`.
 
 Use `hannes mach was --geiz-ist-geil` for an execution point containing checks only.
@@ -192,7 +195,12 @@ a standalone checker, which must not invoke the hook again.
 
 The lifecycle is **Validate -> Inspect -> Plan -> Confirm -> Apply -> Verify**.
 `pass auf` performs validation and reconciliation without checks or provider calls.
-`mach was` performs the same prerequisite, then executes its selected execution point.
+Direct `mach was` execution of `pre-commit`, `commit-msg` or `pre-push` performs
+the same prerequisite. `hannes mach was --at check` and direct custom points such
+as `release` execute without hook inspection, confirmation or modification, even
+with missing or outdated hooks. They need no hook setup in a fresh CI checkout
+and can run independently from any CI workflow. A custom point invoked through a
+managed hook still validates that hook context and synchronization read-only.
 Synchronized state succeeds without prompting or writing. Changes are displayed
 as creation, managed-section update or removal and require `y`/`yes` in a terminal.
 Declining, missing a terminal, conflicts or failures exit 2 and preserve the

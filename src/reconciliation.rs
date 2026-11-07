@@ -131,12 +131,21 @@ fn safe_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn location(project: &Project) -> Result<(PathBuf, String)> {
+fn repository_identity(project: &Project) -> Result<(PathBuf, String)> {
     let common = PathBuf::from(git(
         &project.root,
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],
     )?)
     .canonicalize()?;
+    let owner = format!(
+        "{:x}",
+        Sha256::digest(common.as_os_str().as_encoded_bytes())
+    );
+    Ok((common, owner))
+}
+
+fn location(project: &Project) -> Result<(PathBuf, String)> {
+    let (common, owner) = repository_identity(project)?;
     let directory = PathBuf::from(git(
         &project.root,
         &["rev-parse", "--path-format=absolute", "--git-path", "hooks"],
@@ -155,10 +164,6 @@ fn location(project: &Project) -> Result<(PathBuf, String)> {
             directory.display()
         );
     }
-    let owner = format!(
-        "{:x}",
-        Sha256::digest(common.as_os_str().as_encoded_bytes())
-    );
     Ok((directory, owner))
 }
 
@@ -507,11 +512,15 @@ pub fn prepare(
     point: Option<&str>,
     auto_approve: bool,
 ) -> Result<Option<HookContext>> {
-    let (_, owner) = location(project)?;
+    let (_, owner) = repository_identity(project)?;
     ensure!(
         std::env::var_os(GUARD).as_deref() != Some(std::ffi::OsStr::new(&owner)),
         "recursive Hannes hook execution blocked; run hannes pass auf manually outside the hook"
     );
+    // Direct explicit points need recursion protection, but no hook state.
+    if invocation.is_none() && point.is_some_and(|point| !GIT_EVENTS.contains(&point)) {
+        return Ok(None);
+    }
     if let Some(invocation) = invocation {
         let plan = inspect(project)?;
         ensure!(

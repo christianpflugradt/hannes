@@ -1206,3 +1206,52 @@ fn check_only_configuration_creates_no_hooks_or_workflows() {
     assert_eq!(hannes::report::read(&f.root).unwrap().results.len(), 1);
     assert!(!f.root.join(".github").exists());
 }
+
+#[test]
+fn explicit_points_execute_imported_rules_offline_with_missing_and_outdated_hooks() {
+    let f = Fixture::new();
+    source_points(&f, "repository", &["check", "quality"]);
+    commit(&f.remote);
+    mapped_imports(
+        &f,
+        &[(
+            "repository",
+            "[imports.execution_points]\nquality = 'release'",
+        )],
+        &["release"],
+    );
+    let setup = cli(&f, &["pass", "auf", "--auto-approve"]);
+    assert!(
+        setup.status.success(),
+        "{}",
+        String::from_utf8_lossy(&setup.stderr)
+    );
+    let hook = f.root.join(".git/hooks/pre-push");
+    let original = fs::read_to_string(&hook).unwrap();
+    fs::remove_file(&hook).unwrap();
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    for before in [
+        None,
+        Some(original.replace("--at 'pre-push'", "--at 'check'")),
+    ] {
+        if let Some(text) = &before {
+            fs::write(&hook, text).unwrap();
+        }
+        for point in ["check", "release"] {
+            let output = cli(&f, &["mach", "was", "--at", point]);
+            assert!(
+                output.status.success(),
+                "{point}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let report = hannes::report::read(&f.root).unwrap();
+            assert_eq!(report.overall, Status::Pass);
+            assert_eq!(report.results.len(), 1);
+            assert!(report.results[0].id.starts_with("git:"));
+            assert_eq!(fs::read_to_string(&hook).ok(), before);
+            assert!(!f.root.join(".git/hooks/pre-commit").exists());
+            assert!(!f.root.join(".git/hooks/commit-msg").exists());
+        }
+    }
+    assert!(!f.root.join(".github").exists());
+}

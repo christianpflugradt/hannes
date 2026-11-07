@@ -115,7 +115,10 @@ It is not automatically redacted; configure commands to avoid printing secrets.
 ## Configure checks and reviews
 
 See the [configuration reference](configuration.md). A Check lives in
-`.hannes/checks/<name>/` with rule.toml and its entrypoint. Direct execution uses
+`.hannes/checks/<name>/` with rule.toml. Filename entrypoints live in that
+directory; paths containing `/`, such as `scripts/check-files.py`, resolve from
+the consumer repository root (the source repository root for Git imports).
+Multiple Rules may share a script and still execute independently. Direct execution uses
 the OS; an explicit interpreter receives the absolute entrypoint. The consumer
 root stays the working directory; HANNES_RULE_DIRECTORY locates bundled files.
 Exit 0 is PASS, 1 is FAIL and 2 is ERROR. Unexpected numeric codes are explicitly

@@ -4,7 +4,7 @@
 
 `config` defines the project, Rule and Rule Set schemas and validates loaded
 objects. `discovery` reads only the fixed configuration paths and resolves Rule
-resources within their own directories. Local discovery and explicit external references share Rule
+resources within their source boundaries. Local discovery and explicit external references share Rule
 loading; the central document is intentionally different: project settings locally,
 a single Rule Set in an imported directory. External sets select repository-relative
 Rule directories; only those definitions are loaded and their IDs enter the resolver. `rules` resolves effective assignments;
@@ -12,7 +12,10 @@ Rule directories; only those definitions are loaded and their IDs enter the reso
 runner; `reviews` validates provider verdicts; `report` persists results; `terminal`
 renders them. There are no alternative configuration loaders or execution engines.
 
-Loaded Checks hold their validated absolute entrypoints and optional interpreters.
+Loaded Checks hold their validated absolute entrypoints, source roots, declaring
+Rule directories and optional interpreters. Filename entrypoints resolve within
+the Rule directory; paths containing `/` resolve within the source repository root.
+Execution rechecks both paths from that root without following symlinks.
 Loaded Reviews hold prompt text and consumer-relative context. There is no parallel
 metadata registry. Blocking belongs to each Rule and follows it into plans/results.
 Plan schema 3 and report schema 4 describe output formats, independently of config.

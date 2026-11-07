@@ -1814,3 +1814,155 @@ fn imported_names_survive_namespacing_and_saved_status_uses_short_unique_labels(
     assert!(hannes::terminal::render_details(&saved, false).contains("git:"));
     assert!(saved.results.iter().all(|item| item.id.starts_with("git:")));
 }
+
+#[cfg(unix)]
+#[test]
+fn shared_entrypoints_execute_each_rule_offline() {
+    let f = Fixture::new();
+    write(
+        &f.remote,
+        "repository/config.toml",
+        "id = 'quality'\ndescription = 'Shared entrypoints'\nrules = ['rules/checks/pass', 'rules/checks/fail', 'rules/checks/error', 'rules/checks/missing', 'rules/checks/disabled']\nrun_at = ['check']\n",
+    );
+    write(
+        &f.remote,
+        "scripts/shared.sh",
+        "test -s README.md || exit 2\ncat \"$HANNES_RULE_DIRECTORY/resource\"\nexit \"$HANNES_PARAM_CODE\"\n",
+    );
+    for (id, entrypoint, enabled) in [
+        ("pass", "scripts/shared.sh", true),
+        ("fail", "scripts/shared.sh", true),
+        ("error", "scripts/shared.sh", true),
+        ("missing", "scripts/missing.sh", true),
+        ("disabled", "scripts/missing.sh", false),
+    ] {
+        write(
+            &f.remote,
+            &format!("rules/checks/{id}/rule.toml"),
+            &format!(
+                "id = '{id}'\ndescription = 'Shared check'\nenabled = {enabled}\nblocking = false\n[parameters.code]\ntype = 'string'\nrequired = true\n[check]\nentrypoint = '{entrypoint}'\ninterpreter = 'sh'\n"
+            ),
+        );
+        write(&f.remote, &format!("rules/checks/{id}/resource"), id);
+        write(
+            &f.remote,
+            &format!("rules/checks/{id}/{entrypoint}"),
+            "exit 2",
+        );
+    }
+    // Neither the selected set nor the declaring rule supplies the shared path.
+    write(&f.remote, "repository/scripts/shared.sh", "exit 2");
+    commit(&f.remote);
+    write(&f.root, "README.md", "consumer\n");
+    f.imports(&[("repository", "main")]);
+    let mut configuration = fs::read_to_string(f.root.join(".hannes/config.toml")).unwrap();
+    for (id, code) in [
+        ("pass", "0"),
+        ("fail", "1"),
+        ("error", "2"),
+        ("missing", "0"),
+    ] {
+        configuration += &format!("\n[imports.rule_parameters.{id}]\ncode = '{code}'\n");
+    }
+    write(&f.root, ".hannes/config.toml", &configuration);
+    let p = f.load(true).unwrap();
+    let shared: Vec<_> = p
+        .checks
+        .iter()
+        .filter(|c| c.entrypoint.ends_with("scripts/shared.sh"))
+        .collect();
+    assert_eq!(shared.len(), 3);
+    assert!(shared.iter().all(|c| c.entrypoint == shared[0].entrypoint));
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    let p = f.load(false).unwrap();
+    assert_eq!(
+        planner::build(&p, Some("check"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        4
+    );
+    let report = hannes::verify_project_at(
+        p,
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.overall, Status::Error);
+    assert_eq!(report.results.len(), 4);
+    for (label, status) in [
+        ("pass", Status::Pass),
+        ("fail", Status::Fail),
+        ("error", Status::Error),
+    ] {
+        let result = report
+            .results
+            .iter()
+            .find(|r| r.stdout.as_ref().is_some_and(|s| s.text == label))
+            .unwrap();
+        assert_eq!(result.status, status);
+        assert!(!result.blocking);
+    }
+    let missing = report.results.iter().find(|r| r.stdout.is_none()).unwrap();
+    assert_eq!(missing.status, Status::Error);
+    assert!(missing.reason.contains("entrypoint"));
+    hannes::report::read(&f.root).unwrap();
+}
+
+#[test]
+fn imported_shared_entrypoints_reject_unsafe_paths() {
+    for entrypoint in [
+        "../outside.sh",
+        "scripts/../../outside.sh",
+        "/tmp/outside.sh",
+        "C:/outside.sh",
+        "scripts\\outside.sh",
+        "scripts/.",
+    ] {
+        let f = Fixture::new();
+        write(
+            &f.remote,
+            "repository/checks/required-files/rule.toml",
+            &format!(
+                "id = 'required-files'\ndescription = 'Invalid path'\nenabled = false\n[check]\nentrypoint = {entrypoint:?}\n"
+            ),
+        );
+        fs::create_dir_all(f.remote.join("scripts")).unwrap();
+        write(&f.remote, "scripts/data", "not an entrypoint");
+        commit(&f.remote);
+        f.imports(&[("repository", "main")]);
+        assert!(f.load(true).is_err(), "accepted {entrypoint:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn imported_shared_entrypoints_reject_symlink_escapes() {
+    use std::os::unix::fs::symlink;
+    for link_directory in [false, true] {
+        let f = Fixture::new();
+        let outside = tempfile::tempdir().unwrap();
+        write(outside.path(), "shared.sh", "exit 0");
+        write(
+            &f.remote,
+            "repository/checks/required-files/rule.toml",
+            "id = 'required-files'\ndescription = 'Unsafe shared script'\n[check]\nentrypoint = 'scripts/shared.sh'\ninterpreter = 'sh'\n",
+        );
+        if link_directory {
+            symlink(outside.path(), f.remote.join("scripts")).unwrap();
+        } else {
+            fs::create_dir(f.remote.join("scripts")).unwrap();
+            symlink(
+                outside.path().join("shared.sh"),
+                f.remote.join("scripts/shared.sh"),
+            )
+            .unwrap();
+        }
+        commit(&f.remote);
+        f.imports(&[("repository", "main")]);
+        assert!(f.load(true).is_err());
+    }
+}

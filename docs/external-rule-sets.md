@@ -164,15 +164,20 @@ tree; inspect provenance to see which external revision a report evaluated.
 ## Source resources and trust
 
 Checks keep the consuming project's working directory. HANNES_RULE_DIRECTORY
-locates bundled resources inside the executing Check directory. Explicit
-interpreters receive absolute entrypoint paths. Review prompts load from their
+locates bundled resources inside the declaring Rule directory, even for shared
+scripts. Explicit interpreters receive absolute entrypoint paths. Review prompts load from their
 own Rule directories; context paths and evidence refer to the consumer.
 
 Selected set directories, Rule references, definitions, entrypoints and prompts
 reject symlinks, parent traversal and unexpected file types. The external
-repository is the containment boundary for Rule references; entrypoints and
-prompts remain confined to their own Rule directory. Only designated definitions
-are interpreted; supporting TOML is data. Git retrieval disables downloaded hooks
+repository is the containment boundary for Rule references and shared Check
+entrypoints. A filename entrypoint such as `index.sh` resolves in its declaring
+Rule directory; a path containing `/`, such as `scripts/check-files.py`, resolves
+from the imported repository root, independently of the selected set directory.
+Resolution never searches other locations and works offline from the cache.
+Each Rule executes independently with its own parameters and result, even when
+several Rules reference the same script. Review prompts remain confined to their
+own Rule directory. Only designated definitions are interpreted; supporting TOML is data. Git retrieval disables downloaded hooks
 and initialization scripts and never initializes submodules. Host credential
 helpers and SSH configuration remain trusted integrations.
 

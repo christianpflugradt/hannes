@@ -410,7 +410,7 @@ Definitions cannot be placed arbitrarily or nested in other directories.
 Unknown fields, duplicate keys/IDs and invalid references fail validation, even
 for disabled rules. Missing implementations become execution errors only for
 enabled selected rules. Text uses UTF-8; required text must be nonblank and contain
-no NUL. Resource filenames must name regular files directly inside their own rule
+no NUL. Review prompt filenames must name regular files directly inside their own rule
 directory: no empty names, separators, absolute paths, parent traversal or symlinks.
 Rule directories, definitions and configuration paths also reject symlinks.
 
@@ -567,13 +567,28 @@ produce a clear startup ERROR.
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `check.entrypoint` | Required | Filename directly within this check directory. |
+| `check.entrypoint` | Required | Filename in this Rule directory, or a path containing `/` relative to the rule-source root (see below). |
 | `check.interpreter` | Optional; `null` | Executable used to run the entrypoint. Omitted means direct execution. |
 | `check.timeout_seconds` | Optional; `30` | Integer `1..3600`; deadline including output capture. |
 
+A filename such as `index.sh` resolves inside the declaring Rule directory.
+A path containing `/`, such as `scripts/check-files.py`, resolves from the
+rule-source root: the consumer repository root for local Rules, or the imported
+Git repository root, regardless of the selected Rule Set directory. Use `/` as
+the separator. Hannes chooses the base from the syntax and never searches other
+locations. Entrypoints must be regular files within that source; absolute paths,
+parent traversal, backslashes, drive prefixes and symlink components are rejected.
+
+Several Rules can set `entrypoint = "scripts/check-files.py"` to share one script.
+Each Rule still executes separately with its own parameters, timeout, blocking
+behavior and PASS/FAIL/ERROR result. Git imports support shared scripts offline
+from their resolved cache. Review prompts remain filenames in their own Rule
+directories.
+
 Checks inherit the environment, receive no stdin and keep the consuming project's
 root as their working directory. `HANNES_RULE_DIRECTORY` is the absolute directory
-of the check, for bundled resources such as a scanner configuration or helper.
+of the declaring Rule, even when its entrypoint is shared, for bundled resources
+such as a scanner configuration or helper.
 Checks and AI review provider subprocesses also receive `HANNES_EXECUTION_POINT`,
 the effective execution point (for example, `pre-commit`, `commit-msg`, `pre-push`,
 `check` or a configured custom point). Hannes supplies this runtime context from

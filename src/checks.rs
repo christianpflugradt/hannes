@@ -20,11 +20,11 @@ pub fn execute_with_context(
     let start = Instant::now();
     let mut item = Item::simple(&check.id, "check", Status::Error, String::new());
     item.blocking = check.blocking;
-    let environment = match (|| -> anyhow::Result<_> {
+    let (environment, entrypoint) = match (|| -> anyhow::Result<_> {
         let environment = check.parameters.resolve(&project.root, &check.id)?;
         let entrypoint = crate::config::source_path(
-            check.entrypoint.parent().unwrap(),
-            std::path::Path::new(check.entrypoint.file_name().unwrap()),
+            &check.source_root,
+            check.entrypoint.strip_prefix(&check.source_root)?,
         )
         .map_err(|error| {
             anyhow::anyhow!(
@@ -38,9 +38,14 @@ pub fn execute_with_context(
             "Rule {}: check entrypoint must be a regular file",
             check.id
         );
-        Ok(environment)
+        let directory = crate::config::source_path(
+            &check.source_root,
+            check.rule_directory.strip_prefix(&check.source_root)?,
+        )?;
+        anyhow::ensure!(directory.is_dir(), "Rule directory must be a directory");
+        Ok((environment, entrypoint))
     })() {
-        Ok(environment) => environment,
+        Ok(prepared) => prepared,
         Err(error) => {
             item.reason = format!("{error:#}");
             item.duration_ms = start.elapsed().as_millis() as u64;
@@ -49,13 +54,13 @@ pub fn execute_with_context(
     };
     let mut command = if let Some(interpreter) = &check.interpreter {
         let mut command = Command::new(interpreter);
-        command.arg(&check.entrypoint);
+        command.arg(&entrypoint);
         command
     } else {
-        Command::new(&check.entrypoint)
+        Command::new(&entrypoint)
     };
     crate::parameters::configure(&mut command, &environment);
-    command.env("HANNES_RULE_DIRECTORY", check.entrypoint.parent().unwrap());
+    command.env("HANNES_RULE_DIRECTORY", &check.rule_directory);
     command.env("HANNES_EXECUTION_POINT", execution_point);
     command.current_dir(&project.root).stdin(Stdio::null());
     if let Some(hook) = hook {

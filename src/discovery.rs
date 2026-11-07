@@ -100,7 +100,23 @@ fn resource(root: &Path, directory: &Path, filename: &str) -> Result<PathBuf> {
             && !Path::new(filename).is_absolute(),
         "resource must be a filename directly inside its rule directory: {filename:?}"
     );
-    let path = match source_path(root, &directory.join(filename)) {
+    resolve_resource(root, &directory.join(filename))
+}
+
+fn check_entrypoint(root: &Path, directory: &Path, entrypoint: &str) -> Result<PathBuf> {
+    if !entrypoint.contains('/') {
+        return resource(root, directory, entrypoint);
+    }
+    ensure!(
+        !entrypoint.contains(['\\', ':', '\0']),
+        "check entrypoint must be a relative source path using /: {entrypoint:?}"
+    );
+    config::relative(Path::new(entrypoint))?;
+    resolve_resource(root, Path::new(entrypoint))
+}
+
+fn resolve_resource(root: &Path, relative: &Path) -> Result<PathBuf> {
+    let path = match source_path(root, relative) {
         Ok(path) => path,
         // Missing implementations become per-rule execution errors, including
         // when an interpreter would otherwise turn a missing script into FAIL.
@@ -109,7 +125,7 @@ fn resource(root: &Path, directory: &Path, filename: &str) -> Result<PathBuf> {
                 .downcast_ref::<std::io::Error>()
                 .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
         {
-            return Ok(root.join(directory).join(filename));
+            return Ok(root.join(relative));
         }
         Err(error) => return Err(error),
     };
@@ -173,7 +189,7 @@ fn load_rules(
         );
         match (kind.as_str(), rule.check, rule.review) {
             ("checks", Some(check), None) => {
-                let entrypoint = resource(root, &dir, &check.entrypoint)?;
+                let entrypoint = check_entrypoint(root, &dir, &check.entrypoint)?;
                 if let Some(interpreter) = &check.interpreter {
                     ensure!(
                         !interpreter.trim().is_empty() && !interpreter.contains('\0'),
@@ -189,6 +205,8 @@ fn load_rules(
                         enabled: rule.enabled,
                         blocking: rule.blocking,
                         entrypoint,
+                        source_root: root.to_path_buf(),
+                        rule_directory: full,
                         interpreter: check.interpreter,
                         timeout_seconds: check.timeout_seconds,
                         run_at: rule.run_at.clone(),

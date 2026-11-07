@@ -212,7 +212,8 @@ fn resource_filenames_are_confined() {
         "..",
         "../index.sh",
         "/tmp/index.sh",
-        "helpers/index.sh",
+        "scripts/../index.sh",
+        "C:/index.sh",
         "helpers\\index.sh",
         "C:\\index.sh",
     ] {
@@ -238,6 +239,14 @@ fn resource_filenames_are_confined() {
         assert!(config::load(d.path()).is_err(), "accepted prompt {name:?}");
     }
     let d = project();
+    review(d.path(), "run_at = ['check']");
+    write(
+        d.path(),
+        ".hannes/reviews/design/rule.toml",
+        "id = 'design'\ndescription = 'Review'\nrun_at = ['check']\n[review]\nprompt = 'scripts/prompt.md'\n",
+    );
+    assert!(config::load(d.path()).is_err());
+    fs::remove_dir_all(d.path().join(".hannes/reviews")).unwrap();
     check(
         d.path(),
         "readme",
@@ -778,5 +787,159 @@ fn saved_reports_reject_inconsistent_metadata() {
         }
         write(d.path(), ".hannes/reports/last.json", &value.to_string());
         assert!(report::read(d.path()).is_err(), "accepted {case}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn local_rules_share_entrypoints_with_independent_results() {
+    use std::os::unix::fs::PermissionsExt;
+    for interpreter in ["", "interpreter = 'sh'"] {
+        let d = project();
+        write(
+            d.path(),
+            "scripts/shared.sh",
+            "#!/bin/sh\ntest -s README.md || exit 2\ncat \"$HANNES_RULE_DIRECTORY/resource\"\nexit \"$HANNES_PARAM_CODE\"\n",
+        );
+        fs::set_permissions(
+            d.path().join("scripts/shared.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        for (id, code) in [("pass", "0"), ("fail", "1"), ("error", "2")] {
+            check(
+                d.path(),
+                id,
+                &format!(
+                    "run_at = ['check']\nblocking = false\n[parameters.code]\ntype = 'string'\nvalue = '{code}'"
+                ),
+                &format!("entrypoint = 'scripts/shared.sh'\n{interpreter}"),
+                "exit 2",
+            );
+            write(d.path(), &format!(".hannes/checks/{id}/resource"), id);
+            // A rule-relative decoy must never override a source-relative path.
+            write(
+                d.path(),
+                &format!(".hannes/checks/{id}/scripts/shared.sh"),
+                "exit 2",
+            );
+        }
+        for (id, attributes) in [
+            ("missing", "run_at = ['check']"),
+            ("disabled", "enabled = false"),
+        ] {
+            check(
+                d.path(),
+                id,
+                attributes,
+                "entrypoint = 'scripts/missing.sh'\ninterpreter = 'sh'",
+                "exit 0",
+            );
+            write(
+                d.path(),
+                &format!(".hannes/checks/{id}/scripts/missing.sh"),
+                "exit 0",
+            );
+        }
+        let p = config::load(d.path()).unwrap();
+        let shared: Vec<_> = p
+            .checks
+            .iter()
+            .filter(|c| matches!(c.id.as_str(), "pass" | "fail" | "error"))
+            .collect();
+        assert!(shared.iter().all(|c| c.entrypoint == shared[0].entrypoint));
+        let report = hannes::verify_project_at(
+            p,
+            &Never,
+            hannes::VerificationMode::AllRules,
+            Some("check"),
+            &mut |_| {},
+        )
+        .unwrap();
+        assert_eq!(report.overall, Status::Error);
+        assert_eq!(report.results.len(), 4);
+        for (id, status) in [
+            ("pass", Status::Pass),
+            ("fail", Status::Fail),
+            ("error", Status::Error),
+            ("missing", Status::Error),
+        ] {
+            let result = report.results.iter().find(|r| r.id == id).unwrap();
+            assert_eq!(result.status, status, "{id}: {}", result.reason);
+            if id == "missing" {
+                assert!(result.reason.contains("entrypoint"));
+            } else {
+                assert_eq!(result.stdout.as_ref().unwrap().text, id);
+                assert!(!result.blocking);
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn shared_entrypoints_reject_symlinks_at_discovery_and_execution() {
+    use std::os::unix::fs::symlink;
+    for target in ["scripts/shared.sh", "scripts", ".hannes/checks/readme"] {
+        let d = project();
+        let outside = tempfile::tempdir().unwrap();
+        check(
+            d.path(),
+            "readme",
+            "run_at = ['check']",
+            "entrypoint = 'scripts/shared.sh'\ninterpreter = 'sh'",
+            "exit 0",
+        );
+        write(d.path(), "scripts/shared.sh", "exit 0");
+        let p = config::load(d.path()).unwrap();
+        let original = d.path().join(target);
+        let moved = outside.path().join("replacement");
+        fs::rename(&original, &moved).unwrap();
+        symlink(&moved, &original).unwrap();
+        assert!(config::load(d.path()).is_err(), "accepted {target}");
+        let result = hannes::checks::execute(&p, &p.checks[0], "check");
+        assert_eq!(
+            result.status,
+            Status::Error,
+            "accepted replacement of {target}"
+        );
+        assert!(result.stdout.is_none());
+    }
+    // Disabled rules still reject unsafe paths; missing files alone are allowed.
+    let d = project();
+    check(
+        d.path(),
+        "readme",
+        "enabled = false",
+        "entrypoint = 'scripts/shared.sh'",
+        "exit 0",
+    );
+    symlink("../outside", d.path().join("scripts")).unwrap();
+    assert!(config::load(d.path()).is_err());
+    fs::remove_file(d.path().join("scripts")).unwrap();
+    fs::create_dir_all(d.path().join("scripts/shared.sh")).unwrap();
+    assert!(config::load(d.path()).is_err());
+}
+
+#[test]
+fn shared_entrypoints_recheck_missing_and_nonregular_files_before_execution() {
+    for replace_with_directory in [false, true] {
+        let d = project();
+        check(
+            d.path(),
+            "readme",
+            "run_at = ['check']",
+            "entrypoint = 'scripts/shared.sh'",
+            "exit 0",
+        );
+        write(d.path(), "scripts/shared.sh", "exit 0");
+        let p = config::load(d.path()).unwrap();
+        fs::remove_file(d.path().join("scripts/shared.sh")).unwrap();
+        if replace_with_directory {
+            fs::create_dir(d.path().join("scripts/shared.sh")).unwrap();
+        }
+        let result = hannes::checks::execute(&p, &p.checks[0], "check");
+        assert_eq!(result.status, Status::Error);
+        assert!(result.stdout.is_none());
     }
 }

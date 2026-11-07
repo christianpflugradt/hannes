@@ -79,7 +79,7 @@ pub struct ReviewContext {
     #[serde(default)]
     pub headings: Vec<String>,
 }
-/// A loaded check with an absolute entrypoint, checked for existence before execution.
+/// A loaded check retaining its source boundary and declaring directory for execution.
 #[derive(Debug, Clone, Serialize)]
 pub struct Check {
     pub id: String,
@@ -88,6 +88,8 @@ pub struct Check {
     pub enabled: bool,
     pub blocking: bool,
     pub entrypoint: PathBuf,
+    pub source_root: PathBuf,
+    pub rule_directory: PathBuf,
     pub interpreter: Option<String>,
     pub timeout_seconds: u64,
     pub run_at: Vec<String>,

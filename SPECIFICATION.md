@@ -116,10 +116,11 @@ directories as defined in EXT-001; local definitions use only the paths above.
 Supporting files inside rule directories are data, never governance documents.
 
 Project settings are project, max_display_files (default 5), execution_points
-and imports. The README defines all fields and bounds. Resource filenames
+and imports. The README defines all fields and bounds. Review prompt filenames
 must be single nonempty names directly in a Rule directory: no separators,
 absolute paths, parent traversal, symlinks or special files. Review prompts are
-UTF-8 Markdown without frontmatter requirements. Checks may bundle helpers.
+UTF-8 Markdown without frontmatter requirements. Check entrypoints follow CHK-001.
+Checks may bundle helpers.
 
 fang an creates missing files without replacing edits or installing hooks.
 It scaffolds a passing enabled Check, a disabled failing Check and disabled
@@ -156,7 +157,30 @@ retain their existing contracts.
 
 ## CHK-001: Deterministic checks
 
-[check] requires entrypoint and accepts optional interpreter and timeout_seconds
+[check] requires entrypoint. A filename such as index.sh resolves in the declaring
+Rule directory. A relative path containing `/`, such as scripts/check.py, resolves
+from the rule-source root: the consumer repository root for local Rules and the
+imported repository root for Git Rules, regardless of the selected Rule Set path.
+Resolution depends only on syntax; there is no fallback search. Paths use `/`;
+empty paths, absolute paths, backslashes, drive prefixes, parent traversal,
+symlinks in any component and nonregular files are rejected, including for disabled
+Rules. Missing entrypoints remain per-rule execution ERRORs only when selected and
+enabled. Source containment and regular-file checks run again before execution.
+Review prompt resolution is unchanged.
+
+Multiple Rules may use one entrypoint. Each retains its identity, parameters,
+timeout, blocking behavior, execution and result; sharing never deduplicates
+executions. HANNES_RULE_DIRECTORY always identifies the declaring Rule directory,
+including when the entrypoint lives elsewhere in the source. Cached Git imports
+support the same resolution offline.
+
+Acceptance: `tests/configuration.rs::local_rules_share_entrypoints_with_independent_results`
+and `tests/external_rule_sets.rs::shared_entrypoints_execute_each_rule_offline`
+cover shared scripts, independent parameters/results and declaring directories;
+path confinement, execution-time replacement and missing/disabled cases are covered
+in those test files alongside filename-only compatibility.
+
+[check] accepts optional interpreter and timeout_seconds
 (default 30, 1..=3600). Direct execution uses native OS behavior with no shebang
 parsing or language detection. Explicit interpreters receive the absolute
 entrypoint as one argument; no implicit shell, runtime installation or interpreter
@@ -190,8 +214,9 @@ canonical absolute paths for files and unchanged strings through environment
 variables named `HANNES_PARAM_` plus the uppercase parameter name. Clear inherited
 variables with this prefix so omitted/undeclared values cannot leak into rules.
 Checks and provider subprocesses use the same delivery mechanism. Different review
-environments use separate calls; prepared context remains shared. Rule resources
-continue resolving within their own directories.
+environments use separate calls; prepared context remains shared. Review prompts
+and filename-only Check entrypoints continue resolving within their own
+directories; shared Check paths follow CHK-001.
 
 Acceptance: `tests/parameters.rs` and parameterized imports in
 `tests/external_rule_sets.rs` exercise loading, binding and execution.

@@ -118,6 +118,26 @@ imports execute separately and retain distinguishable IDs in plans and reports;
 repeated references within one binding execute once. See
 [parameter declarations and delivery](../README.md#rule-parameters).
 
+## Named provider configurations
+
+A selected directory may distribute complete named configurations in
+`providers/<id>.toml` beside its `config.toml`. They use the same Codex fields,
+defaults and limits as [local provider configurations](configuration.md#configure-the-ai-provider).
+All provider files in that directory are validated, including unused definitions.
+A review selects one with `provider = "quality"` in its `[review]` table.
+
+Provider IDs are global across local files and all explicitly imported sets.
+Cross-import references resolve after loading all imports, independently of order.
+A distinct definition with an existing ID fails, even with identical settings;
+consumer overrides are unsupported. Repeated imports of the same immutable file
+share its configuration. A provider-only set may use `rules = []`, with the usual
+required `id`, `description` and nonempty `run_at`. No extra imports are inferred
+or downloaded. Reviews without references keep the consumer's legacy provider.
+
+Provider files follow the existing source-boundary, integrity and atomic state
+publication checks. Only `codex-cli` executes; credentials remain in Codex login.
+Named configurations carry no credentials, runtime requirements or transports.
+
 ## Refresh, storage and provenance
 
 Host Git fetches exact selectors into shared bare object storage and resolves them
@@ -143,7 +163,7 @@ Project resolution state lives at `hannes/external-rule-sets.json` inside the
 project's Git directory (per worktree). It records repository digest, configured
 ref, selected directory and resolved commit. It stays outside tracked files and
 working-tree snapshots. Refresh atomically replaces complete state after all
-local and imported rules validate. Removed references are dropped. Cached
+local and imported rules, provider definitions and references validate. Removed references are dropped. Cached
 revisions remain available; no automatic eviction is performed.
 
 OS locks serialize writers, including different projects sharing a cache. Locks
@@ -196,6 +216,6 @@ comes from host Git/SSH; Git stderr is suppressed to avoid credential disclosure
 Fetches have a 60-second deadline; local Git operations and lock waits have
 30-second deadlines. Cached repositories allow 8 MiB/file, 128 MiB total,
 100,000 entries and 128 directory levels. Metadata is limited to 64 KiB/file;
-the combined configuration allows 256 Rules and 256 Rule Sets. Resolution state
+the combined configuration allows 256 Rules, 256 Rule Sets and 256 named providers. Resolution state
 is limited to 64 KiB; refs to 1024 bytes. Shared-cache locking currently uses Unix
 OS locks; external imports on Windows remain unsupported.

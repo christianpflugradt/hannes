@@ -147,6 +147,7 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
             timeout_seconds: 30,
         }),
         review: Some(config::ReviewDefinition {
+            provider: None,
             prompt: "prompt.md".into(),
             files: vec!["README.md".into()],
             context: vec![config::ReviewContext {

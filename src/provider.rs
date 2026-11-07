@@ -24,6 +24,30 @@ pub struct Request<'a> {
     pub input: &'a crate::review_input::PreparedReviewInput,
     pub parameters: &'a crate::parameters::Environment,
 }
+impl Request<'_> {
+    /// Every invocation contains one provider configuration and parameter environment.
+    pub fn provider_config(&self) -> Result<&crate::config::ProviderConfig> {
+        let first = self
+            .reviews
+            .first()
+            .context("provider request has no reviews")?;
+        ensure!(
+            self.reviews
+                .iter()
+                .all(|review| review.provider == first.provider),
+            "provider request mixes configurations"
+        );
+        match &first.provider {
+            Some(id) => self
+                .project
+                .providers
+                .get(id)
+                .with_context(|| format!("review {:?}: unknown provider {id:?}", first.id)),
+            None => Ok(&self.project.provider),
+        }
+    }
+}
+
 pub trait Provider {
     fn review(&self, request: &Request<'_>) -> Result<String>;
     fn review_with_usage(&self, request: &Request<'_>) -> Response {
@@ -173,6 +197,11 @@ impl Provider for Codex {
 }
 impl Codex {
     fn execute(&self, request: &Request<'_>) -> Result<Response> {
+        let config = request.provider_config()?;
+        ensure!(
+            config.provider == "codex-cli",
+            "unsupported provider implementation"
+        );
         let temporary = tempfile::tempdir()?;
         let schema_path = temporary.path().join("schema.json");
         let output_path = temporary.path().join("verdict.json");
@@ -190,14 +219,18 @@ impl Codex {
         input.write_all(prompt(request)?.as_bytes())?;
         input.seek(SeekFrom::Start(0))?;
         let started = Instant::now();
-        let overrides =
-            review_overrides(&self.executable, request.project, request.execution_point)?;
+        let overrides = review_overrides(
+            &self.executable,
+            request.project,
+            config,
+            request.execution_point,
+        )?;
         let mut command = command_with_executable(
             &self.executable,
             &request.project.root,
             &schema_path,
             &output_path,
-            request.project.provider.model.as_deref(),
+            config.model.as_deref(),
         );
         // Each override is one argv element; nothing is passed through a shell.
         for value in &overrides {
@@ -207,8 +240,8 @@ impl Codex {
         command.env("HANNES_EXECUTION_POINT", request.execution_point);
         command.arg("-");
         command.stdin(input);
-        let remaining = Duration::from_secs(request.project.provider.timeout_seconds)
-            .saturating_sub(started.elapsed());
+        let remaining =
+            Duration::from_secs(config.timeout_seconds).saturating_sub(started.elapsed());
         ensure!(
             !remaining.is_zero(),
             "Codex review configuration exceeded provider timeout"
@@ -248,6 +281,7 @@ impl Codex {
 fn review_overrides(
     executable: &Path,
     project: &Project,
+    config: &crate::config::ProviderConfig,
     execution_point: &str,
 ) -> Result<Vec<String>> {
     #[derive(serde::Deserialize)]
@@ -265,7 +299,7 @@ fn review_overrides(
         "web_search=\"disabled\"".into(),
         format!(
             "tool_output_token_limit={}",
-            project.provider.review_profile.tool_output_token_limit
+            config.review_profile.tool_output_token_limit
         ),
     ];
     let mut discovery = Command::new(executable);
@@ -282,7 +316,7 @@ fn review_overrides(
     }
     let output = crate::process::run(
         &mut discovery,
-        Duration::from_secs(project.provider.timeout_seconds.min(10)),
+        Duration::from_secs(config.timeout_seconds.min(10)),
     )
     .context("cannot inspect Codex MCP configuration; install a compatible CLI")?;
     ensure!(
@@ -297,7 +331,7 @@ fn review_overrides(
         "too many Codex MCP servers; no review started"
     );
     let names: BTreeSet<_> = servers.into_iter().map(|server| server.name).collect();
-    for allowed in &project.provider.mcp_servers {
+    for allowed in &config.mcp_servers {
         ensure!(
             names.contains(allowed),
             "allowed MCP server is not configured: {allowed}"
@@ -312,10 +346,10 @@ fn review_overrides(
                     .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte)),
             "Codex MCP server names must use ASCII letters, digits, hyphens or underscores for safe overrides"
         );
-        let enabled = project.provider.mcp_servers.contains(&name);
+        let enabled = config.mcp_servers.contains(&name);
         overrides.push(format!("mcp_servers.{name}.enabled={enabled}"));
     }
-    if let Some(effort) = &project.provider.review_profile.reasoning_effort {
+    if let Some(effort) = &config.review_profile.reasoning_effort {
         overrides.push(format!(
             "model_reasoning_effort={}",
             toml::Value::String(effort.clone())

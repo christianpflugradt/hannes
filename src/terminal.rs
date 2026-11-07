@@ -566,6 +566,15 @@ pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
         plan.provider.review_profile.tool_output_token_limit, plan.planned_model_calls,
         plan.context.selected_bytes, plan.context.byte_limit, plan.context.orientation_diff_bytes,
         if plan.context.orientation_diff_truncated { " (gekürzt; weitere Evidenz muss gelesen werden)" } else { "" }));
+    for rule in &plan.scheduled {
+        if let (Some(id), Some(config)) = (&rule.provider, &rule.provider_config) {
+            text.push_str(&format!("Review {} · Provider-Konfiguration: {} · Provider: {} · Modell: {} · Reasoning: {} · Timeout: {} s · MCP: {} · Tool-Ausgabe: {} Tokens\n",
+                clean(&names[&rule.id]), clean(id), clean(&config.provider),
+                clean(config.model.as_deref().unwrap_or("Codex-Standard (nicht aufgelöst)")),
+                clean(config.review_profile.reasoning_effort.as_deref().unwrap_or("Codex-Standard (nicht aufgelöst)")),
+                config.timeout_seconds, clean(&config.mcp_servers.join(", ")), config.review_profile.tool_output_token_limit));
+        }
+    }
     for path in &plan.context.entry_files {
         text.push_str(&format!("Einstiegsdatei: {}\n", clean(path)));
     }

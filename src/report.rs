@@ -1,5 +1,5 @@
 use crate::{git_snapshot::Snapshot, process::Capture};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, path::Path};
 
@@ -164,6 +164,22 @@ pub fn read(root: &Path) -> Result<Report> {
             && plan.input.complete == report.snapshot.complete,
         "inconsistent report plan/input"
     );
+    for rule in plan
+        .scheduled
+        .iter()
+        .chain(&plan.disabled_rules)
+        .chain(plan.omitted.iter().map(|o| &o.rule))
+    {
+        ensure!(
+            rule.provider.is_some() == rule.provider_config.is_some()
+                && (rule.provider.is_none() || rule.kind == "review"),
+            "inconsistent report provider metadata"
+        );
+        if let Some(config) = &rule.provider_config {
+            crate::config::validate_provider(config)
+                .context("invalid report provider configuration")?;
+        }
+    }
     let expected: std::collections::BTreeSet<_> =
         plan.scheduled.iter().map(|r| (&r.id, &r.kind)).collect();
     let actual: std::collections::BTreeSet<_> = report

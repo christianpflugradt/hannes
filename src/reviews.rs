@@ -136,8 +136,10 @@ pub fn execute_prepared(
     provider: &dyn Provider,
     execution_point: &str,
 ) -> (Vec<Item>, Option<TokenUsage>) {
-    let mut groups =
-        std::collections::BTreeMap::<crate::parameters::Environment, Vec<&Review>>::new();
+    let mut groups = std::collections::BTreeMap::<
+        (Option<String>, crate::parameters::Environment),
+        Vec<&Review>,
+    >::new();
     let mut items = Vec::new();
     for review in active {
         let resolved = review
@@ -153,7 +155,10 @@ pub fn execute_prepared(
                 Ok(environment)
             });
         match resolved {
-            Ok(environment) => groups.entry(environment).or_default().push(review),
+            Ok(environment) => groups
+                .entry((review.provider.clone(), environment))
+                .or_default()
+                .push(review),
             Err(error) => {
                 let mut item =
                     Item::simple(&review.id, "review", Status::Error, format!("{error:#}"));
@@ -163,7 +168,7 @@ pub fn execute_prepared(
         }
     }
     let mut usages = Vec::new();
-    for (parameters, reviews) in groups {
+    for ((_, parameters), reviews) in groups {
         // A snapshot check is required before every provider invocation, including
         // later parameter batches. Never reuse prepared evidence after edits.
         let stable = crate::git_snapshot::capture(&project.root).is_ok_and(|current| {

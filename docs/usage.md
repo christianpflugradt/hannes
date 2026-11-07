@@ -28,7 +28,8 @@ report. Defined but disabled rules do not trigger this message.
 `pass auf` validates all files, even disabled entries, and reconciles declared
 external state after confirmation, without running checks or reviews.
 `mach was` validates, then executes selected enabled checks in ID order, then
-selected active reviews in batches sharing parameter environments if checks passed.
+selected active reviews in batches sharing provider references and parameter
+environments if checks passed.
 It selects rules assigned to the requested execution point. Direct Git-backed points reconcile hooks first;
 `check` and custom points execute without hook synchronization. Disabled items
 never enter results.
@@ -82,7 +83,8 @@ a running message. Internal preparation and successful process-exit messages are
 hidden. Failed rules show their reason and findings; raw command output remains
 in the saved report.
 
-Reviews with identical resolved parameter environments share one provider call.
+Reviews with the same provider reference and identical resolved parameter
+environments share one provider call.
 The number of calls is announced; review starts appear together and verdicts
 arrive when the review phase completes. Numbering is rule order and does not
 claim per-review model progress. Review verdict summaries remain in saved status
@@ -135,7 +137,9 @@ For an optional Codex review:
 
 New provider configuration uses `codex-cli`, a 180-second timeout, `gpt-6.1-sol`,
 medium reasoning and no MCP servers. Model and MCP allow list are configurable in
-`.hannes/provider.toml`; see [review context and profile](configuration.md). A ChatGPT-backed local login works without a separate
+`.hannes/provider.toml`. Reviews may instead select complete named configurations
+from `.hannes/providers/<id>.toml` or explicitly imported rule sets using
+`review.provider`; see [provider configuration](configuration.md#configure-the-ai-provider). A ChatGPT-backed local login works without a separate
 API key. Usage consumes your account allowance; Hannes does not bypass limits.
 Inherited `OPENAI_API_KEY`/`CODEX_API_KEY` variables are removed from the child;
 your saved Codex authentication and user configuration still apply. Check

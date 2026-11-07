@@ -98,6 +98,7 @@ pub struct Check {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Review {
+    pub provider: Option<String>,
     pub id: String,
     pub name: String,
     pub description: String,
@@ -150,6 +151,7 @@ pub struct CheckDefinition {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReviewDefinition {
+    pub provider: Option<String>,
     pub prompt: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<String>,
@@ -161,6 +163,7 @@ pub struct Project {
     pub root: PathBuf,
     pub config: Config,
     pub provider: ProviderConfig,
+    pub providers: BTreeMap<String, ProviderConfig>,
     pub checks: Vec<Check>,
     pub reviews: Vec<Review>,
     pub rule_sets: Vec<RuleSet>,
@@ -326,44 +329,16 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
         Err(e) => return Err(e.into()),
         Ok(_) => crate::discovery::document(&root, &self::path("provider.toml"))?,
     };
-    ensure!(
-        provider.provider == "codex-cli",
-        "unsupported provider: {}; expected codex-cli",
-        provider.provider
-    );
-    timeout(provider.timeout_seconds).context("provider.toml")?;
-    if let Some(model) = &provider.model {
-        nonempty(model, "model")?;
-    }
-    let profile = &provider.review_profile;
-    ensure!(
-        (MIN_TOOL_OUTPUT_TOKENS..=MAX_TOOL_OUTPUT_TOKENS)
-            .contains(&profile.tool_output_token_limit),
-        "tool_output_token_limit must be {MIN_TOOL_OUTPUT_TOKENS}..={MAX_TOOL_OUTPUT_TOKENS}"
-    );
-    if let Some(effort) = &profile.reasoning_effort {
+    validate_provider(&provider).context("provider.toml")?;
+    let mut providers = BTreeMap::new();
+    for (path, id, config) in loaded.providers {
+        let mut ids = BTreeSet::new();
+        identity(&id, "provider configuration", &mut ids)
+            .and_then(|()| validate_provider(&config))
+            .with_context(|| format!("invalid provider {id:?} ({})", path.display()))?;
         ensure!(
-            [
-                "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"
-            ]
-            .contains(&effort.as_str()),
-            "unsupported reasoning_effort"
-        );
-    }
-    ensure!(
-        provider.mcp_servers.len() <= MAX_MCP_SERVERS,
-        "at most {MAX_MCP_SERVERS} allowed MCP servers"
-    );
-    let mut servers = BTreeSet::new();
-    for server in &provider.mcp_servers {
-        nonempty(server, "MCP server name")?;
-        ensure!(
-            server.len() <= MAX_MCP_NAME_BYTES
-                && server
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
-                && servers.insert(server),
-            "invalid or duplicate MCP server name"
+            providers.insert(id.clone(), config).is_none(),
+            "duplicate provider identifier {id:?}"
         );
     }
     let mut ids = BTreeSet::new();
@@ -443,11 +418,79 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
         root,
         config,
         provider,
+        providers,
         checks,
         reviews,
         rule_sets,
         effective,
     })
+}
+
+/// Shared validation for legacy and named configurations.
+pub(crate) fn validate_provider(provider: &ProviderConfig) -> Result<()> {
+    ensure!(
+        provider.provider == "codex-cli",
+        "unsupported provider: {}; expected codex-cli",
+        provider.provider
+    );
+    timeout(provider.timeout_seconds)?;
+    if let Some(model) = &provider.model {
+        nonempty(model, "model")?;
+    }
+    let profile = &provider.review_profile;
+    ensure!(
+        (MIN_TOOL_OUTPUT_TOKENS..=MAX_TOOL_OUTPUT_TOKENS)
+            .contains(&profile.tool_output_token_limit),
+        "tool_output_token_limit must be {MIN_TOOL_OUTPUT_TOKENS}..={MAX_TOOL_OUTPUT_TOKENS}"
+    );
+    if let Some(effort) = &profile.reasoning_effort {
+        ensure!(
+            [
+                "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"
+            ]
+            .contains(&effort.as_str()),
+            "unsupported reasoning_effort"
+        );
+    }
+    ensure!(
+        provider.mcp_servers.len() <= MAX_MCP_SERVERS,
+        "at most {MAX_MCP_SERVERS} allowed MCP servers"
+    );
+    let mut servers = BTreeSet::new();
+    for server in &provider.mcp_servers {
+        nonempty(server, "MCP server name")?;
+        ensure!(
+            server.len() <= MAX_MCP_NAME_BYTES
+                && server
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+                && servers.insert(server),
+            "invalid or duplicate MCP server name"
+        );
+    }
+    Ok(())
+}
+
+impl Project {
+    pub(crate) fn resolve_providers(&self) -> Result<()> {
+        for review in &self.reviews {
+            if let Some(id) = &review.provider {
+                ensure!(
+                    self.providers.contains_key(id),
+                    "review {:?}: unknown provider {id:?}",
+                    review.id
+                );
+            }
+        }
+        Ok(())
+    }
+
+    pub fn review_provider(&self, review: &Review) -> &ProviderConfig {
+        match &review.provider {
+            Some(id) => &self.providers[id],
+            None => &self.provider,
+        }
+    }
 }
 
 pub fn init(root: &Path) -> Result<usize> {

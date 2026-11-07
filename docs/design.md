@@ -123,7 +123,7 @@ requirement excerpts, manifest hints and the bounded orientation diff. Execution
 passes that exact preparation to the provider. Prompt rendering does no filesystem
 reads or Git work; independent snapshot stability checks still guard execution.
 
-Each batch of Reviews sharing a resolved parameter environment receives configured
+Each batch of Reviews sharing a provider reference and resolved parameter environment receives configured
 criteria, deduplicated requirement excerpts with original line numbers, and bounded
 orientation data. Exact per-review entry
 files focus the initial manifest/diff when every active review is focused; otherwise
@@ -135,7 +135,7 @@ queries. Full working-tree snapshots and file/line evidence validation remain.
 
 Before each model call, a bounded token-free `codex mcp list --json` reads
 configuration. Each discovered server is explicitly enabled only if named in
-`provider.toml`'s `mcp_servers` allow list (default empty); a blank server table does
+the resolved provider configuration's `mcp_servers` allow list (default empty); a blank server table does
 not override merged Codex configuration. Invalid discovery blocks the review.
 Inline child-only overrides disable automatic skill context/search, skill-driven
 MCP installation, apps/plugins, subagents and web search, and bound retained tool
@@ -167,8 +167,8 @@ support depends on Codex and the platform. Unsupported CLI versions fail closed.
 Parameter declarations live in the existing Rule schema. Loaded Rules carry a
 binding of those declarations and import-local values. The shared `parameters`
 module resolves and validates only active Rules, and configures child environments.
-The planner counts distinct valid review environments; execution groups Reviews
-by that environment and reuses the prepared context. Inherited parameter variables
+The planner counts distinct valid pairs of provider reference and review environment;
+execution groups Reviews by that pair and reuses the prepared context. Inherited parameter variables
 are removed before applying values. No global environment mutations occur.
 Missing check entrypoints and review prompts are retained for per-rule ERROR
 results; disabled Rules need neither implementation nor parameter resolution.
@@ -207,3 +207,15 @@ switch occurs. Providers, snapshots, selection and reports remain shared.
 The repository uses the same unversioned Rule model with published v0.10.0 as its
 governor. Candidate binaries are exercised only in isolated fixture repositories. No hook installation, remote services or releases
 are triggered by loading configuration.
+
+Named provider configurations reuse `ProviderConfig` and the ordinary bounded,
+symlink-free TOML loader. Local files live in `.hannes/providers/`; imported files
+live in `providers/` inside the selected set directory. Scope-local rule validation
+runs first. Provider definitions merge globally, rejecting collisions except for
+repeated references to the same repository/commit/file. Review references resolve
+after merging all explicit imports, before publishing resolution state. No source
+files are rewritten. The legacy project provider remains separate and is selected
+only when a review omits its reference. Each Codex request resolves its batch's
+configuration, rejects mixed references and applies that configuration to discovery
+and execution. Optional per-rule plan fields preserve named settings in reports
+without changing the interpretation of older schema 3/4 documents.

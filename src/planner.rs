@@ -17,6 +17,10 @@ pub struct Rule {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_config: Option<crate::config::ProviderConfig>,
     pub kind: String,
     pub description: String,
     pub blocking: bool,
@@ -142,7 +146,7 @@ fn metadata_path(path: &str) -> bool {
     match parts.as_slice() {
         [".hannes", "config.toml" | "provider.toml"] => true,
         [".hannes", "checks" | "reviews", _, "rule.toml"] => true,
-        [".hannes", "rule-sets", filename] => filename.ends_with(".toml"),
+        [".hannes", "rule-sets" | "providers", filename] => filename.ends_with(".toml"),
         _ => false,
     }
 }
@@ -202,7 +206,16 @@ pub fn build(
         } else {
             vec![]
         };
+        let review = project.reviews.iter().find(|r| r.id == *id);
+        let provider = review.and_then(|r| r.provider.clone());
+        let provider_config = provider.as_ref().map(|id| {
+            let mut config = project.providers[id].clone();
+            config.mcp_servers.sort();
+            config
+        });
         let rule = Rule {
+            provider,
+            provider_config,
             id: id.clone(),
             name: Some(display_name.clone()),
             kind: kind.into(),
@@ -327,7 +340,13 @@ pub fn build(
         planned_model_calls: active
             .iter()
             .filter(|review| review.execution_error.is_none())
-            .filter_map(|review| review.parameters.resolve(&project.root, &review.id).ok())
+            .filter_map(|review| {
+                review
+                    .parameters
+                    .resolve(&project.root, &review.id)
+                    .ok()
+                    .map(|environment| (review.provider.clone(), environment))
+            })
             .collect::<BTreeSet<_>>()
             .len(),
         context,
@@ -369,11 +388,15 @@ pub fn build(
     let excerpts = review_input
         .as_ref()
         .map_or(&[][..], |input| input.excerpts.as_slice());
+    let mut named_providers = project.providers.clone();
+    for config in named_providers.values_mut() {
+        config.mcp_servers.sort();
+    }
     let identity = serde_json::json!({
         "plan_schema_version": PLAN_SCHEMA_VERSION, "verifier_version": env!("CARGO_PKG_VERSION"),
         "project": project.config.project,
         "at": name, "checks_only": checks_only, "checks": checks, "reviews": reviews,
-        "provider": plan.provider, "head": snapshot.head, "files": files, "context": excerpts,
+        "provider": plan.provider, "named_providers": named_providers, "head": snapshot.head, "files": files, "context": excerpts,
         "complete": snapshot.complete,
     });
     plan.plan_id = format!("{:x}", Sha256::digest(serde_json::to_vec(&identity)?));

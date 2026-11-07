@@ -201,7 +201,11 @@ pub fn verify_project_with_context(
             progress(Progress::ReviewBatch {
                 count: active.len(),
                 calls: plan.planned_model_calls,
-                timeout_seconds: project.provider.timeout_seconds,
+                timeout_seconds: active
+                    .iter()
+                    .map(|r| project.review_provider(r).timeout_seconds)
+                    .max()
+                    .unwrap_or(project.provider.timeout_seconds),
             });
             for (offset, review) in active.iter().enumerate() {
                 progress(Progress::RuleStarted {

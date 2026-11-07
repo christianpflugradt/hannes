@@ -399,6 +399,8 @@ Use this fixed layout at the Git working-tree root:
 .hannes/
   config.toml
   provider.toml
+  providers/
+    quality.toml
   checks/readme/
     rule.toml
     index.sh
@@ -410,7 +412,7 @@ Use this fixed layout at the Git working-tree root:
 ```
 
 `checks/`, `reviews/` and `rule-sets/` are optional. Each immediate rule directory
-requires `rule.toml`. Only `config.toml`, `provider.toml`, `checks/*/rule.toml`,
+requires `rule.toml`. Only `config.toml`, `provider.toml`, `providers/*.toml`, `checks/*/rule.toml`,
 `reviews/*/rule.toml` and `rule-sets/*.toml` are governance configuration. Supporting
 files such as `checks/secrets/gitleaks.toml` are data and are never parsed by Hannes.
 Definitions cannot be placed arbitrarily or nested in other directories.
@@ -677,13 +679,13 @@ tool_output_token_limit = 2000
 | `timeout_seconds` | Required | Integer `1..3600`: seconds per batch for MCP discovery and the model call. Discovery itself is capped at 10 seconds. |
 | `model` | Optional; Codex default | Model identifier passed as `--model`. Generated files select GPT-6.1 Sol (`gpt-6.1-sol`); alternatives must be supported by your CLI/account. |
 | `mcp_servers` | Optional; `[]` | Names of Codex MCP servers allowed for reviews. Empty or omitted disables all of them. See below. |
-| `review_profile` | Optional table | Settings for every AI batch. These settings apply to all reviews. |
+| `review_profile` | Optional table | Settings for batches using this provider configuration. |
 | `review_profile.reasoning_effort` | Optional; Codex default | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`. Actual support depends on the model/CLI. |
 | `review_profile.tool_output_token_limit` | Optional; `2000` | Integer `256..16384`: tokens retained per tool output in Codex history. This is not a limit on total tokens or cost. |
 
 Omitting `model` or `reasoning_effort` uses the corresponding Codex default.
 Unsupported models or settings produce ERROR; Hannes does not silently substitute
-another model. The configuration applies to every selected review batch.
+another model. Each review batch uses its resolved provider configuration.
 
 **MCP integrations.** MCP (Model Context Protocol) servers give Codex access to
 additional tools or data, such as a project knowledge graph. Define server commands,
@@ -696,8 +698,7 @@ mcp_servers = ["project-memory", "browser"]
 ```
 
 Use actual configured names: at most 32 unique names, each 1–256 ASCII letters,
-digits, `_` or `-`; wildcards are not supported. All selected reviews receive the
-same list. There is currently no per-review MCP selection.
+digits, `_` or `-`; wildcards are not supported. Reviews using this configuration receive the same list.
 
 Before the AI call, Hannes reads `codex mcp list --json` without starting a model
 or server. It disables all unlisted servers for the child process. An unknown
@@ -719,6 +720,36 @@ produce ERROR. No credentials are copied to CI.
 
 `provider.toml` is optional; omission uses the generated provider settings above.
 When the file is present its required fields must be supplied.
+
+**Named configurations.** A complete executable setup can also live in
+`.hannes/providers/quality.toml`, with exactly the same fields and defaults as
+`provider.toml` above. The filename stem is its ID: 1–80 ASCII letters, digits,
+`-` or `_`, excluding the reserved `hannes-` prefix. Up to 256 named configurations
+are supported across the project and imports. Each file has the same 64 KiB
+metadata limit as other TOML configuration. Add `provider = "quality"` inside a
+review's `[review]` table to select it. Models cannot be overridden in reviews.
+
+For migration, copy your existing `provider.toml` into `providers/quality.toml`
+and add references to the reviews that should use it. Reviews without a reference
+continue using `provider.toml`; removing that file uses the generated defaults.
+Adding named configurations never changes the default provider.
+
+External rule sets distribute configurations in `providers/<id>.toml` beside the
+selected set's `config.toml`. Every such configuration is loaded and validated,
+including unused ones. IDs are global across local configuration and explicit
+imports. Reviews may reference configurations from another explicitly imported
+set, regardless of import order. Missing references fail, including in disabled
+reviews. Distinct definitions with the same ID fail; identical settings do not
+permit local overrides. Repeated imports of the same immutable provider file
+share its definition. No provider dependencies are downloaded automatically.
+Existing offline cache integrity and atomic resolution guarantees apply.
+
+Only `codex-cli` executes. Reviews batch together only when their provider
+reference and resolved parameter environment match. Different references use
+separate invocations, even if their settings match. Plans and saved reports record
+each explicit reference and its effective configuration. Provider files accept
+no credential fields; use the existing Codex login. Additional transports,
+credential management and runtime requirements are unsupported.
 
 ### Add a review
 
@@ -748,6 +779,7 @@ consumer through the existing shared provider call, after deterministic checks.
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
+| `review.provider` | Optional; `null` (omitted in TOML) | Named provider ID; omission uses the legacy project provider. |
 | `review.prompt` | Required | Nonblank UTF-8 `.md` filename in the review directory. |
 | `review.files` | Optional; `[]` | Up to 64 unique existing consumer-relative source files; exact paths, not globs. Starting points, not an evidence boundary. |
 | `review.context` | Optional; `[]` | Up to 32 document selections as `[[review.context]]`. |

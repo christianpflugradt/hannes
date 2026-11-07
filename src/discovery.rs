@@ -12,6 +12,7 @@ use std::{
 
 pub(crate) struct Loaded {
     pub config: Config,
+    pub providers: Vec<(PathBuf, String, config::ProviderConfig)>,
     pub checks: Vec<(PathBuf, Check)>,
     pub reviews: Vec<(PathBuf, Review)>,
     pub rule_sets: Vec<(PathBuf, RuleSet)>,
@@ -36,7 +37,9 @@ pub(crate) fn load(root: &Path) -> Result<Loaded> {
             directories.push((kind.to_owned(), dir));
         }
     }
-    load_rules(root, config, sets, directories)
+    let mut loaded = load_rules(root, config, sets, directories)?;
+    loaded.providers = providers(root, &directory.join("providers"))?;
+    Ok(loaded)
 }
 pub(crate) fn load_external(root: &Path, selected: &Path, consumer: Config) -> Result<Loaded> {
     let central = selected.join("config.toml");
@@ -79,9 +82,34 @@ pub(crate) fn load_external(root: &Path, selected: &Path, consumer: Config) -> R
         .map(|(_, rule)| rule.id.clone())
         .chain(loaded.reviews.iter().map(|(_, rule)| rule.id.clone()))
         .collect();
+    loaded.providers = providers(root, &selected.join("providers"))?;
     loaded.rule_sets.push((central, set));
     Ok(loaded)
 }
+fn providers(
+    root: &Path,
+    directory: &Path,
+) -> Result<Vec<(PathBuf, String, config::ProviderConfig)>> {
+    entries(root, directory)?
+        .into_iter()
+        .map(|path| {
+            ensure!(
+                path.extension().is_some_and(|e| e == "toml"),
+                "{}: expected a provider TOML file",
+                path.display()
+            );
+            let id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .context("provider ID must be UTF-8")?
+                .to_owned();
+            let provider =
+                document(root, &path).with_context(|| format!("invalid provider {id:?}"))?;
+            Ok((path, id, provider))
+        })
+        .collect()
+}
+
 pub(crate) fn document<T: serde::de::DeserializeOwned>(root: &Path, path: &Path) -> Result<T> {
     let full =
         source_path(root, path).with_context(|| format!("missing or unsafe {}", path.display()))?;
@@ -165,6 +193,7 @@ fn load_rules(
 ) -> Result<Loaded> {
     let mut loaded = Loaded {
         config,
+        providers: vec![],
         rule_sets,
         checks: vec![],
         reviews: vec![],
@@ -265,6 +294,7 @@ fn load_rules(
                 loaded.reviews.push((
                     path.clone(),
                     Review {
+                        provider: review.provider,
                         id: rule.id.clone(),
                         name,
                         description: rule.description,
@@ -364,6 +394,7 @@ pub(crate) fn init(root: &Path) -> Result<usize> {
         parameters: Default::default(),
         check: None,
         review: Some(crate::config::ReviewDefinition {
+            provider: None,
             prompt: "prompt.md".into(),
             files: vec![],
             context: vec![],

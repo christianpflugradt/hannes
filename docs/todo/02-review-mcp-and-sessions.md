@@ -6,7 +6,7 @@ Status: TODO. Depends on: [TODO 1](../execution-points-and-plans.md).
 
 Expose only the MCP servers needed by a review while sharing context between
 reviews that have identical permissions. Provider configuration remains the
-project-wide maximum; it references server definitions in Codex configuration,
+selected configuration's maximum; it references server definitions in Codex configuration,
 without duplicating credentials or rewriting the user's settings.
 
 Proposed review metadata:
@@ -19,7 +19,7 @@ mcp_servers = ["project-memory", "browser"]
   provider-allowed servers; `*` cannot be combined with names. It never selects
   every server from the user's personal configuration.
 - Named permissions must be a subset of the provider allow list. Reject unknown
-  names, duplicates and disallowed names; never expand the project allow list.
+  names, duplicates and disallowed names; never expand the selected provider allow list.
 - Group scheduled reviews by identical effective MCP set, provider/model/effort
   settings and input identity. Reviews with different permissions never share a
   session. Each group starts a fresh session; no resumed cross-group history.

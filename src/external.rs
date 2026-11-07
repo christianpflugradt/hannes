@@ -161,7 +161,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
         imports.len() <= MAX_RULES,
         "at most {MAX_RULES} external rule sets"
     );
-    // Local semantic errors fail before retrieval; local references cannot reach imports.
+    // Validate scope-local semantics first; provider references resolve after merging imports.
     let mut project = config::validate(root.clone(), loaded)?;
     for import in &imports {
         for (source, target) in &import.execution_points {
@@ -186,6 +186,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
         }
     }
     if imports.is_empty() && !refresh {
+        project.resolve_providers()?;
         return Ok(project);
     }
     let state_directory = PathBuf::from(cache::git(
@@ -197,6 +198,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
     .join("hannes");
     let state_path = state_directory.join("external-rule-sets.json");
     if imports.is_empty() {
+        project.resolve_providers()?;
         if state_path.try_exists()? {
             let _lock = cache::Lock::acquire(&state_directory.join("resolution.lock"))?;
             fs::remove_file(&state_path)?;
@@ -250,6 +252,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
     let mut resolved: BTreeMap<(String, String), String> = BTreeMap::new();
     let mut checkouts: BTreeMap<(String, String), PathBuf> = BTreeMap::new();
     let mut bindings: BTreeMap<String, usize> = BTreeMap::new();
+    let mut provider_sources = BTreeMap::new();
     for import in imports {
         let repository = import.repository();
         let key = import.key();
@@ -352,8 +355,36 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
             .filter(|point| !crate::rules::BUILTIN_POINTS.contains(&point.as_str()))
             .cloned()
             .collect();
+        let sources: Vec<_> = definitions
+            .providers
+            .iter()
+            .map(|(path, id, _)| {
+                (
+                    id.clone(),
+                    (repository.clone(), origin.commit.clone(), path.clone()),
+                )
+            })
+            .collect();
         let mut external = config::validate(root.clone(), definitions)
             .with_context(|| format!("invalid external rule set {:?}", import.path))?;
+        for (id, source) in sources {
+            if provider_sources.get(&id) == Some(&source) {
+                continue;
+            }
+            ensure!(
+                !project.providers.contains_key(&id),
+                "duplicate provider identifier {id:?} in import {:?}; provider overrides are unsupported",
+                import.path
+            );
+            ensure!(
+                project.providers.len() < MAX_RULES,
+                "at most {MAX_RULES} named providers including imports"
+            );
+            project
+                .providers
+                .insert(id.clone(), external.providers.remove(&id).unwrap());
+            provider_sources.insert(id, source);
+        }
         ensure!(
             project.checks.len()
                 + project.reviews.len()
@@ -461,6 +492,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
         project.rule_sets.extend(external.rule_sets);
         next.resolutions.insert(key, origin);
     }
+    project.resolve_providers()?;
     crate::review_context::collect(&root, &project.reviews.iter().collect::<Vec<_>>())?;
     project.checks.sort_by(|a, b| a.id.cmp(&b.id));
     project.reviews.sort_by(|a, b| a.id.cmp(&b.id));

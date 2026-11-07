@@ -106,7 +106,7 @@ echo Git stderr or secret repository selectors.
 ## CFG-001: Configuration and initialization
 
 One unversioned configuration model uses lowercase .hannes/config.toml, optional
-provider.toml, checks/*/rule.toml, reviews/*/rule.toml and rule-sets/*.toml.
+provider.toml, providers/*.toml, checks/*/rule.toml, reviews/*/rule.toml and rule-sets/*.toml.
 There is no configuration version field. Unknown fields, duplicate keys/IDs,
 invalid references and unsafe rule resources fail, including disabled Rules.
 Missing check entrypoints or review prompts are execution errors only when
@@ -127,6 +127,32 @@ It scaffolds a passing enabled Check, a disabled failing Check and disabled
 product-consistency Review in self-contained directories. Reports remain local.
 Provider omission uses scaffold defaults: codex-cli, 180 seconds, gpt-6.1-sol,
 medium effort, empty MCP allow list and 2000 retained tool-output tokens.
+
+## PROV-001: Named provider configurations
+
+Local `.hannes/providers/<id>.toml` files define complete provider configurations
+using the same fields, defaults and limits as `provider.toml`. IDs use the Rule ID
+syntax and are global across local definitions and explicitly imported sets.
+Each external selected directory may contain `providers/<id>.toml`; these files
+are loaded through the existing immutable cache and source-boundary checks.
+Repeated imports of the same immutable provider file share one definition;
+distinct definitions with the same ID fail, even if their settings match. Local
+overrides, per-review model overrides and credentials are unsupported.
+
+`review.provider` optionally references one named configuration. Resolve references
+only after all explicit imports are loaded, independently of import order, before
+publishing resolution state. Unknown references fail even for disabled reviews.
+Unreferenced reviews continue using the consumer's `provider.toml`, or its scaffold
+defaults when omitted. Named configurations never become an implicit default.
+Only `codex-cli` is supported. Batches require the same provider reference and
+resolved parameter environment; each invocation uses its resolved model, timeout,
+review profile and MCP allow list. Plans and saved reports retain the reference
+and effective named configuration per review; existing schema 3/4 documents
+without these optional fields remain readable. Provider settings contain no
+credential fields; authentication remains in the existing Codex login.
+
+Acceptance: `tests/named_providers.rs` covers local/imported resolution, conflicts,
+legacy defaults, batching, invocation settings and saved plan/report metadata.
 
 ## SEL-001: Selection and offline plans
 
@@ -251,7 +277,8 @@ variables are removed; no credentials or raw provider traces are persisted or
 copied into CI. Missing/incompatible CLI, login, timeout or exhausted allowance
 produces ERROR, never PASS or a fabricated policy violation.
 
-Selected reviews with identical resolved parameter environments share one new,
+Selected reviews with the same provider reference and identical resolved parameter
+environments share one new,
 noninteractive, ephemeral Codex invocation with structured output, read-only sandbox and no approvals. A bounded, token-free
 `codex mcp list --json` precedes it. Every discovered server is explicitly disabled
 unless in the provider allow list; unknown allowed names, unsafe names, oversized
@@ -588,6 +615,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
+| PROV-001 | `tests/named_providers.rs::named_references_load_without_changing_legacy_defaults` |
 | EXT-001 | `tests/external_rule_sets.rs::shared_rules_are_reused_across_sets_and_points_offline` |
 | RULE-001 | `tests/execution_points.rs::resolution_obeys_membership_override_union_and_disabled_rules` |
 | REC-001 | `tests/reconciliation.rs::approval_updates_removals_and_idempotency` |

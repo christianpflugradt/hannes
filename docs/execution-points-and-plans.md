@@ -23,6 +23,10 @@ required. Checks-only execution rejects required reviews before any command star
 
 Plans include the selected point, rule sources, effective points, contributing
 sets, required IDs, input identity, bounded context and declared provider settings.
+Each review with an explicit provider reference also records `provider` (the named
+ID) and `provider_config` (its complete effective settings). Absent fields select
+the plan's legacy project provider. Model calls count distinct provider references
+and resolved parameter environments.
 No check, Codex request, network access or reconciliation occurs during preview.
 Incomplete snapshots or context preparation block execution. Preview does not
 certify a later source state. Reports use schema 4 and plans use schema 3. Blocking metadata distinguishes

@@ -295,7 +295,7 @@ spaces, executable/argument positions, literals, missing paths, symlinks and
 cached shared scripts. Invalid syntax and legacy behavior retain the tests below.
 
 String commands require Hannes v0.13.0 or later; path references require v0.14.0.
-All 16 local and four imported repository Checks use string commands with the
+All 15 local and four imported repository Checks use string commands with the
 published v0.14.1 governor. Imported shell scripts use @rule/index.sh; the shared
 license script uses @source/scripts/file-reference.py. Older consumers retain
 compatible legacy revisions until they upgrade. Legacy support remains unchanged.
@@ -595,15 +595,20 @@ directly, without local Rule Sets. Pre-commit runs formatting and documentation
 validation; pre-push runs the complete local suite, keeping all Rust tests in
 one Rule. Python helper tests use one unittest discovery Rule and JavaScript
 release tests use one npm Rule. All three test suites, workflow validation and
-minimum-Rust checks run at pre-push and again in CI. The repository has 16 local
+minimum-Rust checks run at pre-push and again in CI. The repository has 15 local
 Checks and one conditional document Review; dependency audits remain at check with advisory access. Agents use Git
 commit/push feedback instead of manually running checks,
 tests, linters or builds. They may read saved reports without rerunning Rules.
 The manual mise check task delegates to published Hannes at pre-push.
 All three external Rule Set imports pin the same migrated full Git commit.
 Their parameters and execution-point assignments remain unchanged.
-The custom release-build point selects the five native
-checks on each release host; release-artifacts checks the collected archives.
+The custom release point selects format, clippy, rust-tests, native-build and
+native-smoke on each release host after version stamping and before packaging.
+It uses the published governor's existing custom-point support. Artifact verification
+is release orchestration: the workflow directly invokes
+scripts/check-release-artifacts.py after download and checksum generation, before
+publication. A failed verification blocks publication. No Hannes artifact point
+is configured.
 The self-governance fixture records local rule definitions and selections.
 The commit-msg point additionally imports the conventional-commits set at a full
 Git commit pin. Its scopes_file parameter uses .hannes/commit-scopes.txt, which
@@ -638,8 +643,9 @@ offline mode and disables Rustup auto-install for Git-backed invocations.
 CI invokes pass auf --auto-approve once before execution. Execution never repairs
 hooks noninteractively. Publish installs no governor or managed hooks and runs no
 Hannes checks. It requires successful CI and native build jobs, then verifies the
-complete artifact set, checksums, planned version and tested source SHA before
-tagging. Native builds stamp Cargo.toml/Cargo.lock only in their disposable
+complete artifact set and checksums through the direct workflow step. The
+publication guard additionally checks the planned version and tested source SHA
+before tagging. Native builds stamp Cargo.toml/Cargo.lock only in their disposable
 checkouts before testing and packaging; committed versions remain unchanged.
 Semantic Release creates tags, Git notes, GitHub Releases and release notes,
 without generating a changelog or release commit. Release tags target the tested

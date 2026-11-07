@@ -456,7 +456,11 @@ and never triggered automatically. It needs no declaration or CI workflow.
 Consumers decide where to invoke it, including multiple workflows; Hannes does
 not generate workflows, discover them or validate CI integration. Declare custom
 points in the consumer, including unmapped custom points used by imports.
-`release` is an ordinary custom point. The default execution point is `pre-push`.
+`release` is an ordinary custom point. In this repository it runs formatting,
+Clippy, Rust tests, a native build and an executable smoke test after version
+stamping and before packaging. GitHub Actions handles packaging, collected
+artifact verification and publication; see the [release sequence](docs/releasing.md#release-sequence).
+The default execution point is `pre-push`.
 
 ### Fields shared by checks and reviews
 
@@ -695,7 +699,7 @@ context, timeout, output capture and exit codes are shared with file entrypoints
 `interpreter` is only available with `entrypoint`.
 
 String commands require Hannes v0.13.0 or later; explicit path references require
-v0.14.0. This repository uses string commands for all 16 local and four imported
+v0.14.0. This repository uses string commands for all 15 local and four imported
 Checks, with published v0.14.1 for Git hooks and CI. Older consumers must retain
 compatible external revisions until their governors are upgraded.
 

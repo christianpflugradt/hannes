@@ -60,12 +60,12 @@ jobs:
           rustup target add --toolchain stable ${{ matrix.target }}
           cargo +stable fetch --locked
       - name: Run native quality gate
-        run: python3 scripts/run-execution-point.py release-build
+        run: python3 scripts/run-execution-point.py release
       - name: Upload Hannes evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: quality-release-build-${{ matrix.target }}
+          name: quality-release-${{ matrix.target }}
           path: .hannes/reports/*.json
           include-hidden-files: true
           if-no-files-found: ignore

@@ -2,7 +2,7 @@ project = "hannes"
 max_display_files = 5
 
 [execution_points]
-custom = ["release-build", "release-artifacts"]
+custom = ["release"]
 
 [[imports]]
 git = "https://github.com/christianpflugradt/christianpflugradt-rulesets.git"

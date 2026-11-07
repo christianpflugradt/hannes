@@ -12,7 +12,4 @@ export function verifyRelease(_config, context) {
   if (head !== env.GITHUB_SHA || remote !== head) {
     throw new Error("main changed during the release; rerun from its latest commit.");
   }
-  execFileSync("python3", ["scripts/verify-release.py", context.nextRelease.version], {
-    ...execution, stdio: "inherit",
-  });
 }

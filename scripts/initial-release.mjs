@@ -1,5 +1,6 @@
 // semantic-release starts at 1.0.0. Bootstrap the initial 0.1.0 through the same
-// artifact guard, then let semantic-release calculate every subsequent version.
+// publication guard, after workflow artifact verification. Subsequent versions
+// are calculated by semantic-release.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

@@ -73,10 +73,9 @@ security and license Rules.
 | commit-msg | commit-message plus imported commit-message |
 | pre-push (default) | format, docs, python-tests, agents-size, release-rules, clippy, rust-tests, native-build, native-smoke, workflows, msrv plus imported license, secret-scan and sensitive-files |
 | check | All pre-push checks plus commit-range, rust-audit and npm-audit: 17 checks total; conditional agents-quality Review |
-| release-build | format, clippy, rust-tests, native-build, native-smoke |
-| release-artifacts | release-artifacts |
+| release | format, clippy, rust-tests, native-build, native-smoke |
 
-The 16 local [checks](../.hannes/checks) use string commands. Python scripts run
+The 15 local [checks](../.hannes/checks) use string commands. Python scripts run
 as `python3 scripts/<name>.py`, relative to the consuming repository root.
 The published v0.14.1 governor supports these commands and explicit path
 references for the four imported Checks. There are no local index.sh launchers.
@@ -106,9 +105,10 @@ same binary for smoke testing and packaging. Neither needs an extra launcher.
 
 Formatting, documentation, Clippy, Rust acceptance tests, deployment
 and release regression tests, Conventional Commits, actionlint, minimum Rust 1.85,
-Rust/npm dependency audits and release artifact verification remain required at
-the points shown above. Audits need advisory feeds; release artifact verification
-requires EXPECTED_RELEASE_VERSION, GITHUB_SHA and a complete dist/ artifact set.
+Rust/npm dependency audits remain required at the points shown above. Audits
+need advisory feeds. Release artifact verification runs directly in the publish
+job after download and checksum generation; it requires EXPECTED_RELEASE_VERSION,
+GITHUB_SHA and a complete dist/ artifact set.
 These checks cannot all be meaningfully executed in an unprepared local checkout.
 
 For manual developer use:
@@ -207,8 +207,12 @@ Ubuntu x64 and ARM64 using a disposable consumer. It verifies PATH, install-only
 mode, custom selection and failure propagation. These runner-specific tests remain
 separate from repository checks.
 
-The [release-build workflow](../.github/workflows/quality.yml) runs only for
-releases, with four native runners and the `release-build` execution point.
+The [release build workflow](../.github/workflows/quality.yml) runs only for
+releases, with four native runners and the `release` execution point.
+The point runs after release version stamping and before packaging, selecting
+the same five reusable native checks with unchanged commands, timeouts and
+blocking behavior. It is an ordinary custom point supported by the pinned
+published governor; it performs no packaging or publication.
 The release workflow also reuses CI before publication. macOS release runners use the
 [native installer](../scripts/install-governor.py). The execution wrapper rejects
 candidate governors inside the checkout and checks CI's version against the pin.
@@ -240,11 +244,14 @@ Push/PR checks retain native Linux x64, tooling, MSRV and audit coverage. Releas
 reuse that CI workflow and run native validation on all four supported hosts. Tool
 installation, dependency preparation, release stamping, packaging and publication
 remain separate operations. Publish installs no governor, managed hooks or check
-prerequisites. It calculates checksums and uses the publication plugin to verify
-the complete artifact set and source/version binding before tagging. The existing
-`release-artifacts` execution point remains available for explicit use; Publish
-does not invoke it. Release lifecycle tests exercise tag and Git note pushes in a
-disposable repository and verify that publication creates no source commit.
+prerequisites. It calculates checksums and directly runs
+`python3 scripts/check-release-artifacts.py` before publication. This mandatory
+step verifies the complete four-platform archive set, metadata, archive/binary
+hashes, executable permissions, packaged README/LICENSE, planned version, tested
+source SHA and SHA256SUMS. Failures stop the job. The publication plugin retains
+the planned-version and local/remote source guards before tagging, without
+repeating artifact verification. Release lifecycle tests exercise tag and Git
+note pushes in a disposable repository and verify that publication creates no source commit.
 
 CI and native build jobs retain their failure-report uploads.
 Schema-4 last.json records execution

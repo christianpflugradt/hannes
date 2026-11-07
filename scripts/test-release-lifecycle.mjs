@@ -38,7 +38,7 @@ async function testLifecycle() {
     git("remote", "add", "origin", remote);
     for (const file of ["README.md", "LICENSE", "Cargo.toml", "Cargo.lock"]) copyFileSync(join(source, file), join(cwd, file));
     mkdirSync(join(cwd, "scripts"));
-    for (const file of ["verify-release.py", "set-release-version.py"]) copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
+    for (const file of ["verify-release.py", "check-release-artifacts.py", "set-release-version.py"]) copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
     execFileSync("python3", ["scripts/set-release-version.py", "0.1.0"], { cwd, env });
     writeFileSync(join(cwd, ".gitignore"), "dist/\n");
     git("add", "."); git("commit", "-m", "feat: initialize fixture"); git("push", "--set-upstream", "origin", "main");
@@ -64,6 +64,8 @@ for target in targets:
 `], { cwd, env });
     }
     archives("0.1.0");
+    const verifyArtifacts = () => execFileSync("python3", ["scripts/check-release-artifacts.py"], { cwd, env });
+    verifyArtifacts();
     const initialContext = { cwd, env, options: { repositoryUrl: "https://github.com/fixture/hannes.git" } };
     assert.equal(isInitialRelease(initialContext), true);
     verifyInitialSource(initialContext);
@@ -110,12 +112,13 @@ for target in targets:
     assert.equal(git("tag"), "v0.1.0"); assert.equal(git("rev-parse", "HEAD"), env.GITHUB_SHA);
     const checksums = readFileSync(join(cwd, "dist", "SHA256SUMS"), "utf8");
     writeFileSync(join(cwd, "dist", "SHA256SUMS"), "corrupt checksums\n");
-    await assert.rejects(semanticRelease(options, context));
+    assert.throws(verifyArtifacts);
     assert.equal(git("tag"), "v0.1.0");
     assert.equal(git("rev-parse", "HEAD"), env.GITHUB_SHA);
     writeFileSync(join(cwd, "dist", "SHA256SUMS"), checksums);
     await assert.rejects(semanticRelease(options, { ...context, env: { ...env, GITHUB_SHA: "0".repeat(40) } }));
     assert.equal(git("tag"), "v0.1.0");
+    verifyArtifacts();
     const result = await semanticRelease(options, context);
     assert.equal(result.nextRelease.version, "0.1.1");
     assert.equal(readFileSync(join(cwd, "Cargo.toml"), "utf8"), original);

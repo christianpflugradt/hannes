@@ -17,7 +17,7 @@
         "pre-commit",
         "pre-push",
         "check",
-        "release-build"
+        "release"
       ]
     },
     "docs": {
@@ -106,7 +106,7 @@
       "run_at": [
         "pre-push",
         "check",
-        "release-build"
+        "release"
       ]
     },
     "rust-tests": {
@@ -124,7 +124,7 @@
       "run_at": [
         "pre-push",
         "check",
-        "release-build"
+        "release"
       ]
     },
     "native-build": {
@@ -143,7 +143,7 @@
       "run_at": [
         "pre-push",
         "check",
-        "release-build"
+        "release"
       ]
     },
     "native-smoke": {
@@ -158,7 +158,7 @@
       "run_at": [
         "pre-push",
         "check",
-        "release-build"
+        "release"
       ]
     },
     "commit-message": {
@@ -247,19 +247,6 @@
       "run_at": [
         "check"
       ]
-    },
-    "release-artifacts": {
-      "id": "release-artifacts",
-      "description": "Verify the complete tested release artifact set",
-      "enabled": true,
-      "command": [
-        "python3",
-        "scripts/check-release-artifacts.py"
-      ],
-      "timeout_seconds": 180,
-      "run_at": [
-        "release-artifacts"
-      ]
     }
   },
   "execution_points": {
@@ -284,9 +271,6 @@
       "workflows",
       "msrv"
     ],
-    "release-artifacts": [
-      "release-artifacts"
-    ],
     "check": [
       "format",
       "docs",
@@ -303,7 +287,7 @@
       "rust-audit",
       "npm-audit"
     ],
-    "release-build": [
+    "release": [
       "format",
       "clippy",
       "rust-tests",

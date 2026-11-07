@@ -77,6 +77,11 @@ jobs:
           merge-multiple: true
       - name: Checksum all native archives
         run: python3 scripts/checksums.py
+      - name: Verify collected release artifacts
+        timeout-minutes: 3
+        env:
+          EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+        run: python3 scripts/check-release-artifacts.py
       - name: Publish versioned CLI archives and release notes
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -1,7 +1,7 @@
 id = "native-smoke"
 description = "Smoke-test the candidate executable"
 enabled = true
-run_at = ["pre-push", "check", "release-build"]
+run_at = ["pre-push", "check", "release"]
 
 [check]
 command = "python3 scripts/smoke.py"

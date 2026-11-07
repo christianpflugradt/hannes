@@ -161,24 +161,16 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("BUILD_TARGET: x86_64-unknown-linux-gnu", ci)
 
     def test_artifact_gate_blocks_missing_corrupt_version_and_source(self):
-        governor = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
-        self.assertTrue(governor, "Install published Hannes with mise deploy")
-        for failure in ("missing", "corrupt", "version", "source"):
+        for failure in (None, "missing", "corrupt", "version", "source", "missing-version", "missing-source"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                subprocess.run(["git", "init", "--quiet", str(root)], check=True)
-                shutil.copytree(SCRIPTS.parent / ".hannes", root / ".hannes", ignore=shutil.ignore_patterns("reports"))
-                shutil.copy2(SCRIPTS.parent / ".hannes-version", root / ".hannes-version")
                 (root / "scripts").mkdir()
-                for name in ("verify-release.py", "check-release-artifacts.py", "run-execution-point.py"):
+                for name in ("verify-release.py", "check-release-artifacts.py"):
                     shutil.copy2(SCRIPTS / name, root / "scripts" / name)
-                (root / ".gitignore").write_text("dist/\n.hannes/reports/\n")
                 dist = root / "dist"
                 (dist / "metadata").mkdir(parents=True)
-                for file in ("README.md", "LICENSE", "AGENTS.md"):
+                for file in ("README.md", "LICENSE"):
                     shutil.copy2(SCRIPTS.parent / file, root / file)
-                (root / "docs").mkdir()
-                shutil.copy2(SCRIPTS.parent / "docs/agents-review-rubric.md", root / "docs/agents-review-rubric.md")
                 for target in verification.TARGETS:
                     name = f"hannes-v1.2.3-{target}"
                     data = b"fixture binary already verified on its native runner"
@@ -198,17 +190,19 @@ class ReleaseTests(unittest.TestCase):
                     archive.unlink()
                 elif failure == "corrupt":
                     archive.write_bytes(b"corrupted archive")
-                env = dict(os.environ, HANNES_EXECUTABLE=governor,
-                           EXPECTED_RELEASE_VERSION="9.9.9" if failure == "version" else "1.2.3",
+                env = dict(os.environ, EXPECTED_RELEASE_VERSION="9.9.9" if failure == "version" else "1.2.3",
                            GITHUB_SHA=("b" if failure == "source" else "a") * 40)
-                setup = subprocess.run([governor, "pass", "auf", "--auto-approve"], cwd=root, env=env, capture_output=True, text=True)
-                self.assertEqual(setup.returncode, 0, setup.stderr)
-                result = subprocess.run([sys.executable, "scripts/run-execution-point.py", "release-artifacts"], cwd=root,
+                if failure == "missing-version":
+                    env.pop("EXPECTED_RELEASE_VERSION")
+                elif failure == "missing-source":
+                    env.pop("GITHUB_SHA")
+                result = subprocess.run([sys.executable, "scripts/check-release-artifacts.py"], cwd=root,
                                         env=env, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 1, result.stderr or result.stdout)
-                report = json.loads((root / ".hannes/reports/last.json").read_text())
-                self.assertEqual(report["overall"], "FAIL")
-                self.assertEqual(report["results"][0]["id"], "release-artifacts")
+                if failure is None:
+                    self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+                    self.assertIn("Verified 4 archives", result.stdout)
+                else:
+                    self.assertNotEqual(result.returncode, 0, result.stderr or result.stdout)
 
     def test_missing_or_extra_archives_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

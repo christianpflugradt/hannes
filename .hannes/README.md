@@ -1,13 +1,13 @@
 # Hannes repository rules
 
 This repository uses unversioned, self-contained deterministic rules and pinned
-external commit-message and Security Rule Sets at six execution points, plus
+external commit-message and Security Rule Sets at five execution points, plus
 the pinned repository-conventions Rule Set at check and pre-push. Its only
 Rule compares LICENSE against the bundled license references byte-for-byte.
 A conditional AGENTS.md quality Review runs only at check through a named Gemini
-REST adapter through the CLI transport. Git hooks and release-build points select checks only.
+REST adapter through the CLI transport. Git hooks and the release point select checks only.
 
-`checks/*/rule.toml` defines 16 local Rules using string commands for installed
+`checks/*/rule.toml` defines 15 local Rules using string commands for installed
 tools and Python scripts relative to the consuming repository root. Cargo, Python
 helper and JavaScript tests each have one Rule and run at pre-push and again in CI. Cargo build, test,
 Clippy and MSRV commands and npm tests explicitly select offline mode.

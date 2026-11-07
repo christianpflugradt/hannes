@@ -91,17 +91,20 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
    Semantic Release dry run calculates the proposed version. Prepare/publish plugins do
    not run; no tag, commit or release is created at this stage.
 2. The quality workflow installs the published governor pinned in `.hannes-version`.
-   Each native runner stamps Cargo.toml/Cargo.lock before its `release-build` Hannes
+   Each native runner stamps Cargo.toml/Cargo.lock before its `release` Hannes
    gate runs formatting, Clippy, tests, candidate build and executable smoke test.
-   The CI workflow runs all 19 checks once on Linux through `check`, including
+   The CI workflow runs all 17 checks once on Linux through `check`, including
    tooling, minimum Rust, dependency audits and security.
 3. Packaging verifies `hannes --version` matches the proposed version. It archives
    the tested executable, README and Unlicense, and records hashes, target and
    source commit as internal artifact metadata.
 4. Only after CI and all native quality jobs pass, publish downloads the four
-   archives and calculates `SHA256SUMS`. The publication guard verifies completeness,
-   hashes, executable permissions, packaged documentation, source commit and planned
-   version before any release tag is created. Publish installs no Hannes, managed
+   archives and calculates `SHA256SUMS`. A mandatory direct call to
+   `python3 scripts/check-release-artifacts.py` verifies completeness, archive/binary
+   hashes, executable permissions, packaged documentation, metadata, source commit,
+   planned version and checksums. The publication guard then checks the planned
+   version and that local/remote main still match the tested source before any
+   release tag is created. Publish installs no Hannes, managed
    Git hooks, Rust, Go, actionlint or Gitleaks and runs no governance checks.
 5. For the initial release, GitHub CLI publishes v0.1.0 at the tested source SHA.
    For subsequent releases, Semantic Release calculates the version again, checks
@@ -114,8 +117,8 @@ Cargo.toml and Cargo.lock retain their committed development version. Version
 stamping happens only in the native build checkouts, before compilation and tests;
 Cargo embeds that version in the binaries. Packaging checks the executable version
 against the stamped manifest and planned tag, and records the source SHA and
-binary/archive hashes. The publisher verifies those records against the planned
-version and dispatched source revision. Rebuilding a release version from its tag
+binary/archive hashes. The direct artifact verification step checks those records
+against the planned version and dispatched source revision. Rebuilding a release version from its tag
 requires the same `scripts/set-release-version.py VERSION` build-time stamping.
 Semantic Release has no version preparation step and never commits generated files.
 

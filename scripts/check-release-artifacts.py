@@ -1,4 +1,4 @@
-"""Check the collected release using the same guard as publication."""
+"""Verify collected artifacts before the release workflow invokes publication."""
 import os
 from pathlib import Path
 import subprocess

@@ -309,7 +309,7 @@ context, timeout, output capture and exit codes are shared with file entrypoints
 `interpreter` is only available with `entrypoint`.
 
 String commands require Hannes v0.13.0 or later; explicit path references require
-v0.14.0. This repository uses string commands for all 16 local and four imported
+v0.14.0. This repository uses string commands for all 15 local and four imported
 Checks, with published v0.14.1 for Git hooks and CI. Older consumers must retain
 compatible external revisions until their governors are upgraded.
 

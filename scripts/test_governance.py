@@ -169,7 +169,7 @@ class GovernanceTests(unittest.TestCase):
         self.assertEqual(checks.count("include-hidden-files: true"), 1)
         self.assertIn("name: GitHub Action compatibility /", ci)
         self.assertIn("os: [ubuntu-24.04, ubuntu-24.04-arm]", ci)
-        self.assertIn("run: python3 scripts/run-execution-point.py release-build", builds)
+        self.assertIn("run: python3 scripts/run-execution-point.py release", builds)
         self.assertIn("if: runner.os == 'macOS'", builds)
         self.assertIn("uses: ./.github/workflows/ci.yml", release)
         self.assertIn("needs: [plan, checks, quality]", release)
@@ -195,7 +195,7 @@ class GovernanceTests(unittest.TestCase):
         self.assertIn("contents: write", publisher)
         self.assertIn("persist-credentials: false", publisher)
         for required in ("actions/download-artifact@", "pattern: hannes-*",
-                         "python3 scripts/checksums.py", "npm run release",
+                         "python3 scripts/checksums.py", "python3 scripts/check-release-artifacts.py", "npm run release",
                          "EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}"):
             self.assertIn(required, publisher)
         for obsolete in ("hannes pass auf", "steps.governor", "uses: christianpflugradt/hannes@",
@@ -203,7 +203,13 @@ class GovernanceTests(unittest.TestCase):
                          "gitleaks", "actionlint", ".hannes/reports", "--no-verify",
                          "core.hooksPath"):
             self.assertNotIn(obsolete, publisher)
-        self.assertLess(publisher.index("scripts/checksums.py"), publisher.index("npm run release"))
+        self.assertLess(publisher.index("actions/download-artifact@"), publisher.index("scripts/checksums.py"))
+        self.assertLess(publisher.index("scripts/checksums.py"), publisher.index("scripts/check-release-artifacts.py"))
+        self.assertLess(publisher.index("scripts/check-release-artifacts.py"), publisher.index("npm run release"))
+        verification = publisher.split("      - name: Verify collected release artifacts\n", 1)[1].split("      - name:", 1)[0]
+        self.assertIn("EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}", verification)
+        for bypass in ("continue-on-error", "if:", "||"):
+            self.assertNotIn(bypass, verification)
 
     def test_native_checks_remain_offline_without_a_launcher(self):
         checks = definitions()

@@ -1,7 +1,7 @@
 id = "clippy"
 description = "Lint Rust with warnings denied"
 enabled = true
-run_at = ["pre-push", "check", "release-build"]
+run_at = ["pre-push", "check", "release"]
 
 [check]
 command = "cargo +stable --offline clippy --all-targets --locked -- -D warnings"

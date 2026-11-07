@@ -1,0 +1,4 @@
+id = "dependency-audits"
+description = "Audit Rust and npm dependencies"
+rules = ["24-rust-audit", "25-npm-audit"]
+run_at = ["ci-audit"]

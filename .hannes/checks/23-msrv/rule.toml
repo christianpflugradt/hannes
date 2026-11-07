@@ -1,0 +1,9 @@
+id = "23-msrv"
+description = "Check minimum supported Rust 1.85"
+enabled = true
+run_at = ["ci-msrv"]
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 600

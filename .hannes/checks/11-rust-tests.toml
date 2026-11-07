@@ -1,6 +1,0 @@
-[[checks]]
-id = "11-rust-tests"
-description = "Run unit acceptance documentation and compatibility tests"
-enabled = true
-command = "python3 scripts/run-check.py cargo +stable test --locked"
-timeout_seconds = 600

@@ -317,7 +317,8 @@ The governor is an installed, previously published binary outside the checkout;
 local candidate builds never govern the source being checked. `.hannes-version`
 is the sole exact release pin, consumed by the shared CI setup action and updated
 by Renovate GitHub-release PRs without automerge. CI never resolves latest.
-The governor is pinned to published v0.5.0, which supports pass auf --auto-approve.
+The governor is pinned to published v0.7.0. Repository rules use the unversioned,
+self-contained Rule model and fixed Git-hook execution points.
 
 The three Git-backed built-in points serve Git hooks. Explicit custom points ci-native,
 ci-tooling, ci-msrv, ci-audit and release-artifacts preserve their former required
@@ -340,7 +341,7 @@ hooks noninteractively. The publish job prepares stable Rust with rustfmt and
 Clippy and fetches locked Cargo dependencies before publication, so its managed
 commit and push hooks can run offline. Report artifacts are uploaded after
 publication with an always condition, including when a release hook fails.
-Reports use schema 3 and a companion execution record
+Reports use schema 4 and a companion execution record
 stores governor version/digest, execution point, checked commit and exit code.
 See [repository self-integration](docs/self-governance.md) for coverage and setup.
 

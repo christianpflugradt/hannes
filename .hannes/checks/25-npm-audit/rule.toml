@@ -1,0 +1,8 @@
+id = "25-npm-audit"
+description = "Audit npm high and critical advisories"
+enabled = true
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 180

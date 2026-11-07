@@ -1,0 +1,8 @@
+id = "07-release-tests"
+description = "Test release integrity and version stamping"
+enabled = true
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 120

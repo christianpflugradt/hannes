@@ -1,0 +1,9 @@
+id = "22-workflows"
+description = "Validate GitHub workflow syntax and expressions"
+enabled = true
+run_at = ["ci-tooling"]
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 120

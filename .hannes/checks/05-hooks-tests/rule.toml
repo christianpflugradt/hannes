@@ -1,0 +1,8 @@
+id = "05-hooks-tests"
+description = "Test message policy and real Git hook failures"
+enabled = true
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 180

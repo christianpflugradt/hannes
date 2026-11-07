@@ -1,0 +1,9 @@
+id = "02-docs"
+description = "Validate documentation links and specification references"
+enabled = true
+run_at = ["ci-tooling", "pre-commit", "pre-push"]
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 60

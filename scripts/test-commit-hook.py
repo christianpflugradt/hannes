@@ -2,7 +2,6 @@
 """Exercise the header allow list and real Git rejection in a disposable repository."""
 from pathlib import Path
 import shutil
-import json
 import os
 import subprocess
 import tempfile
@@ -54,13 +53,16 @@ with tempfile.TemporaryDirectory(prefix="hannes-commit-hook-") as directory:
     (config / "checks").mkdir(parents=True)
     (config / "reviews").mkdir()
     (config / "reports").mkdir()
-    (config / "config.toml").write_text('version = 3\nproject = "Hook fixture"\nmax_display_files = 5\n[hooks.git]\npre-commit="pre-commit"\ncommit-msg="commit-msg"\npre-push="pre-push"\n')
+    (config / "config.toml").write_text('project = "Hook fixture"\nmax_display_files = 5\n')
     shutil.copy2(ROOT / ".hannes/provider.toml", config / "provider.toml")
     (repository / ".gitignore").write_text(".hannes/reports/\n__pycache__/\n")
     (scripts / "fixture-check.py").write_text("from pathlib import Path; import sys; sys.exit(1 if Path(sys.argv[1]).exists() else 0)\n")
     for point in ("pre-commit", "commit-msg", "pre-push"):
         command = "python3 scripts/run-check.py python3 scripts/check-commits.py --message" if point == "commit-msg" else f"python3 scripts/run-check.py python3 scripts/fixture-check.py fail-{point}"
-        (config / f"checks/{point}.toml").write_text(f'[[checks]]\nrun_at = ["{point}"]\nid = "{point}"\ndescription = "Fixture gate"\nenabled = true\ncommand = {json.dumps(command)}\ntimeout_seconds = 30\n')
+        rule = config / "checks" / point
+        rule.mkdir()
+        (rule / "rule.toml").write_text(f'id = "{point}"\ndescription = "Fixture gate"\nrun_at = ["{point}"]\n[check]\nentrypoint = "index.sh"\ninterpreter = "sh"\ntimeout_seconds = 30\n')
+        (rule / "index.sh").write_text(f"#!/bin/sh\nexec {command}\n")
     executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
     assert executable, "Install the compatible published Hannes governor first"
     # Exercise configured paths while retaining the separate versioned message policy.

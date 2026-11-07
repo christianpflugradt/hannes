@@ -1,0 +1,9 @@
+id = "20-commit-message"
+description = "Validate the final Git commit message"
+enabled = true
+run_at = ["commit-msg"]
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 30

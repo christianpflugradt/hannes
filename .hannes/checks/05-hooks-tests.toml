@@ -1,6 +1,0 @@
-[[checks]]
-id = "05-hooks-tests"
-description = "Test message policy and real Git hook failures"
-enabled = true
-command = "python3 scripts/run-check.py python3 scripts/test-commit-hook.py"
-timeout_seconds = 180

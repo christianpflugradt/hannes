@@ -1,0 +1,9 @@
+id = "21-commit-range"
+description = "Validate CI commits and pull request title"
+enabled = true
+run_at = ["ci-tooling"]
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 60

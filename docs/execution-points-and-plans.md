@@ -36,6 +36,6 @@ mappings deduplicate execution. Built-ins cannot be mapped. Plans
 use previously validated cached revisions; pass auf refreshes sources. Origins
 retain the resolved commit. See [external sets](external-rule-sets.md).
 
-The repository's self-integration retains its published governor and existing
-configuration until a separate release and self-migration. Its CI setup calls pass auf --auto-approve before executing the configured
-point. Published v0.5.0 provides that option and is the exact governor pin. See [repository self-integration](self-governance.md).
+The repository's self-integration uses published v0.7.0 with the same unversioned
+Rule model. Its CI setup calls pass auf --auto-approve before executing the
+configured point. See [repository self-integration](self-governance.md).

@@ -1,0 +1,8 @@
+id = "12-native-build"
+description = "Build the candidate native release executable"
+enabled = true
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 600

@@ -1,0 +1,9 @@
+id = "01-format"
+description = "Verify Rust formatting"
+enabled = true
+run_at = ["ci-native", "pre-commit", "pre-push"]
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 120

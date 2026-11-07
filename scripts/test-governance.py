@@ -22,16 +22,15 @@ spec.loader.exec_module(execution)
 BASELINE = json.loads((ROOT / "tests/fixtures/self-governance.json").read_text())
 
 def definitions():
-    checks, sets = {}, []
-    for path in sorted((ROOT / ".hannes").rglob("*.toml")):
-        if "reports" in path.parts or path.name in ("config.toml", "provider.toml"):
-            continue
-        document = tomllib.loads(path.read_text())
-        assert not document.get("reviews"), "Self-integration must not call a provider"
-        for rule in document.get("checks", []):
-            assert rule["id"] not in checks
-            checks[rule["id"]] = rule
-        sets.extend(document.get("rule_sets", []))
+    checks = {}
+    for path in sorted((ROOT / ".hannes/checks").glob("*/rule.toml")):
+        rule = tomllib.loads(path.read_text())
+        assert rule["id"] not in checks
+        checks[rule["id"]] = rule
+    sets = [tomllib.loads(path.read_text()) for path in sorted((ROOT / ".hannes/rule-sets").glob("*.toml"))]
+    assert not list((ROOT / ".hannes/reviews").glob("*/rule.toml")), "Self-integration must not call a provider"
+    assert not list((ROOT / ".hannes/checks").glob("*.toml")), "Obsolete check documents must be removed"
+    assert not (ROOT / ".hannes/rule-sets.toml").exists(), "Obsolete rule-set document must be removed"
     return checks, sets
 
 
@@ -54,18 +53,23 @@ class GovernanceTests(unittest.TestCase):
     def test_self_governance_checks_settings_and_required_coverage(self):
         checks, sets = definitions()
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
-        self.assertEqual(config["hooks"]["git"], {p: p for p in ("pre-commit", "commit-msg", "pre-push")})
-        self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["execution_points"]) - set(config["hooks"]["git"]))
+        self.assertEqual(set(config), {"project", "max_display_files", "execution_points"})
+        self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["execution_points"]) - {"pre-commit", "commit-msg", "pre-push"})
         self.assertEqual(set(checks), set(BASELINE["checks"]))
         for rule, check in checks.items():
-            original = {key: value for key, value in check.items() if key != "run_at"}
-            prefix = "python3 scripts/run-check.py "
-            self.assertTrue(original["command"].startswith(prefix))
-            original["command"] = original["command"].removeprefix(prefix)
-            self.assertEqual(original, BASELINE["checks"][rule])
+            implementation = check["check"]
+            self.assertEqual(implementation["interpreter"], "sh")
+            self.assertEqual(implementation["entrypoint"], "index.sh")
+            original = BASELINE["checks"][rule]
+            self.assertEqual({key: value for key, value in check.items() if key not in ("run_at", "check")},
+                             {key: value for key, value in original.items() if key not in ("command", "timeout_seconds")})
+            self.assertEqual(implementation["timeout_seconds"], original["timeout_seconds"])
+            entrypoint = ROOT / ".hannes/checks" / rule / implementation["entrypoint"]
+            self.assertEqual(entrypoint.read_text(), f"#!/bin/sh\nexec python3 scripts/run-check.py {original['command']}\n")
             self.assertNotRegex(original["command"], r"run-execution-point|\bmise\b|\bhannes mach\b")
         for group in sets:
-            self.assertTrue(group["enabled"])
+            self.assertEqual(set(group), {"id", "description", "rules", "run_at"})
+            self.assertTrue(group["description"])
             self.assertTrue(group["run_at"])
             self.assertEqual(len(group["rules"]), len(set(group["rules"])))
             self.assertTrue(set(group["rules"]) <= set(checks))
@@ -73,7 +77,7 @@ class GovernanceTests(unittest.TestCase):
         for point, expected in BASELINE["execution_points"].items():
             selected = set()
             for rule, check in checks.items():
-                memberships = [group for group in sets if group["enabled"] and rule in group["rules"]]
+                memberships = [group for group in sets if rule in group["rules"]]
                 at = {p for group in memberships for p in group["run_at"]} if memberships else set(check.get("run_at", []))
                 if check["enabled"] and point in at:
                     selected.add(rule)
@@ -236,9 +240,14 @@ class GovernanceTests(unittest.TestCase):
             (config / "reviews").mkdir()
             (root / ".gitignore").write_text(".hannes/reports/\n")
             (root / ".hannes-version").write_text((ROOT / ".hannes-version").read_text())
-            (config / "config.toml").write_text('version = 3\nproject = "Failure fixture"\nmax_display_files = 5\n')
+            (config / "config.toml").write_text('project = "Failure fixture"\nmax_display_files = 5\n')
             shutil.copy2(ROOT / ".hannes/provider.toml", config / "provider.toml")
-            (config / "checks/fail.toml").write_text('[[checks]]\nrun_at=["pre-commit"]\nid = "fail"\ndescription = "Deliberate failure"\nenabled = true\ncommand = "python3 -c \'raise SystemExit(1)\'"\ntimeout_seconds = 10\n')
+            rule = config / "checks/fail"
+            rule.mkdir()
+            (rule / "rule.toml").write_text('id = "fail"\ndescription = "Deliberate failure"\nrun_at = ["pre-commit"]\n[check]\nentrypoint = "index.py"\n' + f'interpreter = {json.dumps(sys.executable)}\ntimeout_seconds = 10\n')
+            (rule / "index.py").write_text("raise SystemExit(1)\n")
+            setup = subprocess.run([executable, "pass", "auf", "--auto-approve"], cwd=root, capture_output=True, text=True)
+            self.assertEqual(setup.returncode, 0, setup.stderr)
             env = dict(os.environ, HANNES_EXECUTABLE=executable)
             result = subprocess.run([sys.executable, str(ROOT / "scripts/run-execution-point.py"), "pre-commit"], cwd=root, env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 1, result.stderr)

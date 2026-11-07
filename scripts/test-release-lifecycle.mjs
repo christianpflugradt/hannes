@@ -52,15 +52,20 @@ async function testLifecycle() {
       copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
     }
     writeFileSync(join(cwd, ".hannes", "config.toml"),
-      'version=3\nproject="Release fixture"\nmax_display_files=5\n[hooks.git]\npre-commit="pre-commit"\ncommit-msg="commit-msg"\npre-push="pre-push"\n');
+      'project="Release fixture"\nmax_display_files=5\n');
     const hookRules = [
       ["format", "pre-commit", "cargo +stable fmt --all -- --check"],
       ["message", "commit-msg", "python3 scripts/check-commits.py --message"],
       ["git", "pre-push", "git --version"],
     ];
-    writeFileSync(join(cwd, ".hannes", "rules.toml"), hookRules.map(([id, point, command]) =>
-      `[[checks]]\nid=${JSON.stringify(id)}\ndescription="Release hook fixture"\nenabled=true\ncommand=${JSON.stringify("python3 scripts/run-check.py " + command)}\ntimeout_seconds=30\nrun_at=[${JSON.stringify(point)}]\n`
-    ).join("\n"));
+    for (const [id, point, command] of hookRules) {
+      const directory = join(cwd, ".hannes", "checks", id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, "rule.toml"),
+        `id=${JSON.stringify(id)}\ndescription="Release hook fixture"\nrun_at=[${JSON.stringify(point)}]\n[check]\nentrypoint="index.sh"\ninterpreter="sh"\ntimeout_seconds=30\n`
+      );
+      writeFileSync(join(directory, "index.sh"), `#!/bin/sh\nexec python3 scripts/run-check.py ${command}\n`);
+    }
     const governor = env.HANNES_EXECUTABLE || "hannes";
     execFileSync(governor, ["pass", "auf", "--auto-approve"], { cwd, env, stdio: "pipe" });
     writeFileSync(join(cwd, ".gitignore"), "dist/\n.hannes/reports/\n");

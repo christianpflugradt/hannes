@@ -1,0 +1,4 @@
+id = "tooling-regressions"
+description = "Validate governance and release tooling"
+rules = ["03-docs-tests", "04-governance-tests", "05-hooks-tests", "06-deploy-tests", "07-release-tests", "08-release-rules"]
+run_at = ["pre-push", "ci-tooling"]

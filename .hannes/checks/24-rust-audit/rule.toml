@@ -1,0 +1,8 @@
+id = "24-rust-audit"
+description = "Audit Rust dependencies"
+enabled = true
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 300

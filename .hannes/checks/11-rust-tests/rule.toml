@@ -1,0 +1,8 @@
+id = "11-rust-tests"
+description = "Run unit acceptance documentation and compatibility tests"
+enabled = true
+
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
+timeout_seconds = 600

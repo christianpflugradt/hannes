@@ -2,10 +2,10 @@
 
 Hannes checks this repository using an installed published Hannes executable.
 Builds under target/ are candidates under test and never become the governor.
-The repository retains its existing governance configuration, with no
+The repository uses unversioned, self-contained Check definitions, with no
 reviews or provider calls.
 
-The exact governor pin in [.hannes-version](../.hannes-version) is v0.5.0. This
+The exact governor pin in [.hannes-version](../.hannes-version) is v0.7.0. This
 published release supports the repository configuration, execution points and
 pass auf --auto-approve for unattended hook reconciliation.
 
@@ -69,9 +69,9 @@ acceptance compares the published governor's actual plans with that evidence.
 | release-artifacts → release-artifacts | 30-release-artifacts | Own run_at |
 
 The [checks](../.hannes/checks) retain their validation commands, timeout settings
-and enabled state. Only the command launcher prefix is added to preserve offline
-hook behavior. The [rule sets](../.hannes/rule-sets.toml) group checks sharing
-execution points; standalone rules reference the same built-in and declared points.
+and enabled state. Each Rule has an index.sh entrypoint that invokes the shared
+command launcher to preserve offline hook behavior. The
+[rule sets](../.hannes/rule-sets) group checks sharing execution points; standalone rules reference the same built-in and declared points.
 
 Formatting, documentation, Clippy, Rust acceptance tests, deployment
 and release regression tests, Conventional Commits, actionlint, minimum Rust 1.85,
@@ -93,11 +93,9 @@ verification only checks formatting.
 
 ## Git hooks
 
-The pinned published governor retains its existing hook declarations until a
-separate release and self-migration. They select pre-commit, commit-msg and
-pre-push at their identically named points. The candidate uses fixed hook semantics
-and rejects those legacy declarations; its fixtures are isolated from repository
-self-integration. The published governor manages this repository's wrappers
+The published governor derives the three required Git hooks from effective Rule
+assignments. Each hook runs its fixed, identically named execution point. The
+repository configuration declares no hook mappings. The governor manages wrappers
 through pass auf, including configured hook paths, compatible unmanaged content,
 ownership checks, argument forwarding and recursion protection. Wrappers inspect
 synchronization read-only; drift tells the developer to rerun pass auf manually.
@@ -137,7 +135,7 @@ its integrity checks. No release process or permissions change is introduced.
 
 Jobs retain their failure-report uploads. The publisher saves artifact-verification
 evidence before publication and uploads hook reports afterward, even on failure,
-as separate artifacts. Schema-3 last.json records execution
+as separate artifacts. Schema-4 last.json records execution
 point, required rules, source state and results. The [execution wrapper](../scripts/run-execution-point.py)
 adds execution.json with governor version/digest, execution point, checked commit
 and exit code. Managed hooks and direct CLI invocations write the ordinary report;

@@ -1,11 +1,5 @@
-version = 3
 project = "hannes"
 max_display_files = 5
 
 [execution_points]
 custom = ["ci-native", "ci-tooling", "ci-msrv", "ci-audit", "release-artifacts"]
-
-[hooks.git]
-pre-commit = "pre-commit"
-commit-msg = "commit-msg"
-pre-push = "pre-push"

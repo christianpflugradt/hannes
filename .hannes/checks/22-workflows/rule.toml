@@ -1,9 +1,8 @@
 id = "22-workflows"
 description = "Validate GitHub workflow syntax and expressions"
 enabled = true
-run_at = ["check"]
+run_at = ["pre-push", "check"]
 
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+command = ["actionlint", "-color"]
 timeout_seconds = 120

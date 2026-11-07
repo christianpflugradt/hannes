@@ -170,7 +170,7 @@ class ReleaseTests(unittest.TestCase):
                 shutil.copytree(SCRIPTS.parent / ".hannes", root / ".hannes", ignore=shutil.ignore_patterns("reports"))
                 shutil.copy2(SCRIPTS.parent / ".hannes-version", root / ".hannes-version")
                 (root / "scripts").mkdir()
-                for name in ("verify-release.py", "check-release-artifacts.py", "run-execution-point.py", "run-check.py"):
+                for name in ("verify-release.py", "check-release-artifacts.py", "run-execution-point.py"):
                     shutil.copy2(SCRIPTS / name, root / "scripts" / name)
                 (root / ".gitignore").write_text("dist/\n.hannes/reports/\n")
                 dist = root / "dist"

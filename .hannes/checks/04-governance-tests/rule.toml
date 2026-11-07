@@ -1,9 +1,0 @@
-id = "04-governance-tests"
-description = "Test repository gates and Renovate declaration"
-enabled = true
-run_at = ["pre-push", "check"]
-
-[check]
-entrypoint = "index.sh"
-interpreter = "sh"
-timeout_seconds = 180

@@ -202,6 +202,6 @@ Checks use the consumer root. Review prompts resolve within their Rule directori
 the loader enforces containment. Checks receive HANNES_RULE_DIRECTORY for resources. No argument rewriting or working-directory
 switch occurs. Providers, snapshots, selection and reports remain shared.
 
-The repository uses the same unversioned Rule model with published v0.9.0 as its
+The repository uses the same unversioned Rule model with published v0.10.0 as its
 governor. Candidate binaries are exercised only in isolated fixture repositories. No hook installation, remote services or releases
 are triggered by loading configuration.

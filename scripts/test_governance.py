@@ -35,9 +35,6 @@ def definitions():
 
 
 class GovernanceTests(unittest.TestCase):
-    def test_public_action_offline(self):
-        subprocess.run([sys.executable, str(ROOT / "scripts/test-action.py")], check=True)
-
     def test_renovate_extracts_one_published_version_without_automerge(self):
         config = json.loads((ROOT / "renovate.json").read_text())
         manager, = config["customManagers"]
@@ -61,15 +58,16 @@ class GovernanceTests(unittest.TestCase):
         self.assertEqual(set(checks), set(BASELINE["checks"]))
         for rule, check in checks.items():
             implementation = check["check"]
-            self.assertEqual(implementation["interpreter"], "sh")
-            self.assertEqual(implementation["entrypoint"], "index.sh")
             original = BASELINE["checks"][rule]
             self.assertEqual({key: value for key, value in check.items() if key != "check"},
                              {key: value for key, value in original.items() if key not in ("command", "timeout_seconds")})
             self.assertEqual(implementation["timeout_seconds"], original["timeout_seconds"])
-            entrypoint = ROOT / ".hannes/checks" / rule / implementation["entrypoint"]
-            self.assertEqual(entrypoint.read_text(), f"#!/bin/sh\nexec python3 scripts/run-check.py {original['command']}\n")
-            self.assertNotRegex(original["command"], r"run-execution-point|\bmise\b|\bhannes mach\b")
+            command = original["command"]
+            if command[0] == "python3" and len(command) == 2:
+                self.assertEqual(implementation, {"entrypoint": command[1], "interpreter": "python3", "timeout_seconds": original["timeout_seconds"]})
+            else:
+                self.assertEqual(implementation, {"command": command, "timeout_seconds": original["timeout_seconds"]})
+            self.assertFalse((ROOT / ".hannes/checks" / rule / "index.sh").exists())
         # The published-governor test below independently checks real resolution.
         for point, expected in BASELINE["execution_points"].items():
             selected = set()
@@ -198,29 +196,14 @@ class GovernanceTests(unittest.TestCase):
         for required in ("if: always()", "uses: actions/upload-artifact@", "name: quality-release-hooks", "path: .hannes/reports/*.json", "include-hidden-files: true"):
             self.assertIn(required, evidence)
 
-    def test_hook_launcher_preserves_arguments_and_offline_environment(self):
-        probe = "import json,os,sys; print(json.dumps([sys.argv[1:], {k:os.environ.get(k) for k in ['CARGO_NET_OFFLINE','npm_config_offline','RUSTUP_AUTO_INSTALL','HANNES_GIT_HOOK_ARG_1']}]))"
-        for point in ("pre-commit", "commit-msg", "pre-push"):
-            result = subprocess.run([sys.executable, str(ROOT / "scripts/run-check.py"), sys.executable, "-c", probe, "two words", "$literal"],
-                env=dict(os.environ, HANNES_GIT_HOOK=point, HANNES_GIT_HOOK_ARG_1="message with spaces"), capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            arguments, environment = json.loads(result.stdout)
-            self.assertEqual(arguments, ["two words", "$literal"])
-            self.assertEqual(environment, dict(CARGO_NET_OFFLINE="true", npm_config_offline="true", RUSTUP_AUTO_INSTALL="0", HANNES_GIT_HOOK_ARG_1="message with spaces"))
-        env = {k:v for k,v in os.environ.items() if k not in ("HANNES_GIT_HOOK", "CARGO_NET_OFFLINE", "npm_config_offline", "RUSTUP_AUTO_INSTALL", "HANNES_GIT_HOOK_ARG_1")}
-        result = subprocess.run([sys.executable, str(ROOT / "scripts/run-check.py"), sys.executable, "-c", probe], env=env, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(all(v is None for v in json.loads(result.stdout)[1].values()))
-
-    def test_check_launcher_reports_startup_errors_and_preserves_tool_exit_codes(self):
-        launcher = [sys.executable, str(ROOT / "scripts/run-check.py")]
-        for arguments in ([], ["hannes-no-such-executable"]):
-            result = subprocess.run(launcher + arguments, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 2)
-            self.assertTrue(result.stderr)
-        for code in (0, 1, 2, 7):
-            result = subprocess.run(launcher + [sys.executable, "-c", f"raise SystemExit({code})"], capture_output=True, text=True)
-            self.assertEqual(result.returncode, code)
+    def test_native_checks_remain_offline_without_a_launcher(self):
+        checks = definitions()
+        for rule in ("10-clippy", "11-rust-tests", "12-native-build", "23-msrv"):
+            self.assertIn("--offline", checks[rule]["check"]["command"])
+        self.assertEqual(checks["08-release-rules"]["check"]["command"], ["npm", "--offline", "test"])
+        self.assertFalse((ROOT / "scripts/run-check.py").exists())
+        for point in ("pre-push", "check"):
+            self.assertTrue({"03-python-tests", "08-release-rules", "11-rust-tests", "22-workflows", "23-msrv"}.issubset(BASELINE["execution_points"][point]))
 
     def test_commit_message_checker_consumes_managed_hook_arguments(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -4,7 +4,14 @@
       "id": "01-format",
       "description": "Verify Rust formatting",
       "enabled": true,
-      "command": "cargo +stable fmt --all -- --check",
+      "command": [
+        "cargo",
+        "+stable",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
       "timeout_seconds": 120,
       "run_at": [
         "pre-commit",
@@ -17,7 +24,10 @@
       "id": "02-docs",
       "description": "Validate documentation links and specification references",
       "enabled": true,
-      "command": "python3 scripts/check-docs.py",
+      "command": [
+        "python3",
+        "scripts/check-docs.py"
+      ],
       "timeout_seconds": 60,
       "run_at": [
         "pre-commit",
@@ -25,56 +35,21 @@
         "check"
       ]
     },
-    "03-docs-tests": {
-      "id": "03-docs-tests",
-      "description": "Test the documentation checker",
+    "03-python-tests": {
+      "id": "03-python-tests",
+      "description": "Test Python helpers and repository integration",
       "enabled": true,
-      "command": "python3 scripts/test-docs.py",
-      "timeout_seconds": 60,
-      "run_at": [
-        "pre-push",
-        "check"
-      ]
-    },
-    "04-governance-tests": {
-      "id": "04-governance-tests",
-      "description": "Test repository gates and Renovate declaration",
-      "enabled": true,
-      "command": "python3 scripts/test-governance.py",
-      "timeout_seconds": 180,
-      "run_at": [
-        "pre-push",
-        "check"
-      ]
-    },
-    "05-hooks-tests": {
-      "id": "05-hooks-tests",
-      "description": "Test message policy and real Git hook failures",
-      "enabled": true,
-      "command": "python3 scripts/test-commit-hook.py",
-      "timeout_seconds": 180,
-      "run_at": [
-        "pre-push",
-        "check"
-      ]
-    },
-    "06-deploy-tests": {
-      "id": "06-deploy-tests",
-      "description": "Test published release installation",
-      "enabled": true,
-      "command": "python3 scripts/test-deploy.py",
-      "timeout_seconds": 60,
-      "run_at": [
-        "pre-push",
-        "check"
-      ]
-    },
-    "07-release-tests": {
-      "id": "07-release-tests",
-      "description": "Test release integrity and version stamping",
-      "enabled": true,
-      "command": "python3 scripts/test-release.py",
-      "timeout_seconds": 120,
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts",
+        "-p",
+        "test_*.py"
+      ],
+      "timeout_seconds": 300,
       "run_at": [
         "pre-push",
         "check"
@@ -84,7 +59,11 @@
       "id": "08-release-rules",
       "description": "Test semantic release rules and lifecycle",
       "enabled": true,
-      "command": "npm test",
+      "command": [
+        "npm",
+        "--offline",
+        "test"
+      ],
       "timeout_seconds": 180,
       "run_at": [
         "pre-push",
@@ -95,7 +74,17 @@
       "id": "10-clippy",
       "description": "Lint Rust with warnings denied",
       "enabled": true,
-      "command": "cargo +stable clippy --all-targets --locked -- -D warnings",
+      "command": [
+        "cargo",
+        "+stable",
+        "--offline",
+        "clippy",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
       "timeout_seconds": 600,
       "run_at": [
         "pre-push",
@@ -107,7 +96,13 @@
       "id": "11-rust-tests",
       "description": "Run unit acceptance documentation and compatibility tests",
       "enabled": true,
-      "command": "cargo +stable test --locked",
+      "command": [
+        "cargo",
+        "+stable",
+        "--offline",
+        "test",
+        "--locked"
+      ],
       "timeout_seconds": 600,
       "run_at": [
         "pre-push",
@@ -119,7 +114,14 @@
       "id": "12-native-build",
       "description": "Build the candidate native release executable",
       "enabled": true,
-      "command": "python3 scripts/native-build.py",
+      "command": [
+        "cargo",
+        "+stable",
+        "build",
+        "--release",
+        "--locked",
+        "--offline"
+      ],
       "timeout_seconds": 600,
       "run_at": [
         "pre-push",
@@ -131,7 +133,10 @@
       "id": "13-native-smoke",
       "description": "Smoke-test the candidate executable",
       "enabled": true,
-      "command": "python3 scripts/native-smoke.py",
+      "command": [
+        "python3",
+        "scripts/smoke.py"
+      ],
       "timeout_seconds": 120,
       "run_at": [
         "pre-push",
@@ -143,7 +148,11 @@
       "id": "20-commit-message",
       "description": "Validate the final Git commit message",
       "enabled": true,
-      "command": "python3 scripts/check-commits.py --message",
+      "command": [
+        "python3",
+        "scripts/check-commits.py",
+        "--message"
+      ],
       "timeout_seconds": 30,
       "run_at": [
         "commit-msg"
@@ -153,7 +162,10 @@
       "id": "21-commit-range",
       "description": "Validate CI commits and pull request title",
       "enabled": true,
-      "command": "python3 scripts/check-commits.py",
+      "command": [
+        "python3",
+        "scripts/check-commits.py"
+      ],
       "timeout_seconds": 60,
       "run_at": [
         "check"
@@ -163,9 +175,13 @@
       "id": "22-workflows",
       "description": "Validate GitHub workflow syntax and expressions",
       "enabled": true,
-      "command": "actionlint -color",
+      "command": [
+        "actionlint",
+        "-color"
+      ],
       "timeout_seconds": 120,
       "run_at": [
+        "pre-push",
         "check"
       ]
     },
@@ -173,9 +189,17 @@
       "id": "23-msrv",
       "description": "Check minimum supported Rust 1.85",
       "enabled": true,
-      "command": "cargo +1.85.0 check --all-targets --locked",
+      "command": [
+        "cargo",
+        "+1.85.0",
+        "--offline",
+        "check",
+        "--all-targets",
+        "--locked"
+      ],
       "timeout_seconds": 600,
       "run_at": [
+        "pre-push",
         "check"
       ]
     },
@@ -183,7 +207,11 @@
       "id": "24-rust-audit",
       "description": "Audit Rust dependencies",
       "enabled": true,
-      "command": "cargo +stable audit",
+      "command": [
+        "cargo",
+        "+stable",
+        "audit"
+      ],
       "timeout_seconds": 300,
       "run_at": [
         "check"
@@ -193,7 +221,11 @@
       "id": "25-npm-audit",
       "description": "Audit npm high and critical advisories",
       "enabled": true,
-      "command": "npm audit --audit-level=high",
+      "command": [
+        "npm",
+        "audit",
+        "--audit-level=high"
+      ],
       "timeout_seconds": 180,
       "run_at": [
         "check"
@@ -203,7 +235,10 @@
       "id": "30-release-artifacts",
       "description": "Verify the complete tested release artifact set",
       "enabled": true,
-      "command": "python3 scripts/check-release-artifacts.py",
+      "command": [
+        "python3",
+        "scripts/check-release-artifacts.py"
+      ],
       "timeout_seconds": 180,
       "run_at": [
         "release-artifacts"
@@ -221,16 +256,14 @@
     "pre-push": [
       "01-format",
       "02-docs",
-      "03-docs-tests",
-      "04-governance-tests",
-      "05-hooks-tests",
-      "06-deploy-tests",
-      "07-release-tests",
+      "03-python-tests",
       "08-release-rules",
       "10-clippy",
       "11-rust-tests",
       "12-native-build",
-      "13-native-smoke"
+      "13-native-smoke",
+      "22-workflows",
+      "23-msrv"
     ],
     "release-artifacts": [
       "30-release-artifacts"
@@ -238,11 +271,7 @@
     "check": [
       "01-format",
       "02-docs",
-      "03-docs-tests",
-      "04-governance-tests",
-      "05-hooks-tests",
-      "06-deploy-tests",
-      "07-release-tests",
+      "03-python-tests",
       "08-release-rules",
       "10-clippy",
       "11-rust-tests",

@@ -37,6 +37,6 @@ mappings deduplicate execution. Built-ins cannot be mapped. Plans
 use previously validated cached revisions; pass auf refreshes sources. Origins
 retain the resolved commit. See [external sets](external-rule-sets.md).
 
-The repository's self-integration uses published v0.9.0 with the same unversioned
+The repository's self-integration uses published v0.10.0 with the same unversioned
 Rule model. Its CI setup calls pass auf --auto-approve before executing the
 configured point. See [repository self-integration](self-governance.md).

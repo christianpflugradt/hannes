@@ -4,6 +4,5 @@ enabled = true
 run_at = ["commit-msg"]
 
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+command = ["python3", "scripts/check-commits.py", "--message"]
 timeout_seconds = 30

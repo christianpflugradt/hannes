@@ -4,6 +4,5 @@ enabled = true
 run_at = ["pre-commit", "pre-push", "check", "release-build"]
 
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+command = ["cargo", "+stable", "fmt", "--all", "--", "--check"]
 timeout_seconds = 120

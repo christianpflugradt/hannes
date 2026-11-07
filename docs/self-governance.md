@@ -5,10 +5,9 @@ Builds under target/ are candidates under test and never become the governor.
 The repository uses local Check definitions and a pinned external commit-message
 Rule Set and Security Rule Set, with no reviews or provider calls.
 
-The exact governor pin in [.hannes-version](../.hannes-version) is v0.9.0. This
-published release supports the repository configuration, execution points and
-shared external Rule references and pass auf --auto-approve for unattended hook
-reconciliation.
+The exact governor pin in [.hannes-version](../.hannes-version) is v0.10.0. This
+published release supports direct command arrays, shared script entrypoints and
+pass auf --auto-approve for unattended hook reconciliation.
 
 ## Local setup
 
@@ -19,6 +18,9 @@ mise trust
 mise install
 npm ci --ignore-scripts
 cargo +stable fetch --locked
+rustup toolchain install 1.85.0 --profile minimal
+cargo +1.85.0 fetch --locked
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 mise deploy
 export PATH="$HOME/.local/bin:$PATH"
 mise hooks:install
@@ -46,11 +48,13 @@ Rust with rustfmt/Clippy and the Node version in mise.toml are required locally.
 Install Gitleaks explicitly and put it on PATH before running the security checks
 or pre-push gate; `gitleaks version` verifies availability. Hooks inherit PATH
 and call the installed hannes binary.
-Prepare dependencies online first. The [check launcher](../scripts/run-check.py)
-sets Cargo/npm offline mode and disables Rustup auto-install for managed Git-hook
-checks, then executes the original command without a shell. It preserves the
-hook context, arguments and recursion guard. Outside hooks it preserves the
-caller's environment. Checks neither install the governor nor repair project files.
+Prepare dependencies online first, including Rust 1.85 for the minimum-version
+check and actionlint for workflow validation. Cargo build, Clippy, test and MSRV
+commands explicitly use --offline; npm tests use --offline too. The execution
+wrapper also sets Cargo/npm offline mode and disables Rustup auto-install when
+invoking a Git-backed point. Direct Rule commands need no launcher. Dependency
+audits run at check in CI with advisory access; they remain outside offline hooks.
+Checks neither install the governor nor repair project files.
 
 ## Execution points and required coverage
 
@@ -66,17 +70,25 @@ security Rules.
 | --- | --- |
 | pre-commit | 01-format, 02-docs |
 | commit-msg | 20-commit-message plus imported commit-message |
-| pre-push (default) | 01-format, 02-docs, 03-docs-tests, 04-governance-tests, 05-hooks-tests, 06-deploy-tests, 07-release-tests, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke plus imported secret-scan and sensitive-files |
-| check | All pre-push checks plus 21-commit-range, 22-workflows, 23-msrv, 24-rust-audit and 25-npm-audit: 19 rules total |
+| pre-push (default) | 01-format, 02-docs, 03-python-tests, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke, 22-workflows, 23-msrv plus imported secret-scan and sensitive-files |
+| check | All pre-push checks plus 21-commit-range, 24-rust-audit and 25-npm-audit: 15 rules total |
 | release-build | 01-format, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke |
 | release-artifacts | 30-release-artifacts |
 
-The [checks](../.hannes/checks) retain their validation commands, timeout settings
-and enabled state. Each Rule has an index.sh entrypoint that invokes the shared
-command launcher to preserve offline hook behavior. Each local Rule declares
-its execution points directly; this repository defines no local Rule Sets.
-The external commit-message and Security Rule Sets retain their own assignments.
-All Rust unit, integration, acceptance and documentation tests remain in one Rule.
+The 15 local [checks](../.hannes/checks) invoke tools directly through command
+arrays. Python scripts without arguments use entrypoint and interpreter instead.
+There are no index.sh launchers. Each local Rule declares its execution points
+directly; this repository defines no local Rule Sets. External assignments remain
+unchanged.
+
+All Rust unit, integration, acceptance and documentation tests run in one Cargo
+Rule. Python helper tests use one unittest discovery Rule; test modules use
+importable test_*.py names and include the Action and real Git-hook fixtures.
+JavaScript release tests run once through npm test. All three suites run at
+pre-push and again in CI, including when local hooks were bypassed. Release builds
+and the smoke test of the built executable remain separate mandatory checks.
+CARGO_BUILD_TARGET selects Cargo's output target in CI; BUILD_TARGET selects the
+same binary for smoke testing and packaging. Neither needs an extra launcher.
 
 Formatting, documentation, Clippy, Rust acceptance tests, deployment
 and release regression tests, Conventional Commits, actionlint, minimum Rust 1.85,
@@ -178,11 +190,9 @@ Gitleaks for its managed pre-push hook. macOS release runners use the
 [native installer](../scripts/install-governor.py). The execution wrapper rejects
 candidate governors inside the checkout and checks CI's version against the pin.
 
-The current v0.9.0 governor supports the consolidated execution points but predates
-the new display names and progress modes. Repository rule documents keep using
-its supported fields until a compatible release is published and the pin is
-updated. CLI acceptance tests exercise the candidate's new display behavior in
-disposable repositories; candidate builds never govern this checkout.
+The v0.10.0 governor supports the repository's command arrays and shared script
+paths. Candidate binaries remain confined to disposable acceptance fixtures and
+smoke tests; they never govern this checkout.
 
 The initial Action was published on main at
 [`2d3cac2324ce54f076c7090e5bf80969eee4b37e`](https://github.com/christianpflugradt/hannes/commit/2d3cac2324ce54f076c7090e5bf80969eee4b37e)

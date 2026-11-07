@@ -48,23 +48,22 @@ async function testLifecycle() {
     writeFileSync(join(cwd, "src", "main.rs"), "fn main() {}\n");
     copyFileSync(join(source, ".hannes", "provider.toml"), join(cwd, ".hannes", "provider.toml"));
     copyFileSync(join(source, ".githooks", "commit-policy"), join(cwd, ".githooks", "commit-policy"));
-    for (const file of ["check-commits.py", "check-commit-message.sh", "run-check.py"]) {
+    for (const file of ["check-commits.py", "check-commit-message.sh"]) {
       copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
     }
     writeFileSync(join(cwd, ".hannes", "config.toml"),
       'project="Release fixture"\nmax_display_files=5\n');
     const hookRules = [
-      ["format", "pre-commit", "cargo +stable fmt --all -- --check"],
-      ["message", "commit-msg", "python3 scripts/check-commits.py --message"],
-      ["git", "pre-push", "git --version"],
+      ["format", "pre-commit", ["cargo", "+stable", "fmt", "--all", "--", "--check"]],
+      ["message", "commit-msg", ["python3", "scripts/check-commits.py", "--message"]],
+      ["git", "pre-push", ["git", "--version"]],
     ];
     for (const [id, point, command] of hookRules) {
       const directory = join(cwd, ".hannes", "checks", id);
       mkdirSync(directory, { recursive: true });
       writeFileSync(join(directory, "rule.toml"),
-        `id=${JSON.stringify(id)}\ndescription="Release hook fixture"\nrun_at=[${JSON.stringify(point)}]\n[check]\nentrypoint="index.sh"\ninterpreter="sh"\ntimeout_seconds=30\n`
+        `id=${JSON.stringify(id)}\ndescription="Release hook fixture"\nrun_at=[${JSON.stringify(point)}]\n[check]\ncommand=${JSON.stringify(command)}\ntimeout_seconds=30\n`
       );
-      writeFileSync(join(directory, "index.sh"), `#!/bin/sh\nexec python3 scripts/run-check.py ${command}\n`);
     }
     const governor = env.HANNES_EXECUTABLE || "hannes";
     execFileSync(governor, ["pass", "auf", "--auto-approve"], { cwd, env, stdio: "pipe" });

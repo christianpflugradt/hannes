@@ -4,6 +4,5 @@ enabled = true
 run_at = ["check"]
 
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+command = ["cargo", "+stable", "audit"]
 timeout_seconds = 300

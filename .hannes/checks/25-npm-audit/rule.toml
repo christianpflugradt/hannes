@@ -4,6 +4,5 @@ enabled = true
 run_at = ["check"]
 
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+command = ["npm", "audit", "--audit-level=high"]
 timeout_seconds = 180

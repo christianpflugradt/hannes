@@ -373,7 +373,7 @@ PATH for subsequent steps. With `run: true` it executes
 its exit status. Installation errors fail with diagnostics. It installs no rule
 dependencies, initializes no rules or hooks, and has no installed-version
 detection, comparison, upgrade logic or persistent cache.
-Acceptance: `scripts/test-action.py` and the public Action consumer job in CI.
+Acceptance: `scripts/test_action.py` and the public Action consumer job in CI.
 
 Supported hosted CI/release targets are macOS Apple Silicon, macOS Intel and
 Linux x64 and ARM64 (GNU/glibc); Windows builds/releases are excluded. Linux ARM64
@@ -406,7 +406,7 @@ local candidate builds never govern the source being checked. `.hannes-version`
 is the sole exact release pin, passed explicitly to the public Action on Ubuntu
 and the native installer on macOS. Renovate updates it through GitHub-release
 PRs without automerge. CI never resolves latest.
-The governor is pinned to published v0.9.0. Repository rules use the unversioned,
+The governor is pinned to published v0.10.0. Repository rules use the unversioned,
 self-contained Rule model and fixed Git-hook execution points.
 
 The three Git-backed built-in points serve Git hooks. Normal CI uses one check
@@ -414,7 +414,11 @@ point for formatting, documentation, tooling, native validation, minimum Rust,
 dependency audits and security. Local Rules declare their execution points
 directly, without local Rule Sets. Pre-commit runs formatting and documentation
 validation; pre-push runs the complete local suite, keeping all Rust tests in
-one Rule. Agents use Git commit/push feedback instead of manually running checks,
+one Rule. Python helper tests use one unittest discovery Rule and JavaScript
+release tests use one npm Rule. All three test suites, workflow validation and
+minimum-Rust checks run at pre-push and again in CI. The repository has 15 local
+Rules; dependency audits remain at check with advisory access. Agents use Git
+commit/push feedback instead of manually running checks,
 tests, linters or builds. They may read saved reports without rerunning Rules.
 The manual mise check task delegates to published Hannes at pre-push.
 External Rule Set imports, pins, parameters and assignments remain unchanged.
@@ -439,9 +443,11 @@ Hooks are managed by pass auf at Git's effective hook path, including forwarding
 commit-message arguments and preserving compatible unmanaged content. A setup
 shim only retires this checkout's obsolete .githooks setting when its old event
 files are absent, then delegates to pass auf; custom hook paths are preserved.
-Check subprocesses retain the inherited environment and recursion guard. A small
-command launcher sets Cargo/npm offline mode and disables Rustup auto-install
-when invoked by a managed Git hook; it then executes the original check command.
+Check subprocesses retain the inherited environment and recursion guard. Local
+Rules use direct command arrays or Python file entrypoints, without per-rule shell
+or Python launchers. Cargo build/test/Clippy/MSRV commands and npm tests explicitly
+select offline mode. The execution-point wrapper additionally sets Cargo/npm
+offline mode and disables Rustup auto-install for Git-backed invocations.
 CI invokes pass auf --auto-approve once before execution. Execution never repairs
 hooks noninteractively. The publish job prepares stable Rust with rustfmt and
 Clippy and fetches locked Cargo dependencies before publication, so its managed
@@ -571,4 +577,4 @@ Public documentation explains supported behavior; proposals remain in the roadma
 | OUT-001 | `tests/review_contract.rs::review_contract_enforces_boundaries_and_semantic_evidence_locally` |
 | INP-001 | `tests/acceptance.rs::changing_files_during_checks_blocks_pass` |
 | RPT-001 | `tests/configuration.rs::saved_reports_reject_inconsistent_metadata` |
-| REL-001 | `scripts/test-release.py::test_ci_policy_checks_new_messages_without_rejecting_legacy_history` |
+| REL-001 | `scripts/test_release.py::test_ci_policy_checks_new_messages_without_rejecting_legacy_history` |

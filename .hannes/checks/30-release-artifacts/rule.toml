@@ -4,6 +4,6 @@ enabled = true
 run_at = ["release-artifacts"]
 
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+entrypoint = "scripts/check-release-artifacts.py"
+interpreter = "python3"
 timeout_seconds = 180

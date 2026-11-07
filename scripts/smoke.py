@@ -6,7 +6,9 @@ import subprocess
 import sys
 import tempfile
 
-binary = Path(sys.argv[1]).resolve()
+target = os.environ.get("BUILD_TARGET")
+default_binary = Path("target") / target / "release/hannes" if target else Path("target/release/hannes")
+binary = (Path(sys.argv[1]) if len(sys.argv) > 1 else default_binary).resolve()
 with tempfile.TemporaryDirectory(prefix="hannes-smoke-") as temporary:
     root = Path(temporary) / "repository"
     root.mkdir()

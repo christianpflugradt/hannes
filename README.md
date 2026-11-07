@@ -950,15 +950,15 @@ is listed in the [TODOs](docs/todo/README.md).
 
 ## Development
 
-The governor is pinned to published Hannes v0.9.0. See
+The governor is pinned to published Hannes v0.10.0. See
 [repository self-integration](docs/self-governance.md) for setup and coverage.
 
 This repository's deterministic quality checks run through an installed published
 Hannes release. Install development tools with `mise install`, dependencies with
 `npm ci --ignore-scripts` and `cargo +stable fetch --locked`, then the governor
 with `mise deploy`. Install Gitleaks v8 with the `dir` command (tested with
-8.30.1) explicitly for the imported Security Rule Set. Ensure Hannes and Gitleaks
-are on PATH.
+8.30.1) explicitly for the imported Security Rule Set. Prepare Rust 1.85 and actionlint as described in the setup guide. Ensure Hannes,
+Gitleaks and actionlint are on PATH.
 
 Install the pre-commit, commit-msg and pre-push hooks explicitly with
 `mise hooks:install`. Commit and push then invoke Hannes automatically: pre-commit
@@ -969,8 +969,9 @@ builds. They may format source and inspect saved results with
 
 For developers who want an explicit manual run, `mise check` delegates to the
 pinned published governor at the `pre-push` execution point:
-formatting, documentation validation, Clippy, Rust tests, release/deployment/hook
-regression tests, an optimized candidate build, smoke test and the imported
+formatting, documentation validation, Clippy, Rust tests, Python helper tests,
+JavaScript release tests, workflow validation, minimum Rust, an optimized
+candidate build, smoke test and the imported
 Security Rule Set against `HEAD`. No reviews or real provider calls run. The governor never comes from the candidate build.
 
 `mise docs:check` checks links, specification references, configuration fields and

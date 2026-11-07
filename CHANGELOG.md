@@ -1,3 +1,16 @@
+## [0.10.0](https://github.com/christianpflugradt/hannes/compare/v0.9.0...v0.10.0) (2026-11-07)
+
+### Features
+
+* **checks:** execute native commands without script launchers ([e6ccc50](https://github.com/christianpflugradt/hannes/commit/e6ccc503ab8dc63a8ba8b14ca0b0264b9a19f3e3))
+* **checks:** support shared source-relative entrypoints ([df7a65f](https://github.com/christianpflugradt/hannes/commit/df7a65fbd971cb3a60bc4d434aa2e7fdc3e0809a))
+* **ci:** add the public Hannes composite Action ([2d3cac2](https://github.com/christianpflugradt/hannes/commit/2d3cac2324ce54f076c7090e5bf80969eee4b37e))
+* **cli:** streamline rule output and CI checks ([cb7986c](https://github.com/christianpflugradt/hannes/commit/cb7986ce9e32da8e7505a0285c5159f2d11733d9))
+
+### Code Refactoring
+
+* **checks:** rely on Git hooks for local validation ([5cb1149](https://github.com/christianpflugradt/hannes/commit/5cb11494ca276694663991d95fa5b84842ed8d74))
+
 ## [0.9.0](https://github.com/christianpflugradt/hannes/compare/v0.8.0...v0.9.0) (2026-11-07)
 
 ### Features

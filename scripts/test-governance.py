@@ -57,7 +57,7 @@ class GovernanceTests(unittest.TestCase):
         checks, sets = definitions()
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
         self.assertEqual(set(config), {"project", "max_display_files", "execution_points", "imports"})
-        self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["execution_points"]) - {"pre-commit", "commit-msg", "pre-push"})
+        self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["execution_points"]) - {"pre-commit", "commit-msg", "pre-push", "check"})
         self.assertEqual(set(checks), set(BASELINE["checks"]))
         for rule, check in checks.items():
             implementation = check["check"]
@@ -105,18 +105,21 @@ class GovernanceTests(unittest.TestCase):
         self.assertRegex(security["ref"], r"^[0-9a-f]{40}$")
         self.assertFalse((ROOT / ".hannes/checks/secret-scan").exists())
         self.assertFalse((ROOT / ".hannes/checks/sensitive-files").exists())
-        workflow = (ROOT / ".github/workflows/quality.yml").read_text()
-        tooling = workflow.split("  tooling:", 1)[1].split("\n  audit:", 1)[0]
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text().split("  action-consumer:")[0]
         run = "run: python3 scripts/run-execution-point.py check"
         self.assertEqual(workflow.count(run + "\n"), 1)
-        self.assertLess(tooling.index("actions/setup-python@"), tooling.index(run))
-        self.assertLess(tooling.index("Install pinned Gitleaks"), tooling.index(run))
-        self.assertLess(tooling.index(run), tooling.index("name: quality-check"))
-        for text in (tooling, (ROOT / ".github/workflows/release.yml").read_text()):
+        self.assertLess(workflow.index("actions/setup-python@"), workflow.index(run))
+        self.assertLess(workflow.index("bash scripts/prepare-ci.sh"), workflow.index(run))
+        self.assertLess(workflow.index(run), workflow.index("name: quality-check"))
+        preparation = (ROOT / "scripts/prepare-ci.sh").read_text()
+        for text in (preparation, (ROOT / ".github/workflows/release.yml").read_text()):
             self.assertIn("v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz", text)
             self.assertIn("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb", text)
             self.assertIn("sha256sum --check", text)
             self.assertIn('echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"', text)
+        for required in ("npm ci --ignore-scripts", "cargo +stable fetch --locked", "cargo +1.85.0 fetch --locked",
+                         "cargo +stable install cargo-audit --version", "go install github.com/rhysd/actionlint"):
+            self.assertIn(required, preparation)
         release = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertLess(release.index("Install pinned Gitleaks"), release.index("Publish versioned CLI"))
 
@@ -124,7 +127,7 @@ class GovernanceTests(unittest.TestCase):
         executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
         self.assertTrue(executable, "Install the compatible published Hannes release before running governance acceptance")
         self.assertFalse(Path(executable).resolve().is_relative_to(ROOT))
-        for point, expected in {**BASELINE["execution_points"], "check": []}.items():
+        for point, expected in BASELINE["execution_points"].items():
             with self.subTest(point=point):
                 result = subprocess.run([executable, "mach", "was", "--at", point, "--plan", "--json"], cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
@@ -148,36 +151,37 @@ class GovernanceTests(unittest.TestCase):
                 self.assertFalse(plan["omitted"])
 
     def test_ci_installs_pinned_governor_and_uploads_failure_reports(self):
-        workflow = (ROOT / ".github/workflows/quality.yml").read_text().split("  action-consumer:")[0]
+        ci = (ROOT / ".github/workflows/ci.yml").read_text()
+        checks = ci.split("  action-consumer:")[0]
+        builds = (ROOT / ".github/workflows/quality.yml").read_text()
         release = (ROOT / ".github/workflows/release.yml").read_text()
-        for point in ("ci-native", "ci-tooling", "ci-msrv", "ci-audit"):
-            self.assertIn(f"python3 scripts/run-execution-point.py {point}", workflow)
-        self.assertEqual(len(re.findall(r"uses: christianpflugradt/hannes@[0-9a-f]{40}", workflow)), 4)
-        self.assertNotIn("uses: ./", workflow)
-        self.assertEqual(workflow.count("execution-point: check"), 4)
-        self.assertEqual(workflow.count("run: 'false'"), 4)
-        self.assertEqual(workflow.count("version: ${{ steps.governor.outputs.version }}"), 4)
-        self.assertEqual(workflow.count("run: hannes pass auf --auto-approve"), 4)
-        self.assertEqual(workflow.count("run: python3 scripts/install-governor.py"), 1)
-        self.assertIn("if: runner.os == 'macOS'", workflow)
-        self.assertRegex(release, r"uses: christianpflugradt/hannes@[0-9a-f]{40}")
-        self.assertNotIn("uses: ./.github/actions/", release)
-        self.assertEqual(workflow.count("if: always()"), 5)
-        self.assertEqual(workflow.count("include-hidden-files: true"), 5)
+        self.assertIn("name: Quality checks", checks)
+        self.assertNotIn("matrix:", checks)
+        self.assertEqual(checks.count("scripts/run-execution-point.py"), 1)
+        self.assertEqual(checks.count("run: hannes pass auf --auto-approve"), 1)
+        self.assertEqual(checks.count("if: always()"), 1)
+        self.assertEqual(checks.count("include-hidden-files: true"), 1)
+        self.assertIn("name: GitHub Action compatibility /", ci)
+        self.assertIn("os: [ubuntu-24.04, ubuntu-24.04-arm]", ci)
+        self.assertIn("run: python3 scripts/run-execution-point.py release-build", builds)
+        self.assertIn("if: runner.os == 'macOS'", builds)
+        self.assertIn("uses: ./.github/workflows/ci.yml", release)
+        self.assertIn("needs: [plan, checks, quality]", release)
+        for obsolete in ("ci-native", "ci-tooling", "ci-msrv", "ci-audit"):
+            self.assertNotIn(obsolete, ci + builds)
+        for workflow in (checks, builds, release):
+            self.assertRegex(workflow, r"uses: christianpflugradt/hannes@[0-9a-f]{40}")
+            self.assertIn("run: 'false'", workflow)
+            self.assertIn("version: ${{ steps.governor.outputs.version }}", workflow)
+            self.assertIn("if: always()", workflow)
+            self.assertNotIn("releases/latest", workflow)
+            self.assertNotRegex(workflow, r"run: (cargo \+stable (test|clippy|audit)|npm (test|audit)|python3 scripts/(check-commits|verify-release|test-))")
         self.assertIn("python3 scripts/run-execution-point.py release-artifacts", release)
-        self.assertIn("if: always()", release)
-        self.assertIn("include-hidden-files: true", release)
-        for text in (workflow, release):
-            self.assertNotIn("releases/latest", text)
-            self.assertNotRegex(text, r"run: (cargo \+stable (test|clippy|audit)|npm (test|audit)|python3 scripts/(check-commits|verify-release|test-))")
         installer = (ROOT / "scripts/install-governor.py").read_text()
         self.assertIn('Path(".hannes-version")', installer)
         self.assertIn("deploy(tag=version", installer)
         self.assertNotIn("cargo", installer)
-        action = (ROOT / "action.yml").read_text()
-        self.assertIn("run: hannes pass auf --auto-approve", release)
         self.assertFalse((ROOT / ".github/actions/setup-hannes/action.yml").exists())
-        self.assertNotRegex(workflow + release + action, r"--profil(?:\s|=|$)")
 
     def test_release_prepares_offline_hooks_and_uploads_reports_after_publication(self):
         release = (ROOT / ".github/workflows/release.yml").read_text()

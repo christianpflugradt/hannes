@@ -6,6 +6,7 @@ pub const MAX_TOTAL_INSTRUCTION_BYTES: usize = 256 * 1024;
 pub const MAX_TIMEOUT_SECONDS: u64 = 3600;
 pub const MAX_DISPLAY_FILES: usize = 5;
 pub const MAX_RULES: usize = 256;
+pub const MAX_RULE_NAME_CHARS: usize = 80;
 pub const MAX_ID_BYTES: usize = 80;
 pub const MAX_ENTRY_FILES: usize = 64;
 pub const MAX_CONTEXT_ENTRIES: usize = 32;

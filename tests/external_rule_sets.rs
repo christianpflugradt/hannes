@@ -1766,3 +1766,51 @@ printf '%s' "$HANNES_EXECUTION_POINT"
     }
     assert_eq!(fs::read_to_string(calls).unwrap(), "discovery\nreview\n");
 }
+
+#[test]
+fn imported_names_survive_namespacing_and_saved_status_uses_short_unique_labels() {
+    let f = Fixture::new();
+    let path = f.remote.join("repository/checks/required-files/rule.toml");
+    fs::write(
+        &path,
+        format!(
+            "name = 'Required files'\n{}",
+            fs::read_to_string(&path).unwrap()
+        ),
+    )
+    .unwrap();
+    commit(&f.remote);
+    f.imports(&[
+        ("repository", "main"),
+        ("repository", "main"),
+        ("software", "main"),
+    ]);
+    let project = f.load(true).unwrap();
+    let mut progress = String::new();
+    let report = hannes::verify_project_at(
+        project,
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |event| progress.push_str(&hannes::terminal::render_progress(&event, false)),
+    )
+    .unwrap();
+    let names = report.plan.display_names();
+    assert_eq!(names.len(), 3);
+    assert!(
+        names
+            .values()
+            .any(|name| name == "Required files [repository]")
+    );
+    assert!(
+        names
+            .values()
+            .any(|name| name == "Required files [repository] #2")
+    );
+    assert!(names.values().any(|name| name == "required-files"));
+    assert!(!progress.contains("git:"));
+    let saved = hannes::report::read(&f.root).unwrap();
+    assert!(!hannes::terminal::render(&saved, false).contains("git:"));
+    assert!(hannes::terminal::render_details(&saved, false).contains("git:"));
+    assert!(saved.results.iter().all(|item| item.id.starts_with("git:")));
+}

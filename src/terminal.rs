@@ -177,71 +177,323 @@ fn short_summary(reason: &str) -> String {
         .chain(std::iter::once('…'))
         .collect()
 }
-pub fn render_progress(event: &crate::Progress<'_>, color: bool) -> String {
+/// Select redraw independently of color. Redirected logs never need cursor controls.
+pub fn progress_redraw(
+    mode: crate::cli::ProgressMode,
+    terminal: bool,
+    ci: bool,
+    dumb: bool,
+) -> bool {
+    match mode {
+        crate::cli::ProgressMode::Auto => terminal && !ci && !dumb,
+        crate::cli::ProgressMode::Plain => false,
+        crate::cli::ProgressMode::Tty => true,
+    }
+}
+
+pub fn terminal_dimensions() -> (usize, usize) {
+    #[cfg(unix)]
+    {
+        let mut size: libc::winsize = unsafe { std::mem::zeroed() };
+        // ioctl writes the winsize structure for stderr's terminal, when present.
+        if unsafe { libc::ioctl(libc::STDERR_FILENO, libc::TIOCGWINSZ, &mut size) } == 0
+            && size.ws_col > 0
+        {
+            return (usize::from(size.ws_col), usize::from(size.ws_row).max(1));
+        }
+    }
+    let dimension = |key, default| {
+        std::env::var(key)
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(default)
+    };
+    (dimension("COLUMNS", 80), dimension("LINES", 24))
+}
+
+fn duration(milliseconds: u64) -> String {
+    format!("{:.1} s", milliseconds as f64 / 1000.0)
+}
+
+// Conservatively reserve two columns for non-ASCII characters, including wide
+// Unicode names. This can shorten a row early, but never lets it wrap.
+fn display_width(text: &str) -> usize {
+    text.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum()
+}
+fn fit(text: &str, width: usize) -> String {
+    let text = clean(text);
+    let columns = |c: char| if c.is_ascii() { 1 } else { 2 };
+    if text.chars().map(columns).sum::<usize>() <= width {
+        return text;
+    }
+    let mut result = String::new();
+    let mut used = 0;
+    for c in text.chars() {
+        if used + columns(c) + 2 > width {
+            break;
+        }
+        result.push(c);
+        used += columns(c);
+    }
+    if width >= 2 {
+        result.push('…');
+    }
+    result
+}
+
+fn progress_row(
+    index: (usize, usize),
+    state: (&str, Tone),
+    label: (&str, &str),
+    elapsed: Option<u64>,
+    color: bool,
+    width: Option<usize>,
+) -> String {
+    let (number, total) = index;
+    let (state, tone) = state;
+    let (name, description) = label;
+    let prefix = format!("[{number}/{total}] {state:<7} · ");
+    let suffix = elapsed
+        .map(|ms| format!(" · {}", duration(ms)))
+        .unwrap_or_default();
+    let label = format!("{} — {}", clean(name), short_summary(description));
+    let label = width
+        .map(|w| {
+            fit(
+                &label,
+                w.saturating_sub(display_width(&prefix) + display_width(&suffix) + 1),
+            )
+        })
+        .unwrap_or(label);
+    format!(
+        "[{number}/{total}] {}{} · {label}{suffix}\n",
+        paint(state, tone, color),
+        " ".repeat(7usize.saturating_sub(state.chars().count()))
+    )
+}
+
+fn progress_event(event: &crate::Progress<'_>, color: bool, width: Option<usize>) -> String {
     use crate::Progress;
     match event {
-        Progress::Plan { total } => format!(
-            "{}\n",
-            paint(
-                &format!(
-                    "Hannes prüft {total} {}.",
-                    if *total == 1 {
-                        "aktive Regel"
-                    } else {
-                        "aktive Regeln"
-                    }
-                ),
-                Tone::Heading,
-                color
-            )
-        ),
-        Progress::Phase(message) => format!("{}\n", paint(message, Tone::Muted, color)),
+        Progress::Plan { .. } | Progress::Phase(_) => String::new(),
         Progress::RuleStarted {
             number,
             total,
-            kind,
-            id,
+            name,
             description,
-        } => format!(
-            "[{number}/{total}] {} {kind} · {} — {}\n",
-            paint("LÄUFT", Tone::Accent, color),
-            clean(id),
-            short_summary(description)
+            ..
+        } => progress_row(
+            (*number, *total),
+            ("LÄUFT", Tone::Accent),
+            (name, description),
+            None,
+            color,
+            width,
         ),
         Progress::RuleFinished {
             number,
             total,
             item,
-        } => format!(
-            "[{number}/{total}] {} {} · {} · {} ms — {}\n",
-            status(item.status, color),
-            clean(&item.kind),
-            clean(&item.id),
-            item.duration_ms,
-            short_summary(&item_reason(item))
-        ),
-        Progress::ReviewBatch {
-            count,
-            calls,
-            timeout_seconds,
-        } => format!(
-            "{}\n",
-            paint(
-                &format!(
-                    "Codex: {count} {} gebündelt {} · Timeout {timeout_seconds} s je Aufruf",
-                    if *count == 1 { "Review" } else { "Reviews" },
-                    if *calls == 1 {
-                        "in einem Aufruf".into()
-                    } else {
-                        format!("in {calls} Aufrufen")
-                    }
-                ),
-                Tone::Accent,
-                color
-            )
+            name,
+            description,
+        } => {
+            let tone = match item.status {
+                Status::Pass => Tone::Success,
+                Status::Fail => Tone::Failure,
+                Status::Error => Tone::Warning,
+                Status::NotRun => Tone::Muted,
+            };
+            let mut row = progress_row(
+                (*number, *total),
+                (item.status.label(), tone),
+                (name, description),
+                Some(item.duration_ms),
+                color,
+                width,
+            );
+            if item.status != Status::Pass {
+                let reason = format!("  {}", short_summary(&item_reason(item)));
+                row.push_str(
+                    &width
+                        .map(|w| fit(&reason, w.saturating_sub(1)))
+                        .unwrap_or(reason),
+                );
+                row.push('\n');
+                for finding in &item.findings {
+                    let line = format!(
+                        "  {}{}",
+                        short_summary(&finding.message),
+                        finding
+                            .path
+                            .as_ref()
+                            .map(|path| format!(" [{}:{}]", clean(path), finding.line.unwrap_or(0)))
+                            .unwrap_or_default()
+                    );
+                    row.push_str(
+                        &width
+                            .map(|w| fit(&line, w.saturating_sub(1)))
+                            .unwrap_or(line),
+                    );
+                    row.push('\n');
+                }
+            }
+            row
+        }
+        Progress::ReviewBatch { count, calls, .. } => format!(
+            "Reviews: {count} · {calls} {}\n",
+            if *calls == 1 {
+                "Provider-Aufruf"
+            } else {
+                "Provider-Aufrufe"
+            }
         ),
     }
 }
+
+pub fn render_progress(event: &crate::Progress<'_>, color: bool) -> String {
+    progress_event(event, color, None)
+}
+
+/// Stateful terminal output replaces running rows, including shared review batches.
+/// Plain mode is append-only and uses the same names and messages.
+pub struct ProgressRenderer {
+    redraw: bool,
+    color: bool,
+    width: usize,
+    rows: std::collections::BTreeMap<usize, String>,
+    visible: usize,
+    height: usize,
+    pending: std::collections::BTreeSet<usize>,
+}
+impl ProgressRenderer {
+    pub fn new(redraw: bool, color: bool, width: usize, height: usize) -> Self {
+        Self {
+            redraw: redraw && width >= 40,
+            color,
+            width,
+            rows: Default::default(),
+            visible: 0,
+            height,
+            pending: Default::default(),
+        }
+    }
+    pub fn render(&mut self, event: &crate::Progress<'_>) -> String {
+        if !self.redraw {
+            return render_progress(event, self.color);
+        }
+        let number = match event {
+            crate::Progress::RuleStarted { number, .. } => {
+                self.pending.insert(*number);
+                *number
+            }
+            crate::Progress::RuleFinished { number, .. } => {
+                self.pending.remove(number);
+                *number
+            }
+            crate::Progress::ReviewBatch { count, .. } => {
+                // A batch larger than the screen must remain append-only;
+                // cursor-up cannot recover rows that have scrolled off-screen.
+                if *count >= self.height.saturating_sub(2) {
+                    self.redraw = false;
+                }
+                self.rows.clear();
+                self.visible = 0;
+                return render_progress(event, self.color);
+            }
+            _ => return String::new(),
+        };
+        let mut text = if self.visible > 0 {
+            format!("\x1b[{}A", self.visible)
+        } else {
+            String::new()
+        };
+        self.rows
+            .insert(number, progress_event(event, self.color, Some(self.width)));
+        self.visible = 0;
+        for row in self.rows.values() {
+            for line in row.lines() {
+                text.push_str("\r\x1b[2K");
+                text.push_str(line);
+                text.push('\n');
+                self.visible += 1;
+            }
+        }
+        if self.visible >= self.height.saturating_sub(2) {
+            self.redraw = false;
+        }
+        if self.pending.is_empty() || !self.redraw {
+            self.rows.clear();
+            self.visible = 0;
+        }
+        text
+    }
+}
+
+/// Execution already printed its results. Only new integrity failures and the
+/// final aggregate belong here; saved status has its own result listing.
+pub fn render_outcome(report: &Report, elapsed_ms: u64, color: bool) -> String {
+    let mut text = String::new();
+    for item in report
+        .results
+        .iter()
+        .filter(|item| item.kind == "integrity")
+    {
+        text.push_str(&format!(
+            "{} · {}\n",
+            status(item.status, color),
+            clean(&item.reason)
+        ));
+    }
+    let count = report.plan.scheduled.len();
+    if count == 0 {
+        text.push_str(&format!(
+            "{} · Keine Regeln ausgeführt · {}\n",
+            status(report.overall, color),
+            duration(elapsed_ms)
+        ));
+    } else {
+        let failed = report
+            .results
+            .iter()
+            .filter(|r| r.status == Status::Fail)
+            .count();
+        let errors = report
+            .results
+            .iter()
+            .filter(|r| r.status == Status::Error)
+            .count();
+        let skipped = report
+            .results
+            .iter()
+            .filter(|r| r.status == Status::NotRun)
+            .count();
+        let mut summary = format!(
+            "{count} {}",
+            if report.results.iter().any(|r| r.kind == "review") {
+                "Regeln"
+            } else {
+                "Checks"
+            }
+        );
+        if failed > 0 {
+            summary.push_str(&format!(" · {failed} fehlgeschlagen"));
+        }
+        if errors > 0 {
+            summary.push_str(&format!(" · {errors} Fehler"));
+        }
+        if skipped > 0 {
+            summary.push_str(&format!(" · {skipped} nicht ausgeführt"));
+        }
+        text.push_str(&format!(
+            "{} · {summary} · {}\n",
+            status(report.overall, color),
+            duration(elapsed_ms)
+        ));
+    }
+    text
+}
+
 pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
     let mut text = format!(
         "{} · {}\nExecution Point: {} ({}) · {} · Input: {}\nPlan-ID: {}\nHEAD: {}\nSnapshot: {} · {}\n",
@@ -279,12 +531,13 @@ pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
             "Reviews ausgelassen"
         }
     ));
+    let names = plan.display_names();
     for (index, rule) in plan.scheduled.iter().enumerate() {
         text.push_str(&format!(
             "[{}] {} {} · {}\n    Auswahl: {}\n",
             index + 1,
             rule.kind,
-            clean(&rule.id),
+            clean(&names[&rule.id]),
             clean(&rule.description),
             clean(&rule.selected_by.join(", "))
         ));
@@ -390,17 +643,28 @@ pub fn render(report: &Report, color: bool) -> String {
     }
     text.push_str(&format!(
         "\n{:<9} {:<24} {:<9} {:<9} SUMMARY\n",
-        "TYPE", "ID", "STATUS", "TIME"
+        "TYPE", "NAME", "STATUS", "TIME"
     ));
+    let names = report.plan.display_names();
     for item in &report.results {
         text.push_str(&format!(
             "{:<9} {:<24} {}{} {:<9} {}\n",
             clean(&item.kind),
-            clean(&item.id),
+            clean(names.get(&item.id).unwrap_or(&item.id)),
             status(item.status, color),
             " ".repeat(9 - item.status.label().len()),
             format!("{} ms", item.duration_ms),
-            short_summary(&item_reason(item))
+            if item.status == Status::Pass && item.kind == "check" {
+                report
+                    .plan
+                    .scheduled
+                    .iter()
+                    .find(|r| r.id == item.id)
+                    .map(|r| short_summary(&r.description))
+                    .unwrap_or_default()
+            } else {
+                short_summary(&item_reason(item))
+            }
         ));
     }
     text.push_str(&format!("\nGesamt: {}\nReport: .hannes/reports/last.json\nDetails: hannes was ist phase --details\n", status(report.overall, color)));
@@ -452,6 +716,20 @@ pub fn render_details(report: &Report, color: bool) -> String {
                 "Ausgelassen: {} · {}\n",
                 clean(&omitted.rule.id),
                 clean(&omitted.reason)
+            ));
+        }
+    }
+    for rule in &report.plan.scheduled {
+        if let Some(external) = rule
+            .origin
+            .as_ref()
+            .and_then(|origin| origin.external.as_ref())
+        {
+            text.push_str(&format!(
+                "Quelle: {} · {} @ {}\n",
+                clean(&rule.id),
+                clean(&external.path),
+                clean(&external.commit)
             ));
         }
     }

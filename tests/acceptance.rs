@@ -1178,6 +1178,7 @@ fn detailed_status_reads_saved_findings_without_another_codex_call() {
 fn compact_report_bounds_execution_error_reasons_without_losing_saved_details() {
     let d = project();
     let mut report = hannes::verify(d.path(), &Never).unwrap();
+    report.results[0].status = Status::Fail;
     report.results[0].reason = format!("first line\n{}", "x".repeat(4000));
     let compact = terminal::render(&report, false);
     let row = compact
@@ -1206,21 +1207,9 @@ fn progress_numbers_only_enabled_rules_and_announces_one_shared_provider_call() 
         fn review(&self, request: &Request<'_>) -> Result<String> {
             self.calls.set(self.calls.get() + 1);
             let events = self.events.borrow();
-            assert!(
-                events
-                    .iter()
-                    .any(|line| line.starts_with("[2/4] PASS check"))
-            );
-            assert!(
-                events
-                    .iter()
-                    .any(|line| line.starts_with("[3/4] LÄUFT review"))
-            );
-            assert!(
-                events
-                    .iter()
-                    .any(|line| line.starts_with("[4/4] LÄUFT review"))
-            );
+            assert!(events.iter().any(|line| line.starts_with("[2/4] PASS")));
+            assert!(events.iter().any(|line| line.starts_with("[3/4] LÄUFT")));
+            assert!(events.iter().any(|line| line.starts_with("[4/4] LÄUFT")));
             assert!(!events.iter().any(|line| line.starts_with("[3/4] PASS")));
             Ok(serde_json::json!({"reviews":request.reviews.iter().map(|review| verdict(&review.id,if review.id=="second" {"FAIL"} else {"PASS"})).collect::<Vec<_>>()} ).to_string())
         }
@@ -1262,12 +1251,12 @@ fn progress_numbers_only_enabled_rules_and_announces_one_shared_provider_call() 
     for number in 1..=4 {
         assert!(output.contains(&format!("[{number}/4] LÄUFT")));
     }
-    assert!(output.contains("[1/4] PASS check · always-ok"));
-    assert!(output.contains("[4/4] FAIL review · second"));
+    assert!(output.contains("[1/4] PASS    · always-ok"));
+    assert!(output.contains("[4/4] FAIL    · second"));
     assert!(output.contains("Second deterministic check"));
-    assert_eq!(output.matches("gebündelt in einem Aufruf").count(), 1);
+    assert_eq!(output.matches("Reviews: 2 · 1 Provider-Aufruf").count(), 1);
     assert!(!output.contains("deliberately-failing"));
-    assert!(!output.contains("Documented expectations inspected"));
+    assert!(output.contains("Documented expectations inspected"));
 }
 #[test]
 fn failed_checks_report_skipped_reviews_without_claiming_they_started() {
@@ -1287,9 +1276,9 @@ fn failed_checks_report_skipped_reviews_without_claiming_they_started() {
     )
     .unwrap();
     assert_eq!(report.overall, Status::Fail);
-    assert!(output.contains("[1/3] PASS check · always-ok"));
-    assert!(output.contains("[2/3] FAIL check · deliberately-failing"));
-    assert!(output.contains("[3/3] NOT_RUN review · product-consistency"));
+    assert!(output.contains("[1/3] PASS    · always-ok"));
+    assert!(output.contains("[2/3] FAIL    · deliberately-failing"));
+    assert!(output.contains("[3/3] NOT_RUN · product-consistency"));
     assert!(!output.contains("LÄUFT review") && !output.contains("Codex:"));
     assert!(path(d.path(), "reports/last.json").is_file());
 }
@@ -1370,6 +1359,7 @@ fn progress_uses_semantic_colors_and_sanitizes_rule_descriptions() {
         total: 2,
         kind: "check",
         id: "test",
+        name: "Tests",
         description: "Tests\nwith\x1bescape",
     };
     let plain = terminal::render_progress(&event, false);
@@ -1386,6 +1376,8 @@ fn progress_uses_semantic_colors_and_sanitizes_rule_descriptions() {
         number: 1,
         total: 2,
         item: &item,
+        name: "Tests",
+        description: "Test check",
     };
     assert!(terminal::render_progress(&completed, true).contains("\x1b[31mFAIL"));
 }
@@ -1855,7 +1847,7 @@ fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(!marker.exists());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("Nur Checks"));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("Nur Checks"));
     assert!(!String::from_utf8_lossy(&output.stderr).contains("Codex:"));
     let saved = fs::read(path(d.path(), "reports/last.json")).unwrap();
     for args in [

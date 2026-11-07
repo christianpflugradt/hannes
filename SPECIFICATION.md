@@ -37,11 +37,19 @@ must not create commits, modify the Git index or silently discover another root.
 
 ## RULE-001: Rules, Rule Sets and Execution Points
 
-Rules are implemented as Checks or Reviews. Each declares id, description,
+Rules are implemented as Checks or Reviews. Each declares id, optional name, description,
 enabled (default true), blocking (default true), optional run_at and exactly one
 implementation table. Rule IDs are unique within a governance scope. Rule Sets
 require id, description, rules and nonempty run_at; no enabled/blocking/source
 fields are accepted. Set IDs are independently unique.
+
+A Rule's optional name is a short display label: 1..=80 characters, without
+control characters or leading/trailing whitespace. Its default is the original
+scope-local ID, including for imported rules. Names do not change identity,
+selection, ordering, parameters or provider IDs. Duplicate display names receive
+a short origin suffix and, where needed, an occurrence number. Plans save names
+so progress, results and saved status agree; technical IDs and full provenance
+remain available in JSON and details. Reports without optional names remain readable.
 
 A present set overrides its rules' own run_at; memberships contribute their union.
 Standalone enabled rules use their own assignments. Repeated references within
@@ -134,7 +142,8 @@ that a later input is identical. Provider availability is not checked offline.
 
 `--geiz-ist-geil` runs checks only, without provider discovery, model calls or MCP
 connections. Reviews are excluded from progress/results and the limited scope is
-explicit in terminal output and reports. Full configuration validation still runs.
+recorded in plans and reports; terminal output warns only about actual omissions.
+Full configuration validation still runs.
 Every selected rule must execute; only completed non-blocking FAIL is nonfatal. A point requiring reviews rejects checks-only
 execution before any check starts. Empty execution points succeed without proving
 any rule PASS.
@@ -286,12 +295,23 @@ Only the current report and plan schemas are accepted. Reject corrupt/inconsiste
 reports and mismatched repositories. Reports are local, unsigned evidence, not
 tamper-proof attestations. Status uses saved selection, not the current default.
 
-Flush progress to stderr before each rule starts and after it finishes. Announce
-the shared AI call; do not claim real-time per-review model completion or sum
-shared durations. Final compact output goes to stdout, with each review's short
-summary. Details are opt-in. No rules defined prints
+Flush progress to stderr before each rule starts and after it finishes. Display
+a short name, description, status and elapsed time. `--progress=auto|plain|tty`
+controls verification progress (default auto). Auto redraws in an interactive
+stderr terminal, except CI=true/1 or TERM=dumb; otherwise it appends plain lines.
+Plain never emits cursor controls. Tty redraws rule rows, replacing their running
+state on completion; descriptions must not wrap the row. Color is independent.
+Announce shared provider calls without claiming individual model completion or
+summing shared durations. Hide internal phases and successful process-exit reasons.
+Failures show actionable reasons and findings; raw captured output stays in details.
+Execution ends with one overall status/count/duration line, without a duplicate
+table, routine report path, timestamps or checks-only boilerplate. Integrity
+failures remain visible even when no rule failed. Empty points explicitly say no
+rules ran and do not claim rule PASS. Saved status lists results with display
+names; details retain IDs, provenance, output and usage. No rules defined prints
 `Du hast noch keine Regeln definiert, du Vogel!`; disabled definitions do not
-trigger that message. Empty successful runs establish no rule PASS.
+trigger that message. Acceptance: tests/progress.rs covers names, plain/TTY
+rendering, concise execution and actionable errors.
 
 Respect `NO_COLOR`, `--no-color` and each stream's terminal state. Status colors
 are green PASS/CURRENT, red FAIL and amber ERROR/STALE/UNKNOWN; help uses cyan
@@ -349,18 +369,19 @@ PRs without automerge. CI never resolves latest.
 The governor is pinned to published v0.9.0. Repository rules use the unversioned,
 self-contained Rule model and fixed Git-hook execution points.
 
-The three Git-backed built-in points serve Git hooks. Explicit custom points ci-native,
-ci-tooling, ci-msrv, ci-audit and release-artifacts preserve their former required
-check selections. Shared native validation, tooling regression and dependency
-audit rules use rule sets; remaining rules have their own run_at. The frozen
-self-governance fixture records the published governor's required checks and selections.
+The three Git-backed built-in points serve Git hooks. Normal CI uses one check
+point for formatting, documentation, tooling, native validation, minimum Rust,
+dependency audits and security. Rule Sets group checks without creating separate
+CI execution points. The custom release-build point selects the five native
+checks on each release host; release-artifacts checks the collected archives.
+The self-governance fixture records local rule definitions and selections.
 The commit-msg point additionally imports the conventional-commits set at a full
 Git commit pin. Its scopes_file parameter uses .hannes/commit-scopes.txt, which
 must match the scopes in .githooks/commit-policy. The existing local message check
 retains Hannes' narrower type allowlist and stricter summary whitespace policy.
 The check and pre-push points also import multi-point/security at a full commit
 pin. Its sensitive-files and secret-scan checks inspect the working tree at check
-and HEAD contents at pre-push, without history. The tooling CI job explicitly
+and HEAD contents at pre-push, without history. The CI quality job explicitly
 runs check with Python 3 and a checksum-verified Gitleaks binary available. The
 release publisher prepares Gitleaks for its managed push hook. Rules and Hannes
 never install these dependencies automatically.

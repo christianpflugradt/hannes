@@ -65,26 +65,34 @@ Execution errors and blocking failures prevent success. Non-blocking FAIL stays 
 atomically, including on FAIL/ERROR. Invalid configuration leaves the previous
 report untouched. Reports are ignored and remain local.
 
-During `mach was`, progress appears immediately on stderr: each enabled rule has
-an `[i/n] LÄUFT` line with its description, followed by its result, duration and
-short summary. Disabled rules are excluded from the total. Skipped reviews get
-NOT_RUN without a running message. Preparation and report-writing phases are
-also shown so snapshot work is not mistaken for a hung check.
+During `mach was`, progress appears immediately on stderr. Each rule shows its
+short display name, description, running state and then its result and duration.
+Set optional `name` in rule.toml to choose a label; its default is the original
+rule ID. Imported hashes and binding identities are confined to JSON and details.
+Duplicate labels receive a short origin suffix and an occurrence number.
 
-Reviews with identical resolved parameter environments share one Codex call. The
-number of planned calls is announced; review start lines appear together and
-verdicts arrive when the review phase completes. The numbering is rule order, not a percentage or a claim
-that Codex reports per-review completion in real time. Raw check output and
-provider traces are not streamed. The final compact report stays on stdout,
-so `hannes mach was > report.txt` keeps progress visible in the terminal.
-Both streams respect `NO_COLOR`, `--no-color` and their own TTY state.
+`--progress=auto` is the default. Interactive terminals replace running rows with
+results; `CI=true`, `CI=1`, `TERM=dumb` and redirected stderr use append-only plain
+output. `--progress=plain` explicitly selects logs; `--progress=tty` requests
+redraw. Very narrow terminals and review batches larger than the screen use plain
+output to avoid wrapping or rewriting scrollback. Color settings
+are independent: `NO_COLOR` removes colors without disabling terminal redraw.
+Disabled rules are excluded from the total. Skipped reviews show NOT_RUN without
+a running message. Internal preparation and successful process-exit messages are
+hidden. Failed rules show their reason and findings; raw command output remains
+in the saved report.
 
-Every result row includes a short summary. Review summaries come from the actual
-Codex response, including PASS results; substantive verdicts are PASS/FAIL, while
-provider problems or unavailable evidence remain ERROR. The AI's `reason` is one
-nonempty line of at most 120 characters. Full findings and file/line references
-stay in the local JSON, not in normal stdout. Long execution errors or verbose
-summaries are shortened only for display; their complete content stays saved.
+Reviews with identical resolved parameter environments share one provider call.
+The number of calls is announced; review starts appear together and verdicts
+arrive when the review phase completes. Numbering is rule order and does not
+claim per-review model progress. Review verdict summaries remain in saved status
+and details. Reports retain full reasons, findings, paths and captured output.
+
+Execution ends with one status/count/duration line on stdout, without repeating
+the results in another table. Empty execution points explicitly say no rules ran.
+Integrity errors such as changing input files remain visible. `was ist phase`
+lists saved results without rerunning them. Both streams respect `NO_COLOR`,
+`--no-color` and their own TTY state.
 
 Use `hannes was ist phase --details` to inspect full saved findings and captured
 command output separately. It does not run Codex or any check again. Saved reports
@@ -137,8 +145,8 @@ flags: `--sandbox read-only`, `--ask-for-approval never`, `--ephemeral`,
 allowed statuses and evidence references are checked locally. Missing CLI, auth
 errors, timeouts, missing/malformed output and ungrounded responses become ERROR.
 Provider traces are not stored. The `turn.completed.usage` event supplies the
-CLI-reported input, cached input and output token counts, shown once per bundled
-review invocation in the compact report. JSON `token_usage` is input plus output;
+CLI-reported input, cached input and output token counts, available in saved
+status and details. JSON `token_usage` is input plus output;
 `provider_usage` retains the separate counters and optional reasoning/cache-write
 counts. Cached tokens are already included in input; reasoning tokens are already
 included in output. Neither is added to the total again. `--details` shows the

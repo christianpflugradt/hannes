@@ -13,12 +13,21 @@ use std::collections::BTreeSet;
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub kind: String,
     pub description: String,
     pub blocking: bool,
     pub selected_by: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::rules::EffectiveRule>,
+}
+impl Rule {
+    pub fn display_name(&self) -> &str {
+        self.name
+            .as_deref()
+            .unwrap_or_else(|| self.id.rsplit(':').next().unwrap_or(&self.id))
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -79,6 +88,40 @@ pub struct Plan {
     pub context: ContextPlan,
 }
 impl Plan {
+    /// Human labels are independent of the technical execution identities.
+    pub fn display_names(&self) -> std::collections::BTreeMap<String, String> {
+        let mut names = std::collections::BTreeMap::new();
+        let mut used = BTreeSet::new();
+        for rule in &self.scheduled {
+            let base = rule.display_name();
+            let duplicate = self
+                .scheduled
+                .iter()
+                .filter(|r| r.display_name() == base)
+                .count()
+                > 1;
+            let origin = rule
+                .origin
+                .as_ref()
+                .and_then(|o| o.external.as_ref())
+                .map(|o| o.path.rsplit('/').next().unwrap_or(&o.path))
+                .unwrap_or("local");
+            let label = if duplicate {
+                format!("{base} [{origin}]")
+            } else {
+                base.into()
+            };
+            let mut unique = label.clone();
+            let mut occurrence = 2;
+            while !used.insert(unique.clone()) {
+                unique = format!("{label} #{occurrence}");
+                occurrence += 1;
+            }
+            names.insert(rule.id.clone(), unique);
+        }
+        names
+    }
+
     pub fn executable(&self) -> bool {
         self.status == "planned"
     }
@@ -124,16 +167,29 @@ pub fn build(
     let mut disabled_rules = Vec::new();
     let mut required_ids = Vec::new();
     let mut blocking_reasons = Vec::new();
-    for (id, kind, description, enabled, blocking) in project
+    for (id, display_name, kind, description, enabled, blocking) in project
         .checks
         .iter()
-        .map(|r| (&r.id, "check", &r.description, r.enabled, r.blocking))
-        .chain(
-            project
-                .reviews
-                .iter()
-                .map(|r| (&r.id, "review", &r.description, r.enabled, r.blocking)),
-        )
+        .map(|r| {
+            (
+                &r.id,
+                &r.name,
+                "check",
+                &r.description,
+                r.enabled,
+                r.blocking,
+            )
+        })
+        .chain(project.reviews.iter().map(|r| {
+            (
+                &r.id,
+                &r.name,
+                "review",
+                &r.description,
+                r.enabled,
+                r.blocking,
+            )
+        }))
     {
         if !selects(id) && enabled {
             continue;
@@ -146,6 +202,7 @@ pub fn build(
         };
         let rule = Rule {
             id: id.clone(),
+            name: Some(display_name.clone()),
             kind: kind.into(),
             description: description.clone(),
             blocking,

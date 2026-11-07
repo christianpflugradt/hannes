@@ -41,12 +41,15 @@ pub enum Progress<'a> {
         total: usize,
         kind: &'static str,
         id: &'a str,
+        name: &'a str,
         description: &'a str,
     },
     RuleFinished {
         number: usize,
         total: usize,
         item: &'a Item,
+        name: &'a str,
+        description: &'a str,
     },
     ReviewBatch {
         count: usize,
@@ -117,6 +120,7 @@ pub fn verify_project_with_context(
         plan.selection_complete,
         "Execution point requires reviews; --geiz-ist-geil cannot omit required rules"
     );
+    let names = plan.display_names();
     planner::apply(&mut project, &plan);
     let check_count = project.checks.iter().filter(|c| c.enabled).count();
     let active: Vec<_> = project
@@ -153,6 +157,7 @@ pub fn verify_project_with_context(
                 total,
                 kind: "check",
                 id: &check.id,
+                name: &names[&check.id],
                 description: &check.description,
             });
         }
@@ -170,6 +175,8 @@ pub fn verify_project_with_context(
             number,
             total,
             item: &item,
+            name: &names[&check.id],
+            description: &check.description,
         });
         items.push(item);
     }
@@ -202,6 +209,7 @@ pub fn verify_project_with_context(
                     total,
                     kind: "review",
                     id: &review.id,
+                    name: &names[&review.id],
                     description: &review.description,
                 });
             }
@@ -221,6 +229,13 @@ pub fn verify_project_with_context(
                     number: check_count + offset + 1,
                     total,
                     item,
+                    name: &names[&item.id],
+                    description: &plan
+                        .scheduled
+                        .iter()
+                        .find(|r| r.id == item.id)
+                        .unwrap()
+                        .description,
                 });
             }
             items.extend(results);
@@ -236,6 +251,8 @@ pub fn verify_project_with_context(
                     number: check_count + offset + 1,
                     total,
                     item: &item,
+                    name: &names[&review.id],
+                    description: &review.description,
                 });
                 items.push(item);
             }

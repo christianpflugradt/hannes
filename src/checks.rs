@@ -82,7 +82,11 @@ pub fn execute_with_context(
                     output.status
                 )
             } else {
-                format!("Command exited: {}", output.status)
+                if output.status.success() {
+                    String::new()
+                } else {
+                    "Check reported a violation; inspect captured output with hannes was ist phase --details".into()
+                }
             };
             item.exit_code = output.status.code();
             item.stdout = Some(output.stdout);

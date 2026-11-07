@@ -134,6 +134,7 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
     );
     let rule = config::RuleDefinition {
         id: "example".into(),
+        name: Some("Example".into()),
         description: "Example".into(),
         enabled: true,
         blocking: true,

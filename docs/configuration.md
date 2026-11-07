@@ -75,6 +75,7 @@ points in the consumer, including unmapped custom points used by imports.
 | Field | Required / default | Meaning |
 | --- | --- | --- |
 | `id` | Required | Case-sensitive ID unique across checks/reviews in its source scope; 1–80 ASCII letters, digits, `-`, `_`; `hannes-` is reserved. |
+| `name` | Optional; `null` | Short display label; defaults to the original rule ID. 1–80 characters, no control characters or surrounding whitespace. |
 | `description` | Required | Nonblank explanation. |
 | `enabled` | Optional; `true` | False rules are validated but never executed or included in results. Plans list them under `disabled_rules`. |
 | `blocking` | Optional; `true` | A completed FAIL prevents success when true. ERROR is always fatal. |
@@ -82,6 +83,12 @@ points in the consumer, including unmapped custom points used by imports.
 | `parameters` | Optional; `{}` | Named parameter declarations; see below. |
 | `check` | Optional; `null` | Check implementation; required for a check rule and mutually exclusive with `review`. |
 | `review` | Optional; `null` | Review implementation; required for a review rule and mutually exclusive with `check`. |
+
+Names are display labels, not references: Rule Sets, parameters and providers
+continue to use IDs. Imported names default to their source-local ID. Duplicate
+names receive a short origin suffix and an occurrence number when necessary.
+Plans and reports save labels so status remains readable after configuration changes.
+Full technical IDs and import provenance are available in JSON and details.
 
 ### Rule parameters
 

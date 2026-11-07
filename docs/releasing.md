@@ -2,7 +2,7 @@
 
 Releases are started manually from **Actions → Release → Run workflow → main**.
 No hand-written version tag is needed. CI runs automatically on pushes to main
-and pull requests; release uses the same reusable quality workflow before publishing.
+and pull requests. Releases reuse CI and add native release builds before publishing.
 
 CI runs have no project-defined concurrency limit or automatic cancellation of
 older runs. Releases execute one at a time to avoid competing version/tag writes.
@@ -90,9 +90,10 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
    Semantic Release dry run calculates the proposed version. Prepare/publish plugins do
    not run; no tag, commit, changelog update or release is created at this stage.
 2. The quality workflow installs the published governor pinned in `.hannes-version`.
-   Each native runner stamps Cargo.toml/Cargo.lock before its `ci-native` Hannes
+   Each native runner stamps Cargo.toml/Cargo.lock before its `release-build` Hannes
    gate runs formatting, Clippy, tests, candidate build and executable smoke test.
-   The tooling, MSRV and audit execution points run once on Linux.
+   The CI workflow runs all 19 checks once on Linux through `check`, including
+   tooling, minimum Rust, dependency audits and security.
 3. Packaging verifies `hannes --version` matches the proposed version. It archives
    the tested executable, README and Unlicense, and records hashes, target and
    source commit as internal artifact metadata.

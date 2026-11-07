@@ -205,6 +205,7 @@ The command phrases are German and must be entered as shown, without quotes:
 | `--auto-approve` | `pass auf` | Approve the displayed integration changes without a prompt, including in CI. Defaults to off. |
 | `--geiz-ist-geil` | `mach was` | Run only checks; do not call an AI provider. |
 | `--at NAME` | `mach was` | Select a known execution point (default `pre-push`). |
+| `--progress=auto`, `--progress=plain`, `--progress=tty` | `mach was` | Progress display; defaults to `auto`. Terminal rows update in place; CI and redirected streams use append-only output. |
 | `--plan` | `mach was` | Preview what would run without executing rules or calling the provider. |
 | `--json` | `mach was --plan` | Print the plan or plan errors as JSON. |
 | `--details` | `was ist phase` | Show full findings and captured check output. |
@@ -220,6 +221,14 @@ environments share a Codex invocation.
 If neither checks nor reviews are defined, Hannes additionally prints
 `Du hast noch keine Regeln definiert, du Vogel!`. A successful empty run does not
 establish that your project passed any quality rules.
+
+During execution, each rule shows its short name, description, status and duration.
+An interactive terminal replaces running rows with their results. In CI, redirected
+output or `--progress=plain`, start and finish messages are appended without cursor
+controls. `auto` also uses plain output for `CI=true`, `CI=1` or `TERM=dumb`;
+`tty` explicitly requests redraw. Colors are controlled separately. Very narrow
+terminals and review batches larger than the screen fall back to plain output. Execution ends with one overall result line;
+use `hannes was ist phase --details` for saved output and full diagnostics.
 
 ### Run checks without AI
 
@@ -237,7 +246,7 @@ The whole configuration is still validated, including disabled and omitted rules
 
 ### Read results
 
-Progress goes to stderr; the final compact report goes to stdout. Redirecting
+Progress goes to stderr; the final result line goes to stdout. Redirecting
 `hannes mach was > report.txt` keeps progress visible in the terminal. Raw command
 output is saved instead of flooding the terminal.
 
@@ -443,6 +452,7 @@ points in the consumer, including unmapped custom points used by imports.
 | Field | Required / default | Meaning |
 | --- | --- | --- |
 | `id` | Required | Case-sensitive ID unique across checks/reviews in its source scope; 1–80 ASCII letters, digits, `-`, `_`; `hannes-` is reserved. |
+| `name` | Optional; `null` | Short display label; defaults to the original rule ID. 1–80 characters, no control characters or surrounding whitespace. |
 | `description` | Required | Nonblank explanation. |
 | `enabled` | Optional; `true` | False rules are validated but never executed or included in results. Plans list them under `disabled_rules`. |
 | `blocking` | Optional; `true` | A completed FAIL prevents success when true. ERROR is always fatal. |
@@ -450,6 +460,12 @@ points in the consumer, including unmapped custom points used by imports.
 | `parameters` | Optional; `{}` | Named parameter declarations; see below. |
 | `check` | Optional; `null` | Check implementation; required for a check rule and mutually exclusive with `review`. |
 | `review` | Optional; `null` | Review implementation; required for a review rule and mutually exclusive with `check`. |
+
+Names are display labels, not references: Rule Sets, parameters and providers
+continue to use IDs. Imported names default to their source-local ID. Duplicate
+names receive a short origin suffix and an occurrence number when necessary.
+Plans and reports save labels so status remains readable after configuration changes.
+Full technical IDs and import provenance are available in JSON and details.
 
 ### Rule parameters
 

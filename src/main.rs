@@ -7,7 +7,7 @@ use hannes::{
     report,
     terminal::{self, Tone},
 };
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 fn execute(cli: Cli) -> Result<i32> {
     let root = std::env::current_dir()?.canonicalize()?;
     let color = terminal::use_color(cli.no_color);
@@ -47,6 +47,7 @@ fn execute(cli: Cli) -> Result<i32> {
         Words::Mach {
             command:
                 Mach::Was {
+                    progress,
                     geiz_ist_geil,
                     at,
                     plan,
@@ -83,12 +84,16 @@ fn execute(cli: Cli) -> Result<i32> {
             }
             let progress_color = terminal::error_color(cli.no_color);
             let mut stderr = std::io::stderr().lock();
-            let _ = writeln!(
-                stderr,
-                "{}",
-                terminal::paint("Konfiguration prüfen …", Tone::Muted, progress_color)
+            let redraw = terminal::progress_redraw(
+                progress,
+                stderr.is_terminal(),
+                matches!(std::env::var("CI").as_deref(), Ok("true" | "1")),
+                std::env::var("TERM").is_ok_and(|term| term == "dumb"),
             );
-            let _ = stderr.flush();
+            let (width, height) = terminal::terminal_dimensions();
+            let mut renderer =
+                terminal::ProgressRenderer::new(redraw, progress_color, width, height);
+            let started = std::time::Instant::now();
             let project = config::load(&root)?;
             for diagnostic in &project.effective.diagnostics {
                 eprintln!("Hinweis: {}", terminal::clean(diagnostic));
@@ -116,8 +121,7 @@ fn execute(cli: Cli) -> Result<i32> {
                 &mut |event| {
                     // Progress must be visible before a slow command or Codex call finishes.
                     // Losing the progress stream must not prevent writing the report.
-                    let _ = stderr
-                        .write_all(terminal::render_progress(&event, progress_color).as_bytes());
+                    let _ = stderr.write_all(renderer.render(&event).as_bytes());
                     let _ = stderr.flush();
                 },
             )?;
@@ -131,7 +135,10 @@ fn execute(cli: Cli) -> Result<i32> {
                     )
                 );
             }
-            print!("{}", terminal::render(&report, color));
+            print!(
+                "{}",
+                terminal::render_outcome(&report, started.elapsed().as_millis() as u64, color)
+            );
             Ok(report.overall.exit_code())
         }
         Words::Was {

@@ -57,23 +57,20 @@ caller's environment. Checks neither install the governor nor repair project fil
 
 Every selected rule is mandatory. Each point preserves the exact check membership
 of its configured execution point. Checks run once per binding, ordered by ID. The
-[immutable migration fixture](../tests/fixtures/self-governance.json) records
-the previous commands, activation states, timeouts and selections; governance
+[governance fixture](../tests/fixtures/self-governance.json) records
+the commands, activation states, timeouts and required selections; governance
 acceptance compares the local checks in the published governor's actual plans
 with that evidence and separately verifies the imported commit-message and
 security Rules.
 
-| Previous selection → execution point | Required checks | Assignment |
-| --- | --- | --- |
-| pre-commit → pre-commit | 01-format, 02-docs | Own run_at |
-| commit-msg → commit-msg | 20-commit-message plus imported commit-message | Own run_at plus external conventional-commits |
-| pre-push → pre-push (default) | 01-format, 02-docs, 03-docs-tests, 04-governance-tests, 05-hooks-tests, 06-deploy-tests, 07-release-tests, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke plus imported secret-scan and sensitive-files | Own run_at plus tooling-regressions, native-validation and external security |
-| check | Imported secret-scan and sensitive-files | External security |
-| ci-native → ci-native | 01-format, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke | Own run_at plus native-validation |
-| ci-tooling → ci-tooling | 02-docs, 03-docs-tests, 04-governance-tests, 05-hooks-tests, 06-deploy-tests, 07-release-tests, 08-release-rules, 21-commit-range, 22-workflows | Own run_at plus tooling-regressions |
-| ci-msrv → ci-msrv | 23-msrv | Own run_at |
-| ci-audit → ci-audit | 24-rust-audit, 25-npm-audit | dependency-audits |
-| release-artifacts → release-artifacts | 30-release-artifacts | Own run_at |
+| Execution point | Required checks |
+| --- | --- |
+| pre-commit | 01-format, 02-docs |
+| commit-msg | 20-commit-message plus imported commit-message |
+| pre-push (default) | 01-format, 02-docs, 03-docs-tests, 04-governance-tests, 05-hooks-tests, 06-deploy-tests, 07-release-tests, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke plus imported secret-scan and sensitive-files |
+| check | All pre-push checks plus 21-commit-range, 22-workflows, 23-msrv, 24-rust-audit and 25-npm-audit: 19 rules total |
+| release-build | 01-format, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke |
+| release-artifacts | 30-release-artifacts |
 
 The [checks](../.hannes/checks) retain their validation commands, timeout settings
 and enabled state. Each Rule has an index.sh entrypoint that invokes the shared
@@ -90,7 +87,7 @@ These checks cannot all be meaningfully executed in an unprepared local checkout
 ```sh
 hannes mach was --at pre-commit
 hannes mach was --at pre-push --plan
-python3 scripts/run-execution-point.py ci-native
+python3 scripts/run-execution-point.py check
 hannes was ist phase --details
 ```
 
@@ -139,21 +136,32 @@ future work.
 
 ## CI, pinning and Renovate
 
-[.hannes-version](../.hannes-version) is the single exact governor pin. Workflows
-read it and pass the exact tag through the public [Action](../action.yml)'s
-`version` input, with `execution-point: check` and `run: 'false'` on Ubuntu.
-The Action downloads the release, verifies its checksum and installs outside the
-checkout. macOS release runners retain the [native installer](../scripts/install-governor.py),
-since the public Action initially supports Ubuntu only. Each governance job
-separately runs `hannes pass auf --auto-approve` to reconcile hooks and external
-rules, then runs its existing execution point. The Ubuntu tooling job additionally
-runs `check` after installing checksum-verified Gitleaks 8.30.1; Python 3 is already
-prepared. It uploads security evidence as `quality-check` before ci-tooling
-replaces the current report. The release publisher installs the same Gitleaks
-binary before managed commit/push hooks can run. Other jobs do not execute the
-Security Rule Set. No governance job installs the governor twice.
-The execution wrapper rejects candidates inside the checkout and checks CI's
-executable version against the pin.
+[.hannes-version](../.hannes-version) is the single exact governor pin. The
+[CI workflow](../.github/workflows/ci.yml) has one **Quality checks** job on Ubuntu
+x64. It prepares Python, Node and Go, then explicitly prepares Rust toolchains,
+locked dependencies, actionlint, cargo-audit and checksum-verified Gitleaks through
+[scripts/prepare-ci.sh](../scripts/prepare-ci.sh). Preparation is outside Hannes
+Rule execution. The job installs the pinned published governor through the public
+[Action](../action.yml), resolves imports once and invokes `check` once.
+One `quality-check` artifact preserves reports even on failure.
+
+The separate **GitHub Action compatibility** matrix tests the public Action on
+Ubuntu x64 and ARM64 using a disposable consumer. It verifies PATH, install-only
+mode, custom selection and failure propagation. These runner-specific tests remain
+separate from repository checks.
+
+The [release-build workflow](../.github/workflows/quality.yml) runs only for
+releases, with four native runners and the `release-build` execution point.
+The release workflow also reuses CI before publication. The publisher installs
+Gitleaks for its managed pre-push hook. macOS release runners use the
+[native installer](../scripts/install-governor.py). The execution wrapper rejects
+candidate governors inside the checkout and checks CI's version against the pin.
+
+The current v0.9.0 governor supports the consolidated execution points but predates
+the new display names and progress modes. Repository rule documents keep using
+its supported fields until a compatible release is published and the pin is
+updated. CLI acceptance tests exercise the candidate's new display behavior in
+disposable repositories; candidate builds never govern this checkout.
 
 The initial Action was published on main at
 [`2d3cac2324ce54f076c7090e5bf80969eee4b37e`](https://github.com/christianpflugradt/hannes/commit/2d3cac2324ce54f076c7090e5bf80969eee4b37e)
@@ -162,19 +170,13 @@ references. This immutable publication revision contains `action.yml`; it has no
 separate Action release tag or compiled artifact. No major-version tag is created.
 The Action revision and CLI release pin are independent.
 
-The reusable quality workflow also runs a disposable consumer fixture on Ubuntu
-x64 and ARM64. It checks installation of the pinned CLI release, PATH in a subsequent step,
-install-only mode, a custom execution point and the default execution/failure path
-through the public Action. The expected failure is asserted explicitly; all
-repository governance jobs and release gates remain required.
-
 The regex custom manager in [renovate.json](../renovate.json) retains the
 GitHub-releases datasource and disabled automerge. Pin updates remain normal
 reviewed dependency PRs. A format-breaking update may require configuration
 changes; every execution point must validate and plan with the proposed release.
 
-Push/PR jobs retain the native Linux x64, tooling, MSRV and audit checks. Releases
-reuse those jobs and run native validation on all four supported hosts. Tool
+Push/PR checks retain native Linux x64, tooling, MSRV and audit coverage. Releases
+reuse that CI workflow and run native validation on all four supported hosts. Tool
 installation, dependency preparation, release stamping, packaging and publication
 remain separate operations. Before publication, the publisher installs stable Rust
 with rustfmt and Clippy and fetches locked Cargo dependencies. Its automated

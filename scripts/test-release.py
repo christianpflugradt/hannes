@@ -151,12 +151,14 @@ class ReleaseTests(unittest.TestCase):
 
     def test_native_matrix_and_archive_contract_cover_the_same_platforms(self):
         workflow = (SCRIPTS.parent / ".github/workflows/quality.yml").read_text()
-        matrices = re.findall(r"'([\[][^']+)'", workflow)
-        release, ordinary = [json.loads(value) for value in matrices]
+        release = [dict(os=os_name, target=target) for os_name, target in
+                   re.findall(r"- \{os: ([^,]+), target: ([^}]+)\}", workflow)]
         self.assertEqual({entry["target"] for entry in release}, set(verification.TARGETS))
         self.assertEqual(len(release), len(verification.TARGETS))
         self.assertIn(dict(os="ubuntu-24.04-arm", target="aarch64-unknown-linux-gnu"), release)
-        self.assertEqual(ordinary, [dict(os="ubuntu-24.04", target="x86_64-unknown-linux-gnu")])
+        ci = (SCRIPTS.parent / ".github/workflows/ci.yml").read_text().split("  action-consumer:")[0]
+        self.assertNotIn("matrix:", ci)
+        self.assertIn("BUILD_TARGET: x86_64-unknown-linux-gnu", ci)
 
     def test_artifact_gate_blocks_missing_corrupt_version_and_source(self):
         governor = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")

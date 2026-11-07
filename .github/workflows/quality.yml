@@ -1,184 +1,27 @@
-name: Quality
+name: Release builds
 
 on:
   workflow_call:
     inputs:
       release-version:
-        description: Optional version to stamp, test and package for a release
+        description: Version to stamp, test and package for a release
         type: string
-        default: ''
+        required: true
 
 permissions:
   contents: read
 
 jobs:
-  tooling:
-    name: Workflow and release tooling
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: '3.15'
-      - name: Read the exact governor release pin
-        id: governor
-        shell: bash
-        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
-      - name: Install published Hannes through the public Action
-        if: runner.os == 'Linux'
-        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
-        with:
-          version: ${{ steps.governor.outputs.version }}
-          execution-point: check
-          run: 'false'
-      - name: Reconcile declared Git hooks and external rules
-        run: hannes pass auf --auto-approve
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: '26'
-          package-manager-cache: false
-      - run: npm ci --ignore-scripts
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: stable
-          cache: false
-      - name: Install workflow linter
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Install pinned Gitleaks for security checks
-        run: |
-          curl --fail --silent --show-error --location \
-            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
-            --output "$RUNNER_TEMP/gitleaks.tar.gz"
-          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
-          mkdir -p "$RUNNER_TEMP/gitleaks-bin"
-          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks-bin" gitleaks
-          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
-      - name: Run security quality gate
-        run: python3 scripts/run-execution-point.py check
-      - name: Upload security evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: quality-check
-          path: .hannes/reports/*.json
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Run tooling quality gate
-        env:
-          COMMIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          COMMIT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: python3 scripts/run-execution-point.py ci-tooling
-      - name: Upload Hannes evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: quality-ci-tooling
-          path: .hannes/reports/*.json
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 7
-
-  audit:
-    name: Dependency audits
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: '3.15'
-      - name: Read the exact governor release pin
-        id: governor
-        shell: bash
-        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
-      - name: Install published Hannes through the public Action
-        if: runner.os == 'Linux'
-        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
-        with:
-          version: ${{ steps.governor.outputs.version }}
-          execution-point: check
-          run: 'false'
-      - name: Reconcile declared Git hooks and external rules
-        run: hannes pass auf --auto-approve
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: '26'
-          package-manager-cache: false
-      - run: npm ci --ignore-scripts
-      - run: rustup toolchain install stable --profile minimal
-      - run: cargo +stable install cargo-audit --version 0.22.2 --locked
-      - name: Run dependency audit gate
-        run: python3 scripts/run-execution-point.py ci-audit
-      - name: Upload Hannes evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: quality-ci-audit
-          path: .hannes/reports/*.json
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 7
-
-  msrv:
-    name: Minimum Rust 1.85
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: '3.15'
-      - name: Read the exact governor release pin
-        id: governor
-        shell: bash
-        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
-      - name: Install published Hannes through the public Action
-        if: runner.os == 'Linux'
-        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
-        with:
-          version: ${{ steps.governor.outputs.version }}
-          execution-point: check
-          run: 'false'
-      - name: Reconcile declared Git hooks and external rules
-        run: hannes pass auf --auto-approve
-      - run: rustup toolchain install 1.85.0 --profile minimal
-      - run: cargo +1.85.0 fetch --locked
-      - name: Run minimum Rust gate
-        run: python3 scripts/run-execution-point.py ci-msrv
-      - name: Upload Hannes evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: quality-ci-msrv
-          path: .hannes/reports/*.json
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 7
-
   native:
-    name: Native / ${{ matrix.target }}
+    name: Release build / ${{ matrix.target }}
     strategy:
       fail-fast: false
       matrix:
-        include: >-
-          ${{ fromJSON(inputs.release-version != '' && '[
-            {"os":"macos-15","target":"aarch64-apple-darwin"},
-            {"os":"macos-15-intel","target":"x86_64-apple-darwin"},
-            {"os":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"},
-            {"os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-gnu"}
-          ]' || '[{"os":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"}]') }}
+        include:
+          - {os: macos-15, target: aarch64-apple-darwin}
+          - {os: macos-15-intel, target: x86_64-apple-darwin}
+          - {os: ubuntu-24.04, target: x86_64-unknown-linux-gnu}
+          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     env:
@@ -207,7 +50,6 @@ jobs:
       - name: Reconcile declared Git hooks and external rules
         run: hannes pass auf --auto-approve
       - name: Stamp planned release version before verification
-        if: inputs.release-version != ''
         env:
           RELEASE_VERSION: ${{ inputs.release-version }}
         run: python3 scripts/set-release-version.py "$RELEASE_VERSION"
@@ -217,98 +59,23 @@ jobs:
           rustup target add --toolchain stable ${{ matrix.target }}
           cargo +stable fetch --locked
       - name: Run native quality gate
-        run: python3 scripts/run-execution-point.py ci-native
+        run: python3 scripts/run-execution-point.py release-build
       - name: Upload Hannes evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: quality-ci-native-${{ matrix.target }}
+          name: quality-release-build-${{ matrix.target }}
           path: .hannes/reports/*.json
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
       - name: Package tested candidate executable
-        if: inputs.release-version != ''
         env:
           RELEASE_TAG: v${{ inputs.release-version }}
         run: python3 scripts/package-release.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: inputs.release-version != ''
         with:
           name: hannes-${{ matrix.target }}
           path: dist/
           if-no-files-found: error
           retention-days: 7
-
-  action-consumer:
-    name: Public Action / ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Read the exact governor release pin
-        id: governor
-        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
-      - name: Prepare an isolated consumer configuration
-        run: |
-          # This disposable checkout tests the public Action without repository imports.
-          mv .hannes "$RUNNER_TEMP/original-hannes"
-          mkdir -p .hannes/checks/consumer
-          cat > .hannes/config.toml <<'TOML'
-          project = "Action_Consumer"
-          [execution_points]
-          custom = ["action-test"]
-          TOML
-          cat > .hannes/checks/consumer/rule.toml <<'TOML'
-          id = "consumer"
-          description = "Record the selected point and return the requested test status"
-          run_at = ["check", "action-test"]
-          [check]
-          entrypoint = "index.sh"
-          interpreter = "sh"
-          TOML
-          cat > .hannes/checks/consumer/index.sh <<'SH'
-          printf '%s\n' "$HANNES_EXECUTION_POINT" >> "$RUNNER_TEMP/action-points"
-          exit "${ACTION_CHECK_STATUS:-0}"
-          SH
-      - name: Install only through the public Action
-        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
-        with:
-          version: ${{ steps.governor.outputs.version }}
-          execution-point: check
-          run: 'false'
-      - name: Verify PATH and skipped execution in a subsequent step
-        env:
-          EXPECTED_VERSION: ${{ steps.governor.outputs.version }}
-        run: |
-          test "$(hannes --version)" = "hannes ${EXPECTED_VERSION#v}"
-          test ! -e "$RUNNER_TEMP/action-points"
-      - name: Run a specified execution point through the public Action
-        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
-        with:
-          version: ${{ steps.governor.outputs.version }}
-          execution-point: action-test
-          run: 'true'
-      - name: Verify default execution propagates a failing check
-        id: failing
-        continue-on-error: true
-        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
-        env:
-          ACTION_CHECK_STATUS: '1'
-        with:
-          version: ${{ steps.governor.outputs.version }}
-          execution-point: check
-      - name: Assert the expected failure and executed points
-        if: always()
-        env:
-          FAILURE_OUTCOME: ${{ steps.failing.outcome }}
-        run: |
-          test "$FAILURE_OUTCOME" = failure
-          printf 'action-test\ncheck\n' > "$RUNNER_TEMP/expected-points"
-          diff -u "$RUNNER_TEMP/expected-points" "$RUNNER_TEMP/action-points"

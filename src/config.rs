@@ -83,6 +83,7 @@ pub struct ReviewContext {
 #[derive(Debug, Clone, Serialize)]
 pub struct Check {
     pub id: String,
+    pub name: String,
     pub description: String,
     pub enabled: bool,
     pub blocking: bool,
@@ -95,6 +96,7 @@ pub struct Check {
 #[derive(Debug, Clone, Serialize)]
 pub struct Review {
     pub id: String,
+    pub name: String,
     pub description: String,
     pub enabled: bool,
     pub blocking: bool,
@@ -120,6 +122,7 @@ fn default_timeout() -> u64 {
 #[serde(deny_unknown_fields)]
 pub struct RuleDefinition {
     pub id: String,
+    pub name: Option<String>,
     pub description: String,
     #[serde(default = "default_true")]
     pub enabled: bool,

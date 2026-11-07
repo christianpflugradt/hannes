@@ -1,5 +1,13 @@
 use clap::{Parser, Subcommand};
 
+#[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
+pub enum ProgressMode {
+    #[default]
+    Auto,
+    Plain,
+    Tty,
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "hannes",
@@ -55,6 +63,13 @@ pub enum Pass {
 #[derive(Debug, Subcommand)]
 pub enum Mach {
     Was {
+        #[arg(
+            long,
+            value_enum,
+            default_value = "auto",
+            help = "Fortschrittsdarstellung: auto, plain oder tty"
+        )]
+        progress: ProgressMode,
         #[arg(long, help = "Nur deterministische Checks ausführen, ohne LLM-Aufruf")]
         geiz_ist_geil: bool,
         #[arg(

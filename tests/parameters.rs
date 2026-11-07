@@ -250,8 +250,8 @@ fn disabled_rules_do_not_resolve_parameters_or_missing_implementations() {
 #[test]
 fn outcomes_distinguish_violations_from_missing_processes_scripts_and_signals() {
     for (script, interpreter, status, reason) in [
-        ("exit 0", "sh", Status::Pass, "exited"),
-        ("exit 1", "sh", Status::Fail, "exited"),
+        ("exit 0", "sh", Status::Pass, ""),
+        ("exit 1", "sh", Status::Fail, "violation"),
         ("echo details >&2; exit 2", "sh", Status::Error, "exit 2"),
         ("exit 7", "sh", Status::Fail, "Unexpected"),
         ("kill -TERM $$", "sh", Status::Error, "signal"),
@@ -276,6 +276,10 @@ fn outcomes_distinguish_violations_from_missing_processes_scripts_and_signals() 
             "{}",
             report.results[0].reason
         );
+        if status == Status::Pass {
+            assert!(report.results[0].reason.is_empty());
+            assert_eq!(report.results[0].exit_code, Some(0));
+        }
         if script.contains("details") {
             assert!(
                 report.results[0]

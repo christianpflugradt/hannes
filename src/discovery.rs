@@ -162,6 +162,15 @@ fn load_rules(
         );
         let path = dir.join("rule.toml");
         let rule: RuleDefinition = document(root, &path)?;
+        let name = rule.name.unwrap_or_else(|| rule.id.clone());
+        ensure!(
+            !name.is_empty()
+                && name.chars().count() <= MAX_RULE_NAME_CHARS
+                && name.trim() == name
+                && !name.chars().any(char::is_control),
+            "{}: name must contain 1..={MAX_RULE_NAME_CHARS} characters without control characters or surrounding whitespace",
+            path.display()
+        );
         match (kind.as_str(), rule.check, rule.review) {
             ("checks", Some(check), None) => {
                 let entrypoint = resource(root, &dir, &check.entrypoint)?;
@@ -175,6 +184,7 @@ fn load_rules(
                     path.clone(),
                     Check {
                         id: rule.id.clone(),
+                        name,
                         description: rule.description,
                         enabled: rule.enabled,
                         blocking: rule.blocking,
@@ -213,6 +223,7 @@ fn load_rules(
                     path.clone(),
                     Review {
                         id: rule.id.clone(),
+                        name,
                         description: rule.description,
                         enabled: rule.enabled,
                         blocking: rule.blocking,
@@ -285,6 +296,7 @@ pub(crate) fn init(root: &Path) -> Result<usize> {
     let check = |id: &str, description: &str, enabled: bool| -> Result<String> {
         Ok(toml::to_string(&RuleDefinition {
             id: id.into(),
+            name: None,
             description: description.into(),
             enabled,
             blocking: true,
@@ -300,6 +312,7 @@ pub(crate) fn init(root: &Path) -> Result<usize> {
     };
     let review = RuleDefinition {
         id: "product-consistency".into(),
+        name: None,
         description: "Evaluate behavior against documented expectations".into(),
         enabled: false,
         blocking: true,

@@ -2,7 +2,7 @@ project = "hannes"
 max_display_files = 5
 
 [execution_points]
-custom = ["ci-native", "ci-tooling", "ci-msrv", "ci-audit", "release-artifacts"]
+custom = ["release-build", "release-artifacts"]
 
 [[imports]]
 git = "https://github.com/christianpflugradt/christianpflugradt-rulesets.git"

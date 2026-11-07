@@ -135,31 +135,6 @@
     }
   },
   "execution_points": {
-    "ci-audit": [
-      "24-rust-audit",
-      "25-npm-audit"
-    ],
-    "ci-msrv": [
-      "23-msrv"
-    ],
-    "ci-native": [
-      "01-format",
-      "10-clippy",
-      "11-rust-tests",
-      "12-native-build",
-      "13-native-smoke"
-    ],
-    "ci-tooling": [
-      "02-docs",
-      "03-docs-tests",
-      "04-governance-tests",
-      "05-hooks-tests",
-      "06-deploy-tests",
-      "07-release-tests",
-      "08-release-rules",
-      "21-commit-range",
-      "22-workflows"
-    ],
     "commit-msg": [
       "20-commit-message"
     ],
@@ -183,6 +158,32 @@
     ],
     "release-artifacts": [
       "30-release-artifacts"
+    ],
+    "check": [
+      "01-format",
+      "02-docs",
+      "03-docs-tests",
+      "04-governance-tests",
+      "05-hooks-tests",
+      "06-deploy-tests",
+      "07-release-tests",
+      "08-release-rules",
+      "10-clippy",
+      "11-rust-tests",
+      "12-native-build",
+      "13-native-smoke",
+      "21-commit-range",
+      "22-workflows",
+      "23-msrv",
+      "24-rust-audit",
+      "25-npm-audit"
+    ],
+    "release-build": [
+      "01-format",
+      "10-clippy",
+      "11-rust-tests",
+      "12-native-build",
+      "13-native-smoke"
     ]
   }
 }

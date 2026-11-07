@@ -1,7 +1,7 @@
 id = "23-msrv"
 description = "Check minimum supported Rust 1.85"
 enabled = true
-run_at = ["ci-msrv"]
+run_at = ["check"]
 
 [check]
 entrypoint = "index.sh"

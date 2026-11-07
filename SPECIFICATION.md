@@ -185,8 +185,7 @@ Imported CLI definitions follow EXT-001's existing explicit import trust boundar
 refresh and validate before publication, immutable offline cache, no local overrides.
 Imported commands have the consumer's permissions, just like imported checks.
 Generic CLIs provide no sandbox or Codex MCP controls; consumers must trust their
-tools and configure read-only behavior themselves. No HTTP transport, retries,
-file triggers or new orchestration is introduced.
+tools and configure read-only behavior themselves. No HTTP transport, retries or new orchestration is introduced.
 
 Acceptance: `tests/cli_providers.rs` covers configuration, stdin/JSON execution,
 runtime gating, isolation, process errors and timeout cleanup; PROV-001 retains
@@ -515,7 +514,7 @@ requests carry no token. Missing releases/assets, network/API failures and missi
 malformed or mismatched checksums fail installation and preserve the installed copy.
 Acceptance: `scripts/test_deploy.py` covers direct pinned URLs, optional API
 authentication, safe diagnostics and installation failures with mocked downloads.
-The governor is pinned to published v0.10.0. Repository rules use the unversioned,
+The governor uses the exact published release in .hannes-version. Repository rules use the unversioned,
 self-contained Rule model and fixed Git-hook execution points.
 
 The three Git-backed built-in points serve Git hooks. Normal CI uses one check
@@ -525,8 +524,8 @@ directly, without local Rule Sets. Pre-commit runs formatting and documentation
 validation; pre-push runs the complete local suite, keeping all Rust tests in
 one Rule. Python helper tests use one unittest discovery Rule and JavaScript
 release tests use one npm Rule. All three test suites, workflow validation and
-minimum-Rust checks run at pre-push and again in CI. The repository has 15 local
-Rules; dependency audits remain at check with advisory access. Agents use Git
+minimum-Rust checks run at pre-push and again in CI. The repository has 16 local
+Checks and one conditional document Review; dependency audits remain at check with advisory access. Agents use Git
 commit/push feedback instead of manually running checks,
 tests, linters or builds. They may read saved reports without rerunning Rules.
 The manual mise check task delegates to published Hannes at pre-push.
@@ -551,7 +550,8 @@ PolyForm-Noncommercial-1.0.0 or Unlicense. Hannes uses the exact Unlicense text.
 The Rule reads the working tree at check and HEAD at pre-push. Missing or
 nonmatching licenses produce FAIL; technical errors produce ERROR.
 Acceptance: scripts/test_governance.py covers the import and effective selection.
-Checks remain mandatory and no reviews are enabled. Missing tools and errors
+Checks remain mandatory. The agents-quality Review runs at check only when its
+file trigger matches, as defined in GOV-001. Missing tools and errors
 block success. Setup, dependency installation and release publication remain
 outside rule execution.
 
@@ -672,6 +672,26 @@ CI runs them through check. The manual `mise docs:check` and `mise check` tasks
 remain available to developers; agents rely on Git hooks. Automated checks
 complement editorial review; they do not prove prose understandable.
 
+## GOV-001: AGENTS.md quality review
+
+The repository example uses a blocking command Check to limit root AGENTS.md to
+1200 words. Words are maximal runs separated by ASCII whitespace (space, tab,
+LF, CR, vertical tab and form feed), including Markdown syntax and code. Exactly
+1200 passes; excess reports the actual count and limit. The initial document has
+1050 words and is not shortened for this gate.
+
+A named generic CLI Gemini provider evaluates the complete document against a
+concise rubric, using whole-file context and the existing structured contract.
+Only substantive, evidenced governance defects warrant FAIL. The review is
+non-blocking; technical ERROR still blocks. The existing global check gate applies.
+File triggers select root AGENTS.md or the rubric; other changes omit the review
+with trigger_not_matched. CI uses an explicit verified baseline, preferring the
+PR merge-base. Summaries distinguish PASS, non-blocking FAIL, ERROR and SKIP.
+No live provider is required by automated tests.
+
+Acceptance: `scripts/test_agents_review.py` and `tests/agents_review.rs` cover the
+repository example and its local mocked provider.
+
 ## Acceptance coverage and change process
 
 Each essential requirement has a stable ID and representative acceptance tests.
@@ -683,6 +703,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
+| GOV-001 | `tests/agents_review.rs::repository_review_uses_complete_context_and_triggered_cli` |
 | TRIG-001 | `tests/review_triggers.rs::preview_and_execution_agree_and_nonmatches_need_no_provider_or_context` |
 | PROV-002 | `tests/cli_providers.rs::stdin_results_and_provider_isolation` |
 | PROV-001 | `tests/named_providers.rs::named_references_load_without_changing_legacy_defaults` |

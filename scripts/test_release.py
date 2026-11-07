@@ -175,8 +175,10 @@ class ReleaseTests(unittest.TestCase):
                 (root / ".gitignore").write_text("dist/\n.hannes/reports/\n")
                 dist = root / "dist"
                 (dist / "metadata").mkdir(parents=True)
-                for file in ("README.md", "LICENSE"):
+                for file in ("README.md", "LICENSE", "AGENTS.md"):
                     shutil.copy2(SCRIPTS.parent / file, root / file)
+                (root / "docs").mkdir()
+                shutil.copy2(SCRIPTS.parent / "docs/agents-review-rubric.md", root / "docs/agents-review-rubric.md")
                 for target in verification.TARGETS:
                     name = f"hannes-v1.2.3-{target}"
                     data = b"fixture binary already verified on its native runner"

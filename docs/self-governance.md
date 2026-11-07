@@ -3,11 +3,12 @@
 Hannes checks this repository using an installed published Hannes executable.
 Builds under target/ are candidates under test and never become the governor.
 The repository uses local Check definitions and a pinned external commit-message
-Rule Set and Security Rule Set, with no reviews or provider calls.
+Rule Set and Security Rule Set. A conditional AGENTS.md quality Review uses Gemini
+only at check; Git hooks and native release builds remain checks-only.
 
-The exact governor pin in [.hannes-version](../.hannes-version) is v0.10.0. This
-published release supports direct command arrays, shared script entrypoints and
-pass auf --auto-approve for unattended hook reconciliation.
+The exact published governor pin is recorded in [.hannes-version](../.hannes-version).
+It must support named CLI providers, runtime requirements and file-change triggers,
+as well as direct commands and unattended hook reconciliation.
 
 ## Local setup
 
@@ -68,14 +69,14 @@ security and license Rules.
 
 | Execution point | Required checks |
 | --- | --- |
-| pre-commit | 01-format, 02-docs |
+| pre-commit | 01-format, 02-docs, 04-agents-size |
 | commit-msg | 20-commit-message plus imported commit-message |
-| pre-push (default) | 01-format, 02-docs, 03-python-tests, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke, 22-workflows, 23-msrv plus imported license, secret-scan and sensitive-files |
-| check | All pre-push checks plus 21-commit-range, 24-rust-audit and 25-npm-audit: 16 rules total |
+| pre-push (default) | 01-format, 02-docs, 03-python-tests, 04-agents-size, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke, 22-workflows, 23-msrv plus imported license, secret-scan and sensitive-files |
+| check | All pre-push checks plus 21-commit-range, 24-rust-audit and 25-npm-audit: 17 checks total; conditional agents-quality Review |
 | release-build | 01-format, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke |
 | release-artifacts | 30-release-artifacts |
 
-The 15 local [checks](../.hannes/checks) invoke tools directly through command
+The 16 local [checks](../.hannes/checks) invoke tools directly through command
 arrays. Python scripts without arguments use entrypoint and interpreter instead.
 There are no index.sh launchers. Each local Rule declares its execution points
 directly; this repository defines no local Rule Sets. External Rule Sets supply
@@ -102,7 +103,7 @@ For manual developer use:
 ```sh
 hannes mach was --at pre-commit
 hannes mach was --at pre-push --plan
-python3 scripts/run-execution-point.py check
+HANNES_CHANGE_BASE="<baseline-commit>" python3 scripts/run-execution-point.py check --reviews
 hannes was ist phase --details
 ```
 
@@ -203,8 +204,7 @@ Both installers download the pinned release's assets directly, without a GitHub
 Releases API request. Missing tags, assets or valid checksums fail installation;
 there is no fallback to latest. These installation steps need no GitHub token.
 
-The v0.10.0 governor supports the repository's command arrays and shared script
-paths. Candidate binaries remain confined to disposable acceptance fixtures and
+The pinned governor supports the repository's named CLI provider and file triggers. Candidate binaries remain confined to disposable acceptance fixtures and
 smoke tests; they never govern this checkout.
 
 The initial Action was published on main at
@@ -238,3 +238,13 @@ point, required rules, source state and results. The [execution wrapper](../scri
 adds execution.json with governor version/digest, execution point, checked commit
 and exit code. Managed hooks and direct CLI invocations write the ordinary report;
 the wrapper supplies companion evidence for CI and mise invocations.
+
+## Conditional document review
+
+See [AGENTS.md quality review](agents-quality-review.md) for the 1200-word gate,
+whole-document rubric evaluation, named Gemini provider, local execution and CI
+summary. The existing check point runs both checks and triggered reviews; the
+execution wrapper's --reviews option enables full execution there. Its default
+remains checks-only for hooks and native release points. CI sets an event baseline,
+installs Gemini CLI and supplies its optional secret only during execution.
+A semantic FAIL is non-blocking; a technical ERROR fails the job.

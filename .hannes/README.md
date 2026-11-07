@@ -4,9 +4,10 @@ This repository uses unversioned, self-contained deterministic rules and pinned
 external commit-message and Security Rule Sets at six execution points, plus
 the unpinned repository-conventions Rule Set at check and pre-push. Its only
 Rule compares LICENSE against the bundled license references byte-for-byte.
-No reviews or provider calls run.
+A conditional AGENTS.md quality Review runs only at check through a named Gemini
+CLI provider. Git hooks and release-build points select checks only.
 
-`checks/*/rule.toml` defines 15 local Rules using direct command arrays or Python
+`checks/*/rule.toml` defines 16 local Rules using direct command arrays or Python
 file entrypoints with an explicit interpreter. Cargo, Python helper and JavaScript
 tests each have one Rule and run at pre-push and again in CI. Cargo build, test,
 Clippy and MSRV commands and npm tests explicitly select offline mode.
@@ -23,7 +24,8 @@ hannes mach was --at pre-commit --plan
 hannes was ist phase --details
 ```
 
-The governor is pinned to published Hannes v0.10.0, which supports direct commands and shared script paths.
+The exact published governor pin is recorded in .hannes-version. It must support
+named CLI providers and file-change triggers.
 Do not use a candidate built from this checkout as the governor.
 Agents rely on pre-commit and pre-push feedback instead of running checks manually.
 The manual `mise check` task remains available to developers and delegates to
@@ -32,3 +34,7 @@ Hannes at pre-push.
 See [repository self-integration](../docs/self-governance.md) for setup, required
 coverage, reports and CI. The general [configuration reference](../docs/configuration.md)
 describes the schema. Reports remain ignored.
+
+The blocking 04-agents-size Check limits AGENTS.md to 1200 words. The
+[quality-review example](../docs/agents-quality-review.md) explains counting,
+full-document context, the rubric, Gemini setup, triggers and CI summaries.

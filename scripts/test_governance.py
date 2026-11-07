@@ -28,7 +28,7 @@ def definitions():
         assert rule["id"] not in checks
         checks[rule["id"]] = rule
     assert not list((ROOT / ".hannes/rule-sets").glob("*.toml")), "Local rules declare their execution points directly"
-    assert not list((ROOT / ".hannes/reviews").glob("*/rule.toml")), "Self-integration must not call a provider"
+    assert [p.parent.name for p in (ROOT / ".hannes/reviews").glob("*/rule.toml")] == ["agents-quality"]
     assert not list((ROOT / ".hannes/checks").glob("*.toml")), "Obsolete check documents must be removed"
     assert not (ROOT / ".hannes/rule-sets.toml").exists(), "Obsolete rule-set document must be removed"
     return checks
@@ -99,7 +99,7 @@ class GovernanceTests(unittest.TestCase):
         self.assertFalse((ROOT / ".hannes/checks/secret-scan").exists())
         self.assertFalse((ROOT / ".hannes/checks/sensitive-files").exists())
         workflow = (ROOT / ".github/workflows/ci.yml").read_text().split("  action-consumer:")[0]
-        run = "run: python3 scripts/run-execution-point.py check"
+        run = "run: python3 scripts/run-execution-point.py check --reviews"
         self.assertEqual(workflow.count(run + "\n"), 1)
         self.assertLess(workflow.index("actions/setup-python@"), workflow.index(run))
         self.assertLess(workflow.index("bash scripts/prepare-ci.sh"), workflow.index(run))
@@ -133,11 +133,11 @@ class GovernanceTests(unittest.TestCase):
         self.assertFalse(Path(executable).resolve().is_relative_to(ROOT))
         for point, expected in BASELINE["execution_points"].items():
             with self.subTest(point=point):
-                result = subprocess.run([executable, "mach", "was", "--at", point, "--plan", "--json"], cwd=ROOT, capture_output=True, text=True)
+                result = subprocess.run([executable, "mach", "was", "--at", point, "--plan", "--json"], cwd=ROOT, env=dict(os.environ, HANNES_CHANGE_BASE="HEAD"), capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
                 plan = json.loads(result.stdout)
                 self.assertEqual(plan["at"], point)
-                local = [rule for rule in plan["scheduled"] if not rule["origin"].get("external")]
+                local = [rule for rule in plan["scheduled"] if not rule["origin"].get("external") and rule["kind"] == "check"]
                 imported = [rule for rule in plan["scheduled"] if rule["origin"].get("external")]
                 self.assertEqual([rule["id"] for rule in local], sorted(expected))
                 expected_rules = {"commit-message"} if point == "commit-msg" else (
@@ -154,9 +154,11 @@ class GovernanceTests(unittest.TestCase):
                     else:
                         self.assertEqual(declaration["ref"], "main")
                         self.assertRegex(origin["commit"], r"^[0-9a-f]{40}$")
-                self.assertEqual(set(plan["required_ids"]), set(expected) | {rule["id"] for rule in imported})
-                self.assertEqual(plan["planned_model_calls"], 0)
-                self.assertFalse(plan["omitted"])
+                reviews = [rule for rule in plan["scheduled"] if rule["kind"] == "review"]
+                self.assertEqual([rule["id"] for rule in reviews], ["agents-quality"] if point == "check" and reviews else [])
+                self.assertEqual(set(plan["required_ids"]), set(expected) | {rule["id"] for rule in imported + reviews})
+                self.assertEqual(plan["planned_model_calls"], len(reviews))
+                self.assertTrue(all(item["reason"] == "trigger_not_matched" for item in plan["omitted"]))
 
     def test_ci_installs_pinned_governor_and_uploads_failure_reports(self):
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -167,7 +169,7 @@ class GovernanceTests(unittest.TestCase):
         self.assertNotIn("matrix:", checks)
         self.assertEqual(checks.count("scripts/run-execution-point.py"), 1)
         self.assertEqual(checks.count("run: hannes pass auf --auto-approve"), 1)
-        self.assertEqual(checks.count("if: always()"), 1)
+        self.assertEqual(checks.count("if: always()"), 2)
         self.assertEqual(checks.count("include-hidden-files: true"), 1)
         self.assertIn("name: GitHub Action compatibility /", ci)
         self.assertIn("os: [ubuntu-24.04, ubuntu-24.04-arm]", ci)

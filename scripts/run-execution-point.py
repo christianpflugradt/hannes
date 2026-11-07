@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 
-def run(point):
+def run(point, reviews=False):
     root = Path.cwd().resolve()
     reports = root / ".hannes/reports"
     reports.mkdir(exist_ok=True)
@@ -33,7 +33,10 @@ def run(point):
     env = dict(os.environ, HANNES_EXECUTABLE=str(executable))
     if point in ("pre-commit", "commit-msg", "pre-push"):
         env.update(CARGO_NET_OFFLINE="true", npm_config_offline="true", RUSTUP_AUTO_INSTALL="0")
-    result = subprocess.run([str(executable), "mach", "was", "--at", point, "--geiz-ist-geil"], env=env)
+    args = [str(executable), "mach", "was", "--at", point]
+    if not reviews:
+        args.append("--geiz-ist-geil")
+    result = subprocess.run(args, env=env)
     report_path = reports / "last.json"
     fresh_report = report_path.exists() and report_path.stat().st_mtime_ns != previous_report
     report = json.loads(report_path.read_text()) if fresh_report else None
@@ -48,8 +51,8 @@ def run(point):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 2 or not all(c.isalnum() or c == "-" for c in sys.argv[1]):
-            raise ValueError("Usage: python3 scripts/run-execution-point.py NAME")
-        sys.exit(run(sys.argv[1]))
+        if len(sys.argv) not in (2, 3) or not all(c.isalnum() or c == "-" for c in sys.argv[1]) or (len(sys.argv) == 3 and sys.argv[2] != "--reviews"):
+            raise ValueError("Usage: python3 scripts/run-execution-point.py NAME [--reviews]")
+        sys.exit(run(sys.argv[1], reviews=len(sys.argv) == 3))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         sys.exit(f"Hannes execution failed: {error}")

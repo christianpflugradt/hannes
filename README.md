@@ -1109,10 +1109,15 @@ is listed in the [TODOs](docs/todo/README.md).
 
 ## Development
 
-The governor is pinned to published Hannes v0.10.0. See
+The governor uses the exact published release in `.hannes-version`. See
 [repository self-integration](docs/self-governance.md) for setup and coverage.
 The `repository-conventions` Rule Set tracks `main` and checks LICENSE against
 its permitted reference texts at `pre-push` and `check`.
+
+The [AGENTS.md quality-review example](docs/agents-quality-review.md) combines a
+blocking 1200-word limit with a conditional, non-blocking Gemini review at `check`.
+It receives the complete document and rubric; provider errors still block CI.
+Git hooks need no Gemini credentials.
 
 This repository's deterministic quality checks run through an installed published
 Hannes release. Install development tools with `mise install`, dependencies with

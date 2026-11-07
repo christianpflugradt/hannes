@@ -41,6 +41,8 @@ jobs:
     needs: plan
     if: needs.plan.outputs.release == 'true'
     uses: ./.github/workflows/ci.yml
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
   quality:
     needs: plan

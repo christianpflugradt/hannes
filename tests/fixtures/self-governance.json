@@ -55,6 +55,23 @@
         "check"
       ]
     },
+    "04-agents-size": {
+      "id": "04-agents-size",
+      "description": "Limit AGENTS.md to 1200 ASCII-whitespace-separated words",
+      "enabled": true,
+      "command": [
+        "python3",
+        "scripts/check-word-count.py",
+        "AGENTS.md",
+        "1200"
+      ],
+      "timeout_seconds": 30,
+      "run_at": [
+        "pre-commit",
+        "pre-push",
+        "check"
+      ]
+    },
     "08-release-rules": {
       "id": "08-release-rules",
       "description": "Test semantic release rules and lifecycle",
@@ -251,12 +268,14 @@
     ],
     "pre-commit": [
       "01-format",
-      "02-docs"
+      "02-docs",
+      "04-agents-size"
     ],
     "pre-push": [
       "01-format",
       "02-docs",
       "03-python-tests",
+      "04-agents-size",
       "08-release-rules",
       "10-clippy",
       "11-rust-tests",
@@ -272,6 +291,7 @@
       "01-format",
       "02-docs",
       "03-python-tests",
+      "04-agents-size",
       "08-release-rules",
       "10-clippy",
       "11-rust-tests",

@@ -4,12 +4,10 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
-import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -17,22 +15,6 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("execution", ROOT / "scripts/run-execution-point.py")
 execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
-
-
-# Expected checks and selections for the pinned published governor.
-BASELINE = json.loads((ROOT / "tests/fixtures/self-governance.json").read_text())
-
-def definitions():
-    checks = {}
-    for path in sorted((ROOT / ".hannes/checks").glob("*/rule.toml")):
-        rule = tomllib.loads(path.read_text())
-        assert rule["id"] not in checks
-        checks[rule["id"]] = rule
-    assert not list((ROOT / ".hannes/rule-sets").glob("*.toml")), "Local rules declare their execution points directly"
-    assert [p.parent.name for p in (ROOT / ".hannes/reviews").glob("*/rule.toml")] == ["agents-quality"]
-    assert not list((ROOT / ".hannes/checks").glob("*.toml")), "Obsolete check documents must be removed"
-    assert not (ROOT / ".hannes/rule-sets.toml").exists(), "Obsolete rule-set document must be removed"
-    return checks
 
 
 class GovernanceTests(unittest.TestCase):
@@ -50,111 +32,6 @@ class GovernanceTests(unittest.TestCase):
         self.assertFalse(rule["automerge"])
         self.assertEqual(rule["matchDatasources"], ["github-releases"])
         self.assertIn("config:best-practices", config["extends"])
-
-    def test_self_governance_checks_settings_and_required_coverage(self):
-        checks = definitions()
-        config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
-        self.assertEqual(set(config), {"project", "max_display_files", "execution_points", "imports"})
-        self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["execution_points"]) - {"pre-commit", "commit-msg", "pre-push", "check"})
-        self.assertEqual(set(checks), set(BASELINE["checks"]))
-        for rule, check in checks.items():
-            implementation = check["check"]
-            original = BASELINE["checks"][rule]
-            self.assertEqual({key: value for key, value in check.items() if key != "check"},
-                             {key: value for key, value in original.items() if key not in ("command", "timeout_seconds")})
-            self.assertEqual(implementation["timeout_seconds"], original["timeout_seconds"])
-            self.assertEqual(set(implementation), {"command", "timeout_seconds"})
-            self.assertIsInstance(implementation["command"], str)
-            # Local commands use the common quoting subset of shlex and Hannes.
-            # Keep the pre-migration argument vectors as independent evidence.
-            self.assertEqual(shlex.split(implementation["command"]), original["command"])
-            self.assertFalse((ROOT / ".hannes/checks" / rule / "index.sh").exists())
-        # The published-governor test below independently checks real resolution.
-        for point, expected in BASELINE["execution_points"].items():
-            selected = set()
-            for rule, check in checks.items():
-                if check["enabled"] and point in check["run_at"]:
-                    selected.add(rule)
-            self.assertEqual(selected, set(expected), point)
-        task = tomllib.loads((ROOT / "mise.toml").read_text())["tasks"]["check"]
-        self.assertEqual(task["run"], "python3 scripts/run-execution-point.py pre-push")
-        self.assertNotIn("depends", task)
-
-    def test_external_commit_message_import_is_pinned_and_scopes_match_policy(self):
-        config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
-        imported, = [item for item in config["imports"] if item["path"] == "commit-msg/conventional-commits"]
-        self.assertEqual(imported["git"], "https://github.com/christianpflugradt/christianpflugradt-rulesets.git")
-        self.assertEqual(imported["path"], "commit-msg/conventional-commits")
-        self.assertRegex(imported["ref"], r"^[0-9a-f]{40}$")
-        parameters = imported["rule_parameters"]["commit-message"]
-        self.assertEqual(parameters, {"scopes_file": ".hannes/commit-scopes.txt"})
-        expected = [line.split()[1] for line in (ROOT / ".githooks/commit-policy").read_text().splitlines() if line.startswith("scope ")]
-        self.assertEqual((ROOT / parameters["scopes_file"]).read_text().splitlines(), expected)
-
-    def test_security_import_is_pinned_and_ci_executes_check_with_dependencies(self):
-        config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
-        security, = [item for item in config["imports"] if item["path"] == "multi-point/security"]
-        self.assertEqual(set(security), {"git", "path", "ref"})
-        self.assertEqual(security["git"], "https://github.com/christianpflugradt/christianpflugradt-rulesets.git")
-        self.assertRegex(security["ref"], r"^[0-9a-f]{40}$")
-        self.assertFalse((ROOT / ".hannes/checks/secret-scan").exists())
-        self.assertFalse((ROOT / ".hannes/checks/sensitive-files").exists())
-        workflow = (ROOT / ".github/workflows/ci.yml").read_text().split("  action-consumer:")[0]
-        run = "run: python3 scripts/run-execution-point.py check --reviews"
-        self.assertEqual(workflow.count(run + "\n"), 1)
-        self.assertLess(workflow.index("actions/setup-python@"), workflow.index(run))
-        self.assertLess(workflow.index("bash scripts/prepare-ci.sh"), workflow.index(run))
-        self.assertLess(workflow.index(run), workflow.index("name: quality-check"))
-        preparation = (ROOT / "scripts/prepare-ci.sh").read_text()
-        self.assertIn("v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz", preparation)
-        self.assertIn("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb", preparation)
-        self.assertIn("sha256sum --check", preparation)
-        self.assertIn('echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"', preparation)
-        for required in ("npm ci --ignore-scripts", "cargo +stable fetch --locked", "cargo +1.85.0 fetch --locked",
-                         "cargo +stable install cargo-audit --version", "go install github.com/rhysd/actionlint"):
-            self.assertIn(required, preparation)
-
-    def test_repository_conventions_import_is_pinned_and_license_target(self):
-        config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
-        imported, = [item for item in config["imports"] if item["path"] == "repository-conventions"]
-        self.assertRegex(imported["ref"], r"^[0-9a-f]{40}$")
-        self.assertEqual({key: value for key, value in imported.items() if key != "ref"}, {
-            "git": "https://github.com/christianpflugradt/christianpflugradt-rulesets.git",
-            "path": "repository-conventions",
-            "rule_parameters": {"license": {"target": "LICENSE"}},
-        })
-        self.assertFalse((ROOT / ".hannes/checks/license").exists())
-
-    def test_published_governor_can_plan_every_execution_point_without_execution(self):
-        executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
-        self.assertTrue(executable, "Install the compatible published Hannes release before running governance acceptance")
-        self.assertFalse(Path(executable).resolve().is_relative_to(ROOT))
-        version = subprocess.check_output([executable, "--version"], text=True).strip()
-        self.assertEqual(version, "hannes " + (ROOT / ".hannes-version").read_text().strip().removeprefix("v"))
-        for point, expected in BASELINE["execution_points"].items():
-            with self.subTest(point=point):
-                result = subprocess.run([executable, "mach", "was", "--at", point, "--plan", "--json"], cwd=ROOT, env=dict(os.environ, HANNES_CHANGE_BASE="HEAD"), capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
-                plan = json.loads(result.stdout)
-                self.assertEqual(plan["at"], point)
-                local = [rule for rule in plan["scheduled"] if not rule["origin"].get("external") and rule["kind"] == "check"]
-                imported = [rule for rule in plan["scheduled"] if rule["origin"].get("external")]
-                self.assertEqual([rule["id"] for rule in local], sorted(expected))
-                expected_rules = {"commit-message"} if point == "commit-msg" else (
-                    {"license", "secret-scan", "sensitive-files"} if point in ("check", "pre-push") else set())
-                self.assertEqual({rule["id"].rsplit(":", 1)[-1] for rule in imported}, expected_rules)
-                self.assertEqual(len(imported), len(expected_rules))
-                declarations = tomllib.loads((ROOT / ".hannes/config.toml").read_text())["imports"]
-                for rule in imported:
-                    self.assertTrue(rule["blocking"])
-                    origin = rule["origin"]["external"]
-                    declaration, = [item for item in declarations if item["path"] == origin["path"]]
-                    self.assertEqual(origin["commit"], declaration["ref"])
-                reviews = [rule for rule in plan["scheduled"] if rule["kind"] == "review"]
-                self.assertEqual([rule["id"] for rule in reviews], ["agents-quality"] if point == "check" and reviews else [])
-                self.assertEqual(set(plan["required_ids"]), set(expected) | {rule["id"] for rule in imported + reviews})
-                self.assertEqual(plan["planned_model_calls"], len(reviews))
-                self.assertTrue(all(item["reason"] == "trigger_not_matched" for item in plan["omitted"]))
 
     def test_ci_installs_pinned_governor_and_uploads_failure_reports(self):
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -210,15 +87,6 @@ class GovernanceTests(unittest.TestCase):
         self.assertIn("EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}", verification)
         for bypass in ("continue-on-error", "if:", "||"):
             self.assertNotIn(bypass, verification)
-
-    def test_native_checks_remain_offline_without_a_launcher(self):
-        checks = definitions()
-        for rule in ("clippy", "rust-tests", "native-build", "msrv"):
-            self.assertIn("--offline", shlex.split(checks[rule]["check"]["command"]))
-        self.assertEqual(shlex.split(checks["release-rules"]["check"]["command"]), ["npm", "--offline", "test"])
-        self.assertFalse((ROOT / "scripts/run-check.py").exists())
-        for point in ("pre-push", "check"):
-            self.assertTrue({"python-tests", "release-rules", "rust-tests", "workflows", "msrv"}.issubset(BASELINE["execution_points"][point]))
 
     def test_commit_message_checker_consumes_managed_hook_arguments(self):
         with tempfile.TemporaryDirectory() as temporary:

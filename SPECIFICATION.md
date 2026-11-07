@@ -185,7 +185,7 @@ Imported CLI definitions follow EXT-001's existing explicit import trust boundar
 refresh and validate before publication, immutable offline cache, no local overrides.
 Imported commands have the consumer's permissions, just like imported checks.
 Generic CLIs provide no sandbox or Codex MCP controls; consumers must trust their
-tools and configure read-only behavior themselves. The repository Gemini adapter uses standard-library HTTP as specified in GOV-001.
+tools and configure read-only behavior themselves.
 CLI providers may set timeout_seconds = 0 to delegate deadlines to their adapter;
 Codex still requires 1..=3600 seconds.
 
@@ -625,9 +625,8 @@ must match an SPDX reference byte-for-byte: Apache-2.0,
 PolyForm-Noncommercial-1.0.0 or Unlicense. Hannes uses the exact Unlicense text.
 The Rule reads the working tree at check and HEAD at pre-push. Missing or
 nonmatching licenses produce FAIL; technical errors produce ERROR.
-Acceptance: scripts/test_governance.py covers the import and effective selection.
 Checks remain mandatory. The agents-quality Review runs at check only when its
-file trigger matches, as defined in GOV-001. Missing tools and errors
+file trigger matches. Missing tools and errors
 block success. Setup, dependency installation and release publication remain
 outside rule execution.
 
@@ -752,48 +751,6 @@ CI runs them through check. The manual `mise docs:check` and `mise check` tasks
 remain available to developers; agents rely on Git hooks. Automated checks
 complement editorial review; they do not prove prose understandable.
 
-## GOV-001: AGENTS.md quality review
-
-The repository example uses a blocking command Check to limit root AGENTS.md to
-1200 words. Words are maximal runs separated by ASCII whitespace (space, tab,
-LF, CR, vertical tab and form feed), including Markdown syntax and code. Exactly
-1200 passes; excess reports the actual count and limit. The initial document has
-1050 words and is not shortened for this gate.
-
-A named generic CLI adapter calls the Gemini REST API to evaluate the complete document against a
-concise rubric, using whole-file context and the existing structured contract.
-Only substantive, evidenced governance defects warrant FAIL. The review is
-non-blocking, including technical ERROR. The existing global check gate applies.
-File triggers select only root AGENTS.md; other changes omit the review
-with trigger_not_matched. CI uses an explicit verified baseline, preferring the
-PR merge-base. Summaries distinguish PASS, non-blocking FAIL, ERROR and SKIP.
-The rubric is context only. review.include_diff defaults to true; setting it to
-false excludes the diff. The active repository Review sets include_diff = false
-using published Hannes v0.14.1. Batches separate reviews with different diff
-settings, and no diff is assembled or delivered for a batch that disables it.
-Plain HTTP models use only supplied evidence; generic instructions require no tools or repository access.
-
-The adapter sends the complete prompt in one user text part to generateContent,
-using HANNES_MODEL (configured as gemini-3.8-flash), x-goog-api-key from
-GEMINI_API_KEY, responseMimeType application/json and maxOutputTokens 8192.
-It selects the first candidate, requires STOP, concatenates its non-thought text
-parts and passes the result unchanged to the central Hannes contract validator.
-HTTP success alone is insufficient. Missing, malformed, blocked, incomplete or
-oversized responses are provider errors, never PASS.
-
-At most five HTTP attempts use 30/60/120/240 second delays for HTTP
-429/500/502/503/504 and transient connections. Retry-After seconds or dates may
-increase a delay up to 240 seconds. Every request has a 600-second timeout;
-timeouts stop immediately. Authentication, invalid requests and invalid responses
-are not retried. The adapter has no overall deadline. The active repository
-provider sets CLI timeout_seconds = 0 to disable its enclosing deadline.
-Concise safe retry/error diagnostics exclude keys, prompts and response content.
-CI reserves 90 minutes for checks plus review retries. No live provider is
-required by automated tests.
-
-Acceptance: `scripts/test_agents_review.py` and `tests/agents_review.rs` cover the
-repository example and its local mocked provider.
-
 ## Acceptance coverage and change process
 
 Each essential requirement has a stable ID and representative acceptance tests.
@@ -805,7 +762,6 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
-| GOV-001 | `tests/agents_review.rs::repository_review_uses_complete_context_and_triggered_cli` |
 | TRIG-001 | `tests/review_triggers.rs::preview_and_execution_agree_and_nonmatches_need_no_provider_or_context` |
 | PROV-002 | `tests/cli_providers.rs::stdin_results_and_provider_isolation` |
 | PROV-001 | `tests/named_providers.rs::named_references_load_without_changing_legacy_defaults` |

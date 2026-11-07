@@ -60,12 +60,8 @@ Checks neither install the governor nor repair project files.
 ## Execution points and required coverage
 
 Every selected rule is mandatory. Each point preserves the exact check membership
-of its configured execution point. Checks run once per binding, ordered by ID. The
-[governance fixture](../tests/fixtures/self-governance.json) records
-the commands, activation states, timeouts and required selections; governance
-acceptance compares the local checks in the published governor's actual plans
-with that evidence and separately verifies the imported commit-message,
-security and license Rules.
+of its configured execution point. Checks run once per binding, ordered by ID. The concrete rule definitions and assignments live in `.hannes/`; product tests
+use independent synthetic configurations.
 
 | Execution point | Required checks |
 | --- | --- |

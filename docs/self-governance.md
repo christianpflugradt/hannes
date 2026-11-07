@@ -2,12 +2,13 @@
 
 Hannes checks this repository using an installed published Hannes executable.
 Builds under target/ are candidates under test and never become the governor.
-The repository uses unversioned, self-contained Check definitions, with no
-reviews or provider calls.
+The repository uses local Check definitions and a pinned external commit-message
+Rule Set, with no reviews or provider calls.
 
-The exact governor pin in [.hannes-version](../.hannes-version) is v0.7.0. This
+The exact governor pin in [.hannes-version](../.hannes-version) is v0.8.0. This
 published release supports the repository configuration, execution points and
-pass auf --auto-approve for unattended hook reconciliation.
+shared external Rule references and pass auf --auto-approve for unattended hook
+reconciliation.
 
 ## Local setup
 
@@ -52,15 +53,16 @@ caller's environment. Checks neither install the governor nor repair project fil
 ## Execution points and required coverage
 
 Every selected rule is mandatory. Each point preserves the exact check membership
-of its configured execution point. Checks run once, ordered by their numbered IDs. The
+of its configured execution point. Checks run once per binding, ordered by ID. The
 [immutable migration fixture](../tests/fixtures/self-governance.json) records
 the previous commands, activation states, timeouts and selections; governance
-acceptance compares the published governor's actual plans with that evidence.
+acceptance compares the local checks in the published governor's actual plans
+with that evidence and separately verifies the imported commit-message Rule.
 
 | Previous selection → execution point | Required checks | Assignment |
 | --- | --- | --- |
 | pre-commit → pre-commit | 01-format, 02-docs | Own run_at |
-| commit-msg → commit-msg | 20-commit-message | Own run_at |
+| commit-msg → commit-msg | 20-commit-message plus imported commit-message | Own run_at plus external conventional-commits |
 | pre-push → pre-push (default) | 01-format, 02-docs, 03-docs-tests, 04-governance-tests, 05-hooks-tests, 06-deploy-tests, 07-release-tests, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke | Own run_at plus tooling-regressions and native-validation |
 | ci-native → ci-native | 01-format, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke | Own run_at plus native-validation |
 | ci-tooling → ci-tooling | 02-docs, 03-docs-tests, 04-governance-tests, 05-hooks-tests, 06-deploy-tests, 07-release-tests, 08-release-rules, 21-commit-range, 22-workflows | Own run_at plus tooling-regressions |
@@ -100,8 +102,18 @@ through pass auf, including configured hook paths, compatible unmanaged content,
 ownership checks, argument forwarding and recursion protection. Wrappers inspect
 synchronization read-only; drift tells the developer to rerun pass auf manually.
 
-The commit-message checker consumes HANNES_GIT_HOOK_ARG_1 from commit-msg, requires
-exactly one argument and uses the same standalone commit policy checker as CI.
+The `commit-msg` point imports `commit-msg/conventional-commits` from
+[the shared Ruleset repository](https://github.com/christianpflugradt/christianpflugradt-rulesets),
+pinned to the full commit in `.hannes/config.toml`. It receives
+`.hannes/commit-scopes.txt` through the `scopes_file` parameter. Governance tests
+require this file to match the scopes in `.githooks/commit-policy`.
+Both message checks consume HANNES_GIT_HOOK_ARG_1 and require exactly one
+commit-msg argument. The imported Rule validates the header, type and scope.
+The local `20-commit-message` check also enforces Hannes' narrower type allowlist
+and summary whitespace requirements using the same policy checker as CI.
+`pass auf` retrieves and validates the import during setup; subsequent checks and
+hooks use its immutable cache offline. A fresh clone needs access to the source
+repository during setup.
 Pre-commit runs before the final message is available. Hooks block on failure and
 never modify the Git index. They verify working files, including unstaged edits,
 which can differ from the staged or pushed commits. Hooks are bypassable; clean

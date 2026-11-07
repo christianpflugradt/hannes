@@ -3,3 +3,11 @@ max_display_files = 5
 
 [execution_points]
 custom = ["ci-native", "ci-tooling", "ci-msrv", "ci-audit", "release-artifacts"]
+
+[[imports]]
+git = "https://github.com/christianpflugradt/christianpflugradt-rulesets.git"
+path = "commit-msg/conventional-commits"
+ref = "e1d7aadc0f46617835534c5fb067c42123b26f55"
+
+[imports.rule_parameters.commit-message]
+scopes_file = ".hannes/commit-scopes.txt"

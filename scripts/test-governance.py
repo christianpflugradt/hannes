@@ -53,7 +53,7 @@ class GovernanceTests(unittest.TestCase):
     def test_self_governance_checks_settings_and_required_coverage(self):
         checks, sets = definitions()
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
-        self.assertEqual(set(config), {"project", "max_display_files", "execution_points"})
+        self.assertEqual(set(config), {"project", "max_display_files", "execution_points", "imports"})
         self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["execution_points"]) - {"pre-commit", "commit-msg", "pre-push"})
         self.assertEqual(set(checks), set(BASELINE["checks"]))
         for rule, check in checks.items():
@@ -83,6 +83,17 @@ class GovernanceTests(unittest.TestCase):
                     selected.add(rule)
             self.assertEqual(selected, set(expected), point)
 
+    def test_external_commit_message_import_is_pinned_and_scopes_match_policy(self):
+        config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
+        imported, = config["imports"]
+        self.assertEqual(imported["git"], "https://github.com/christianpflugradt/christianpflugradt-rulesets.git")
+        self.assertEqual(imported["path"], "commit-msg/conventional-commits")
+        self.assertRegex(imported["ref"], r"^[0-9a-f]{40}$")
+        parameters = imported["rule_parameters"]["commit-message"]
+        self.assertEqual(parameters, {"scopes_file": ".hannes/commit-scopes.txt"})
+        expected = [line.split()[1] for line in (ROOT / ".githooks/commit-policy").read_text().splitlines() if line.startswith("scope ")]
+        self.assertEqual((ROOT / parameters["scopes_file"]).read_text().splitlines(), expected)
+
     def test_published_governor_can_plan_every_execution_point_without_execution(self):
         executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
         self.assertTrue(executable, "Install the compatible published Hannes release before running governance acceptance")
@@ -93,8 +104,18 @@ class GovernanceTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
                 plan = json.loads(result.stdout)
                 self.assertEqual(plan["at"], point)
-                self.assertEqual([rule["id"] for rule in plan["scheduled"]], sorted(expected))
-                self.assertEqual(set(plan["required_ids"]), set(expected))
+                local = [rule for rule in plan["scheduled"] if not rule["origin"].get("external")]
+                imported = [rule for rule in plan["scheduled"] if rule["origin"].get("external")]
+                self.assertEqual([rule["id"] for rule in local], sorted(expected))
+                self.assertEqual(len(imported), 1 if point == "commit-msg" else 0)
+                for rule in imported:
+                    self.assertTrue(rule["id"].endswith(":commit-message"))
+                    self.assertTrue(rule["blocking"])
+                    origin = rule["origin"]["external"]
+                    declaration, = tomllib.loads((ROOT / ".hannes/config.toml").read_text())["imports"]
+                    self.assertEqual(origin["commit"], declaration["ref"])
+                    self.assertEqual(origin["path"], declaration["path"])
+                self.assertEqual(set(plan["required_ids"]), set(expected) | {rule["id"] for rule in imported})
                 self.assertEqual(plan["planned_model_calls"], 0)
                 self.assertFalse(plan["omitted"])
 

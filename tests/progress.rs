@@ -295,7 +295,8 @@ fn real_terminal_finishes_with_one_visible_row_per_check() {
                 &mut slave,
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
-                &mut size,
+                // libc declares this pointer mutable on macOS and const on Linux.
+                &raw mut size,
             )
         },
         0

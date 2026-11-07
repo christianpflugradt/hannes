@@ -220,7 +220,8 @@ Push/PR checks retain native Linux x64, tooling, MSRV and audit coverage. Releas
 reuse that CI workflow and run native validation on all four supported hosts. Tool
 installation, dependency preparation, release stamping, packaging and publication
 remain separate operations. Before publication, the publisher installs stable Rust
-with rustfmt and Clippy and fetches locked Cargo dependencies. Its automated
+with rustfmt and Clippy, Rust 1.85 and actionlint, and fetches locked Cargo
+dependencies for both toolchains. Its automated
 version commit and push invoke managed hooks with offline checks; release lifecycle
 tests exercise hooks in a disposable repository. After artifact collection,
 release-artifacts verifies

@@ -457,8 +457,9 @@ select offline mode. The execution-point wrapper additionally sets Cargo/npm
 offline mode and disables Rustup auto-install for Git-backed invocations.
 CI invokes pass auf --auto-approve once before execution. Execution never repairs
 hooks noninteractively. The publish job prepares stable Rust with rustfmt and
-Clippy and fetches locked Cargo dependencies before publication, so its managed
-commit and push hooks can run offline. Report artifacts are uploaded after
+Clippy, Rust 1.85 and actionlint, and fetches locked Cargo dependencies for both
+toolchains before publication, so its managed commit and push hooks can run
+offline. Report artifacts are uploaded after
 publication with an always condition, including when a release hook fails.
 Reports use schema 4 and a companion execution record
 stores governor version/digest, execution point, checked commit and exit code.

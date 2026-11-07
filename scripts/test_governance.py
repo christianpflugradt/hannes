@@ -206,6 +206,13 @@ class GovernanceTests(unittest.TestCase):
         self.assertIn("run: |", preparation)
         self.assertIn("rustup toolchain install stable --profile minimal --component rustfmt --component clippy", preparation)
         self.assertIn("cargo +stable fetch --locked", preparation)
+        self.assertIn("rustup toolchain install 1.85.0 --profile minimal", preparation)
+        self.assertIn("cargo +1.85.0 fetch --locked", preparation)
+        self.assertIn("go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12", preparation)
+        self.assertIn('echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"', preparation)
+        publisher = release.split("  publish:\n", 1)[1]
+        self.assertIn("uses: actions/setup-go@", publisher[:publisher.index("      - name: Prepare managed release hooks")])
+        self.assertLess(preparation.index("rustup toolchain install 1.85.0"), preparation.index("cargo +1.85.0 fetch"))
         self.assertLess(preparation.index("rustup toolchain install"), preparation.index("cargo +stable fetch"))
         evidence = release[upload:].split("\n      - ")[0]
         for required in ("if: always()", "uses: actions/upload-artifact@", "name: quality-release-hooks", "path: .hannes/reports/*.json", "include-hidden-files: true"):

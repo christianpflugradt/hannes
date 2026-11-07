@@ -55,7 +55,7 @@ fn definitions(root: &Path, path: &str, script: &str) {
     write(
         root,
         &format!("{path}/checks/required-files/rule.toml"),
-        "id = 'required-files'\ndescription = 'Inspect consuming project'\nenabled = true\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\ntimeout_seconds = 5\n",
+        "id = 'required-files'\ndescription = 'Inspect consuming project'\nenabled = true\n[check]\ncommand = 'sh @rule/index.sh'\ntimeout_seconds = 5\n",
     );
     write(
         root,
@@ -375,7 +375,11 @@ fn traversal_and_symlink_escapes_are_rejected() {
         f.imports(&[("link", "main")]);
         assert!(format!("{:#}", f.load(true).unwrap_err()).contains("symlink"));
         f.imports(&[("repository", "main")]);
-        assert!(format!("{:#}", f.load(true).unwrap_err()).contains("symlink"));
+        let p = f.load(true).unwrap();
+        let check = p.checks.iter().find(|c| c.id.starts_with("git:")).unwrap();
+        let result = hannes::checks::execute(&p, check, "check");
+        assert_eq!(result.status, Status::Error);
+        assert!(result.reason.contains("symlink"));
     }
 }
 
@@ -966,7 +970,7 @@ fn independent_mappings_resolve_inheritance_many_to_one_and_offline_execution() 
     write(
         &f.remote,
         "repository/checks/standalone/rule.toml",
-        "id = 'standalone'\ndescription = 'Standalone'\nrun_at = ['lint', 'test']\nblocking = false\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+        "id = 'standalone'\ndescription = 'Standalone'\nrun_at = ['lint', 'test']\nblocking = false\n[check]\ncommand = 'sh @rule/index.sh'\n",
     );
     write(
         &f.remote,
@@ -977,7 +981,7 @@ fn independent_mappings_resolve_inheritance_many_to_one_and_offline_execution() 
     write(
         &f.remote,
         "repository/checks/disabled/rule.toml",
-        "id = 'disabled'\ndescription = 'Disabled'\nenabled = false\nrun_at = ['test']\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+        "id = 'disabled'\ndescription = 'Disabled'\nenabled = false\nrun_at = ['test']\n[check]\ncommand = 'sh @rule/index.sh'\n",
     );
     write(&f.remote, "repository/checks/disabled/index.sh", "exit 1\n");
     let central = f.remote.join("repository/config.toml");
@@ -1200,7 +1204,7 @@ fn built_in_hooks_execute_imported_and_local_rules_with_message_context() {
     write(
         &f.root,
         ".hannes/checks/local/rule.toml",
-        "id = 'local'\ndescription = 'Standalone local hook Rule'\nrun_at = ['pre-commit']\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+        "id = 'local'\ndescription = 'Standalone local hook Rule'\nrun_at = ['pre-commit']\n[check]\ncommand = 'sh @rule/index.sh'\n",
     );
     write(&f.root, ".hannes/checks/local/index.sh", "git --version\n");
     write(
@@ -1571,7 +1575,7 @@ fn shared_rules_are_reused_across_sets_and_points_offline() {
         .collect();
     assert_eq!(checks.len(), 2);
     assert_eq!(reviews.len(), 2);
-    assert_eq!(checks[0].entrypoint, checks[1].entrypoint);
+    assert_eq!(checks[0].command.as_deref(), checks[1].command.as_deref());
     assert_eq!(reviews[0].text, reviews[1].text);
     for point in ["pre-push", "check"] {
         let plan = planner::build(&project, Some(point), false).unwrap().plan;
@@ -1641,7 +1645,7 @@ fn shared_rule_references_reject_symlink_components() {
         write(
             &f.remote,
             "rules/checks/shared/rule.toml",
-            "id = 'shared'\ndescription = 'Shared rule'\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+            "id = 'shared'\ndescription = 'Shared rule'\n[check]\ncommand = 'sh @rule/index.sh'\n",
         );
         write(
             &f.remote,
@@ -1849,7 +1853,7 @@ fn shared_entrypoints_execute_each_rule_offline() {
             &f.remote,
             &format!("rules/checks/{id}/rule.toml"),
             &format!(
-                "id = '{id}'\ndescription = 'Shared check'\nenabled = {enabled}\nblocking = false\n[parameters.code]\ntype = 'string'\nrequired = true\n[check]\nentrypoint = '{entrypoint}'\ninterpreter = 'sh'\n"
+                "id = '{id}'\ndescription = 'Shared check'\nenabled = {enabled}\nblocking = false\n[parameters.code]\ntype = 'string'\nrequired = true\n[check]\ncommand = 'sh @source/{entrypoint}'\n"
             ),
         );
         write(&f.remote, &format!("rules/checks/{id}/resource"), id);
@@ -1879,13 +1883,17 @@ fn shared_entrypoints_execute_each_rule_offline() {
         .checks
         .iter()
         .filter(|c| {
-            c.entrypoint
+            c.command
                 .as_ref()
-                .is_some_and(|p| p.ends_with("scripts/shared.sh"))
+                .is_some_and(|c| c.iter().any(|p| p == "@source/scripts/shared.sh"))
         })
         .collect();
     assert_eq!(shared.len(), 3);
-    assert!(shared.iter().all(|c| c.entrypoint == shared[0].entrypoint));
+    assert!(
+        shared
+            .iter()
+            .all(|c| c.command.as_deref() == shared[0].command.as_deref())
+    );
     fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
     let p = f.load(false).unwrap();
     assert_eq!(
@@ -1921,7 +1929,7 @@ fn shared_entrypoints_execute_each_rule_offline() {
     }
     let missing = report.results.iter().find(|r| r.stdout.is_none()).unwrap();
     assert_eq!(missing.status, Status::Error);
-    assert!(missing.reason.contains("entrypoint"));
+    assert!(missing.reason.contains("scripts/missing.sh"));
     hannes::report::read(&f.root).unwrap();
 }
 
@@ -1940,7 +1948,7 @@ fn imported_shared_entrypoints_reject_unsafe_paths() {
             &f.remote,
             "repository/checks/required-files/rule.toml",
             &format!(
-                "id = 'required-files'\ndescription = 'Invalid path'\nenabled = false\n[check]\nentrypoint = {entrypoint:?}\n"
+                "id = 'required-files'\ndescription = 'Invalid path'\nenabled = false\n[check]\ncommand = \"sh @source/{entrypoint}\"\n"
             ),
         );
         fs::create_dir_all(f.remote.join("scripts")).unwrap();
@@ -1962,7 +1970,7 @@ fn imported_shared_entrypoints_reject_symlink_escapes() {
         write(
             &f.remote,
             "repository/checks/required-files/rule.toml",
-            "id = 'required-files'\ndescription = 'Unsafe shared script'\n[check]\nentrypoint = 'scripts/shared.sh'\ninterpreter = 'sh'\n",
+            "id = 'required-files'\ndescription = 'Unsafe shared script'\n[check]\ncommand = 'sh @source/scripts/shared.sh'\n",
         );
         if link_directory {
             symlink(outside.path(), f.remote.join("scripts")).unwrap();
@@ -1976,53 +1984,53 @@ fn imported_shared_entrypoints_reject_symlink_escapes() {
         }
         commit(&f.remote);
         f.imports(&[("repository", "main")]);
-        assert!(f.load(true).is_err());
+        let p = f.load(true).unwrap();
+        let check = p.checks.iter().find(|c| c.id.starts_with("git:")).unwrap();
+        let result = hannes::checks::execute(&p, check, "check");
+        assert_eq!(result.status, Status::Error);
     }
 }
 
 #[test]
 fn imported_commands_plan_and_execute_offline() {
-    for command in ["['git', '--version']", "'git --version'"] {
-        let f = Fixture::new();
-        write(
-            &f.remote,
-            "repository/checks/required-files/rule.toml",
-            &format!(
-                "id = 'required-files'\ndescription = 'Native Git command'\n[check]\ncommand = {command}\n"
-            ),
-        );
-        commit(&f.remote);
-        f.imports(&[("repository", "main"), ("repository", "main")]);
-        f.load(true).unwrap();
-        fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
-        let p = f.load(false).unwrap();
-        assert_eq!(
-            planner::build(&p, Some("check"), false)
-                .unwrap()
-                .plan
-                .scheduled
-                .len(),
-            2
-        );
-        let report = hannes::verify_project_at(
-            p,
-            &Never,
-            hannes::VerificationMode::AllRules,
-            Some("check"),
-            &mut |_| {},
-        )
-        .unwrap();
-        assert_eq!(report.overall, Status::Pass);
-        assert_eq!(report.results.len(), 2);
-        assert!(
-            report.results.iter().all(|r| r
-                .stdout
-                .as_ref()
-                .unwrap()
-                .text
-                .starts_with("git version"))
-        );
-    }
+    let command = "'git --version'";
+    let f = Fixture::new();
+    write(
+        &f.remote,
+        "repository/checks/required-files/rule.toml",
+        &format!(
+            "id = 'required-files'\ndescription = 'Native Git command'\n[check]\ncommand = {command}\n"
+        ),
+    );
+    commit(&f.remote);
+    f.imports(&[("repository", "main"), ("repository", "main")]);
+    f.load(true).unwrap();
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    let p = f.load(false).unwrap();
+    assert_eq!(
+        planner::build(&p, Some("check"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        2
+    );
+    let report = hannes::verify_project_at(
+        p,
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.overall, Status::Pass);
+    assert_eq!(report.results.len(), 2);
+    assert!(
+        report
+            .results
+            .iter()
+            .all(|r| r.stdout.as_ref().unwrap().text.starts_with("git version"))
+    );
 }
 
 #[cfg(unix)]

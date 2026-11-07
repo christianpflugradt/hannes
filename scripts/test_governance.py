@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -165,10 +166,10 @@ class GovernanceTests(unittest.TestCase):
             (root / ".gitignore").write_text(".hannes/reports/\n")
             (root / ".hannes-version").write_text((ROOT / ".hannes-version").read_text())
             (config / "config.toml").write_text('project = "Failure fixture"\nmax_display_files = 5\n')
-            shutil.copy2(ROOT / ".hannes/provider.toml", config / "provider.toml")
+            (config / "provider.toml").write_text('provider = "codex-cli"\ntimeout_seconds = 30\n')
             rule = config / "checks/fail"
             rule.mkdir()
-            (rule / "rule.toml").write_text('id = "fail"\ndescription = "Deliberate failure"\nrun_at = ["pre-commit"]\n[check]\nentrypoint = "index.py"\n' + f'interpreter = {json.dumps(sys.executable)}\ntimeout_seconds = 10\n')
+            (rule / "rule.toml").write_text('id = "fail"\ndescription = "Deliberate failure"\nrun_at = ["pre-commit"]\n[check]\n' + f'command = {json.dumps(shlex.join([sys.executable, "@rule/index.py"]))}\ntimeout_seconds = 10\n')
             (rule / "index.py").write_text("raise SystemExit(1)\n")
             setup = subprocess.run([executable, "pass", "auf", "--auto-approve"], cwd=root, capture_output=True, text=True)
             self.assertEqual(setup.returncode, 0, setup.stderr)

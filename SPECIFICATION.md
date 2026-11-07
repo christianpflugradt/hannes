@@ -609,7 +609,6 @@ is release orchestration: the workflow directly invokes
 scripts/check-release-artifacts.py after download and checksum generation, before
 publication. A failed verification blocks publication. No Hannes artifact point
 is configured.
-The self-governance fixture records local rule definitions and selections.
 The commit-msg point additionally imports the conventional-commits set at a full
 Git commit pin. Its scopes_file parameter uses .hannes/commit-scopes.txt, which
 must match the scopes in .githooks/commit-policy. The existing local message check

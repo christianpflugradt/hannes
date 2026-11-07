@@ -229,8 +229,12 @@ fn validation_does_not_execute_checks_or_provider() {
     replace(
         d.path(),
         "checks/always-ok/rule.toml",
-        "[check]",
-        "[check]\ninterpreter = \"nonexistent-command-hannes\"",
+        if cfg!(windows) {
+            r#"entrypoint = "index.cmd""#
+        } else {
+            r#"entrypoint = "index.sh""#
+        },
+        r#"command = "nonexistent-command-hannes""#,
     );
     assert!(config::load(d.path()).is_ok());
     assert_eq!(
@@ -293,8 +297,12 @@ fn spawn_error_writes_blocking_error_report() {
     replace(
         d.path(),
         "checks/always-ok/rule.toml",
-        "[check]",
-        "[check]\ninterpreter = \"nonexistent-command-hannes\"",
+        if cfg!(windows) {
+            r#"entrypoint = "index.cmd""#
+        } else {
+            r#"entrypoint = "index.sh""#
+        },
+        r#"command = "nonexistent-command-hannes""#,
     );
     let r = hannes::verify(d.path(), &Never).unwrap();
     assert_eq!(r.overall, Status::Error);
@@ -1800,8 +1808,12 @@ fn checks_only_never_calls_provider_and_counts_only_checks_even_on_failure() {
             replace(
                 d.path(),
                 "checks/always-ok/rule.toml",
-                "[check]",
-                "[check]\ninterpreter = \"hannes-nonexistent-executable-for-test\"",
+                if cfg!(windows) {
+                    r#"entrypoint = "index.cmd""#
+                } else {
+                    r#"entrypoint = "index.sh""#
+                },
+                r#"command = "hannes-nonexistent-executable-for-test""#,
             );
         } else if case == "no-checks" {
             replace(

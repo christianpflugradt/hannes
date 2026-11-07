@@ -264,8 +264,8 @@ fn outcomes_distinguish_violations_from_missing_processes_scripts_and_signals() 
         fs::write(
             &path,
             fs::read_to_string(&path).unwrap().replace(
-                "interpreter = \"sh\"",
-                &format!("interpreter = {interpreter:?}"),
+                "command = \"sh @rule/entrypoint\"",
+                &format!("command = \"{interpreter} @rule/entrypoint\""),
             ),
         )
         .unwrap();

@@ -108,7 +108,7 @@ fn fixed_discovery_and_defaults() {
         d.path(),
         "readme",
         "run_at = ['check']",
-        "entrypoint = 'index.sh'",
+        "command = '@rule/index.sh'",
         "exit 0\n",
     );
     // Supporting data and unrelated TOML documents are never parsed as governance.
@@ -144,24 +144,21 @@ fn fixed_discovery_and_defaults() {
 #[test]
 fn strict_configuration_and_implementation_validation() {
     for (attributes, implementation) in [
-        ("run_at = ['unknown']", "entrypoint = 'index.sh'"),
+        ("run_at = ['unknown']", "command = '@rule/index.sh'"),
         (
             "run_at = ['check']\nunknown = true",
-            "entrypoint = 'index.sh'",
+            "command = '@rule/index.sh'",
         ),
         (
             "run_at = ['check']",
-            "entrypoint = 'index.sh'\nunknown = true",
+            "command = '@rule/index.sh'\nunknown = true",
         ),
+        ("run_at = ['check']", "command = ''"),
         (
             "run_at = ['check']",
-            "entrypoint = 'index.sh'\ninterpreter = ''",
+            "command = '@rule/index.sh'\ntimeout_seconds = 0",
         ),
-        (
-            "run_at = ['check']",
-            "entrypoint = 'index.sh'\ntimeout_seconds = 0",
-        ),
-        ("", "entrypoint = 'index.sh'"),
+        ("", "command = '@rule/index.sh'"),
     ] {
         let d = project();
         check(d.path(), "readme", attributes, implementation, "exit 0");
@@ -192,7 +189,7 @@ fn definitions_are_required_but_disabled_implementations_may_be_missing() {
         d.path(),
         "readme",
         "enabled = false",
-        "entrypoint = 'missing.sh'",
+        "command = 'sh @rule/missing.sh'",
         "exit 0",
     );
     assert!(config::load(d.path()).is_ok());
@@ -218,15 +215,6 @@ fn resource_filenames_are_confined() {
         "C:\\index.sh",
     ] {
         let d = project();
-        check(
-            d.path(),
-            "readme",
-            "run_at = ['check']",
-            &format!("entrypoint = {name:?}"),
-            "exit 0",
-        );
-        assert!(config::load(d.path()).is_err(), "accepted {name:?}");
-        fs::remove_dir_all(d.path().join(".hannes/checks")).unwrap();
         review(d.path(), "run_at = ['check']");
         let path = d.path().join(".hannes/reviews/design/rule.toml");
         fs::write(
@@ -246,16 +234,6 @@ fn resource_filenames_are_confined() {
         "id = 'design'\ndescription = 'Review'\nrun_at = ['check']\n[review]\nprompt = 'scripts/prompt.md'\n",
     );
     assert!(config::load(d.path()).is_err());
-    fs::remove_dir_all(d.path().join(".hannes/reviews")).unwrap();
-    check(
-        d.path(),
-        "readme",
-        "run_at = ['check']",
-        "entrypoint = 'helpers'",
-        "exit 0",
-    );
-    fs::create_dir(d.path().join(".hannes/checks/readme/helpers")).unwrap();
-    assert!(config::load(d.path()).is_err());
 }
 
 #[test]
@@ -265,7 +243,7 @@ fn local_sets_override_union_and_validate_scope() {
         d.path(),
         "readme",
         "run_at = ['pre-commit']",
-        "entrypoint = 'index.sh'",
+        "command = '@rule/index.sh'",
         "exit 0",
     );
     for (set, at) in [("repository", "check"), ("software", "release")] {
@@ -326,7 +304,7 @@ fn duplicate_ids_and_exactly_one_implementation() {
         d.path(),
         "design",
         "run_at = ['check']",
-        "entrypoint = 'index.sh'",
+        "command = '@rule/index.sh'",
         "exit 0",
     );
     review(d.path(), "run_at = ['check']");
@@ -346,13 +324,13 @@ fn duplicate_ids_and_exactly_one_implementation() {
 #[test]
 fn direct_and_interpreter_execution_keep_consumer_and_resources() {
     use std::os::unix::fs::PermissionsExt;
-    for interpreter in ["", "interpreter = 'sh'"] {
+    for interpreter in ["", "sh "] {
         let d = project();
         check(
             d.path(),
             "readme",
             "run_at = ['check']",
-            &format!("entrypoint = 'index.sh'\n{interpreter}"),
+            &format!("command = '{interpreter}@rule/index.sh'"),
             "#!/bin/sh\ntest -s README.md || exit 1\ncat \"$HANNES_RULE_DIRECTORY/data.txt\"\n",
         );
         write(d.path(), ".hannes/checks/readme/data.txt", "bundled data\n");
@@ -387,42 +365,42 @@ fn blocking_failures_errors_and_disabled_rules() {
     for (attributes, implementation, script, expected, item_status) in [
         (
             "",
-            "interpreter = 'sh'",
+            "command = 'sh @rule/index.sh'",
             "exit 1",
             Status::Fail,
             Status::Fail,
         ),
         (
             "blocking = false",
-            "interpreter = 'sh'",
+            "command = 'sh @rule/index.sh'",
             "exit 1",
             Status::Pass,
             Status::Fail,
         ),
         (
             "blocking = false",
-            "interpreter = 'sh'",
+            "command = 'sh @rule/index.sh'",
             "exit 2",
             Status::Error,
             Status::Error,
         ),
         (
             "blocking = false",
-            "interpreter = 'hannes-missing-interpreter'",
+            "command = 'hannes-missing-interpreter @rule/index.sh'",
             "exit 0",
             Status::Error,
             Status::Error,
         ),
         (
             "blocking = false",
-            "interpreter = 'sh'\ntimeout_seconds = 1",
+            "command = 'sh @rule/index.sh'\ntimeout_seconds = 1",
             "sleep 4",
             Status::Error,
             Status::Error,
         ),
         (
             "blocking = false",
-            "",
+            "command = '@rule/index.sh'",
             "exit 0",
             Status::Error,
             Status::Error,
@@ -433,7 +411,7 @@ fn blocking_failures_errors_and_disabled_rules() {
             d.path(),
             "readme",
             &format!("run_at = ['pre-push']\n{attributes}"),
-            &format!("entrypoint = 'index.sh'\n{implementation}"),
+            implementation,
             script,
         );
         let result = hannes::verify(d.path(), &Never).unwrap();
@@ -451,7 +429,7 @@ fn blocking_failures_errors_and_disabled_rules() {
         d.path(),
         "readme",
         "enabled = false",
-        "entrypoint = 'index.sh'",
+        "command = '@rule/index.sh'",
         "exit 1",
     );
     let p = config::load(d.path()).unwrap();
@@ -488,7 +466,7 @@ fn advisory_check_does_not_skip_reviews() {
         d.path(),
         "readme",
         "run_at = ['pre-push']\nblocking = false",
-        "entrypoint = 'index.sh'\ninterpreter = 'sh'",
+        "command = 'sh @rule/index.sh'",
         "exit 1",
     );
     review(d.path(), "run_at = ['pre-push']");
@@ -518,7 +496,7 @@ fn all_designated_paths_reject_symlinks() {
             d.path(),
             "readme",
             "run_at = ['check']",
-            "entrypoint = 'index.sh'",
+            "command = '@rule/index.sh'",
             "exit 0",
         );
         review(d.path(), "run_at = ['check']");
@@ -526,7 +504,15 @@ fn all_designated_paths_reject_symlinks() {
         let outside = d.path().join("outside");
         fs::rename(&source, &outside).unwrap();
         symlink(&outside, &source).unwrap();
-        assert!(config::load(d.path()).is_err(), "followed {relative}");
+        if relative == "checks/readme/index.sh" {
+            let p = config::load(d.path()).unwrap();
+            assert_eq!(
+                hannes::checks::execute(&p, &p.checks[0], "check").status,
+                Status::Error
+            );
+        } else {
+            assert!(config::load(d.path()).is_err(), "followed {relative}");
+        }
     }
 }
 
@@ -556,7 +542,7 @@ impl External {
             write(
                 &remote,
                 &format!("{name}/checks/readme/rule.toml"),
-                "id = 'readme'\ndescription = 'Consumer README'\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+                "id = 'readme'\ndescription = 'Consumer README'\n[check]\ncommand = 'sh @rule/index.sh'\n",
             );
             write(
                 &remote,
@@ -609,7 +595,7 @@ fn external_refs_cache_offline_isolation_and_consumer_execution() {
         &f.root,
         "readme",
         "run_at = ['check']",
-        "entrypoint = 'index.sh'\ninterpreter = 'sh'",
+        "command = 'sh @rule/index.sh'",
         "exit 0",
     );
     for reference in ["main", "v1.0.0", &commit] {
@@ -794,7 +780,7 @@ fn saved_reports_reject_inconsistent_metadata() {
 #[test]
 fn local_rules_share_entrypoints_with_independent_results() {
     use std::os::unix::fs::PermissionsExt;
-    for interpreter in ["", "interpreter = 'sh'"] {
+    for interpreter in ["", "sh "] {
         let d = project();
         write(
             d.path(),
@@ -813,7 +799,7 @@ fn local_rules_share_entrypoints_with_independent_results() {
                 &format!(
                     "run_at = ['check']\nblocking = false\n[parameters.code]\ntype = 'string'\nvalue = '{code}'"
                 ),
-                &format!("entrypoint = 'scripts/shared.sh'\n{interpreter}"),
+                &format!("command = '{interpreter}@source/scripts/shared.sh'"),
                 "exit 2",
             );
             write(d.path(), &format!(".hannes/checks/{id}/resource"), id);
@@ -832,7 +818,7 @@ fn local_rules_share_entrypoints_with_independent_results() {
                 d.path(),
                 id,
                 attributes,
-                "entrypoint = 'scripts/missing.sh'\ninterpreter = 'sh'",
+                "command = 'sh @source/scripts/missing.sh'",
                 "exit 0",
             );
             write(
@@ -847,7 +833,11 @@ fn local_rules_share_entrypoints_with_independent_results() {
             .iter()
             .filter(|c| matches!(c.id.as_str(), "pass" | "fail" | "error"))
             .collect();
-        assert!(shared.iter().all(|c| c.entrypoint == shared[0].entrypoint));
+        assert!(
+            shared
+                .iter()
+                .all(|c| c.command.as_deref() == shared[0].command.as_deref())
+        );
         let report = hannes::verify_project_at(
             p,
             &Never,
@@ -867,7 +857,7 @@ fn local_rules_share_entrypoints_with_independent_results() {
             let result = report.results.iter().find(|r| r.id == id).unwrap();
             assert_eq!(result.status, status, "{id}: {}", result.reason);
             if id == "missing" {
-                assert!(result.reason.contains("entrypoint"));
+                assert!(result.reason.contains("scripts/missing.sh"));
             } else {
                 assert_eq!(result.stdout.as_ref().unwrap().text, id);
                 assert!(!result.blocking);
@@ -878,7 +868,7 @@ fn local_rules_share_entrypoints_with_independent_results() {
 
 #[cfg(unix)]
 #[test]
-fn shared_entrypoints_reject_symlinks_at_discovery_and_execution() {
+fn shared_commands_reject_symlinks_at_execution() {
     use std::os::unix::fs::symlink;
     for target in ["scripts/shared.sh", "scripts", ".hannes/checks/readme"] {
         let d = project();
@@ -887,7 +877,7 @@ fn shared_entrypoints_reject_symlinks_at_discovery_and_execution() {
             d.path(),
             "readme",
             "run_at = ['check']",
-            "entrypoint = 'scripts/shared.sh'\ninterpreter = 'sh'",
+            "command = 'sh @source/scripts/shared.sh'",
             "exit 0",
         );
         write(d.path(), "scripts/shared.sh", "exit 0");
@@ -896,7 +886,16 @@ fn shared_entrypoints_reject_symlinks_at_discovery_and_execution() {
         let moved = outside.path().join("replacement");
         fs::rename(&original, &moved).unwrap();
         symlink(&moved, &original).unwrap();
-        assert!(config::load(d.path()).is_err(), "accepted {target}");
+        if target == ".hannes/checks/readme" {
+            assert!(config::load(d.path()).is_err());
+        } else {
+            let reloaded = config::load(d.path()).unwrap();
+            assert_eq!(
+                hannes::checks::execute(&reloaded, &reloaded.checks[0], "check").status,
+                Status::Error,
+                "accepted {target}"
+            );
+        }
         let result = hannes::checks::execute(&p, &p.checks[0], "check");
         assert_eq!(
             result.status,
@@ -911,14 +910,22 @@ fn shared_entrypoints_reject_symlinks_at_discovery_and_execution() {
         d.path(),
         "readme",
         "enabled = false",
-        "entrypoint = 'scripts/shared.sh'",
+        "command = '@source/scripts/shared.sh'",
         "exit 0",
     );
     symlink("../outside", d.path().join("scripts")).unwrap();
-    assert!(config::load(d.path()).is_err());
+    let p = config::load(d.path()).unwrap();
+    assert_eq!(
+        hannes::checks::execute(&p, &p.checks[0], "check").status,
+        Status::Error
+    );
     fs::remove_file(d.path().join("scripts")).unwrap();
     fs::create_dir_all(d.path().join("scripts/shared.sh")).unwrap();
-    assert!(config::load(d.path()).is_err());
+    let p = config::load(d.path()).unwrap();
+    assert_eq!(
+        hannes::checks::execute(&p, &p.checks[0], "check").status,
+        Status::Error
+    );
 }
 
 #[test]
@@ -929,7 +936,7 @@ fn shared_entrypoints_recheck_missing_and_nonregular_files_before_execution() {
             d.path(),
             "readme",
             "run_at = ['check']",
-            "entrypoint = 'scripts/shared.sh'",
+            "command = '@source/scripts/shared.sh'",
             "exit 0",
         );
         write(d.path(), "scripts/shared.sh", "exit 0");
@@ -1107,14 +1114,10 @@ fn command_representations_execute_equivalently() {
         let mut previous = None;
         for implementation in [
             format!("command = {}", serde_json::to_string(&quoted).unwrap()),
-            format!("command = {}", serde_json::json!([executable])),
             format!(
                 "command = {}",
                 serde_json::to_string(&format!("sh {quoted}")).unwrap()
             ),
-            format!("command = {}", serde_json::json!(["sh", executable])),
-            format!("entrypoint = '{relative}'"),
-            format!("entrypoint = '{relative}'\ninterpreter = 'sh'"),
         ] {
             check(
                 d.path(),
@@ -1173,46 +1176,42 @@ fn commands_validate_without_execution() {
         );
         assert!(config::load(d.path()).is_err(), "accepted {implementation}");
     }
-    for command in [
-        "['hannes-no-such-command', '']",
-        "\"hannes-no-such-command ''\"",
-    ] {
-        let d = project();
-        check(
-            d.path(),
-            "missing",
-            "run_at = ['check']",
-            &format!("command = {command}"),
-            "exit 0",
-        );
-        check(
-            d.path(),
-            "disabled",
-            "enabled = false",
-            &format!("command = {command}"),
-            "exit 0",
-        );
-        let p = config::load(d.path()).unwrap();
-        assert!(p.checks.iter().all(|c| c.entrypoint.is_none()));
-        assert_eq!(
-            planner::build(&p, Some("check"), false)
-                .unwrap()
-                .plan
-                .scheduled
-                .len(),
-            1
-        );
-        let report = hannes::verify_project_at(
-            p,
-            &Never,
-            hannes::VerificationMode::AllRules,
-            Some("check"),
-            &mut |_| {},
-        )
-        .unwrap();
-        assert_eq!(report.results.len(), 1);
-        assert_eq!(report.results[0].status, Status::Error);
-    }
+    let command = "\"hannes-no-such-command ''\"";
+    let d = project();
+    check(
+        d.path(),
+        "missing",
+        "run_at = ['check']",
+        &format!("command = {command}"),
+        "exit 0",
+    );
+    check(
+        d.path(),
+        "disabled",
+        "enabled = false",
+        &format!("command = {command}"),
+        "exit 0",
+    );
+    let p = config::load(d.path()).unwrap();
+    assert!(p.checks.iter().all(|c| c.entrypoint.is_none()));
+    assert_eq!(
+        planner::build(&p, Some("check"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        1
+    );
+    let report = hannes::verify_project_at(
+        p,
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.results.len(), 1);
+    assert_eq!(report.results[0].status, Status::Error);
 }
 
 #[cfg(unix)]
@@ -1229,7 +1228,9 @@ fn commands_preserve_literal_arguments_and_rule_context() {
         let script = format!(
             "test -s README.md || exit 2; cat \"$HANNES_RULE_DIRECTORY/resource\"; printf '\\n<%s>\\n<%s>\\n%s\\n%s' \"$1\" \"$2\" \"$HANNES_PARAM_LABEL\" \"$HANNES_EXECUTION_POINT\"; exit {code}"
         );
-        let command = serde_json::json!(["sh", "-c", script, "probe", "", literal]);
+        write(d.path(), "scripts/probe.sh", &script);
+        let command =
+            serde_json::to_string(&format!("sh @source/scripts/probe.sh '' '{literal}'")).unwrap();
         check(
             d.path(),
             "native",
@@ -1259,7 +1260,7 @@ fn direct_commands_use_the_existing_process_runner() {
         d.path(),
         "native",
         "run_at = ['check']",
-        "command = ['git', '--version']",
+        "command = 'git --version'",
         "exit 2",
     );
     let p = config::load(d.path()).unwrap();
@@ -1274,7 +1275,7 @@ fn direct_commands_use_the_existing_process_runner() {
         d.path(),
         "native",
         "run_at = ['check']",
-        "command = ['git', '--help']",
+        "command = 'git --help'",
         "exit 2",
     );
     let p = config::load(d.path()).unwrap();

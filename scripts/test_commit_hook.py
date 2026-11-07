@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 import json
+import shlex
 
 ROOT = Path(__file__).resolve().parents[1]
 TYPES = ("build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test")
@@ -58,14 +59,14 @@ class CommitHookTests(unittest.TestCase):
             (config / "reviews").mkdir()
             (config / "reports").mkdir()
             (config / "config.toml").write_text('project = "Hook fixture"\nmax_display_files = 5\n')
-            shutil.copy2(ROOT / ".hannes/provider.toml", config / "provider.toml")
+            (config / "provider.toml").write_text('provider = "codex-cli"\ntimeout_seconds = 30\n')
             (repository / ".gitignore").write_text(".hannes/reports/\n__pycache__/\n")
             (scripts / "fixture-check.py").write_text("from pathlib import Path; import sys; sys.exit(1 if Path(sys.argv[1]).exists() else 0)\n")
             for point in ("pre-commit", "commit-msg", "pre-push"):
                 command = ["python3", "scripts/check-commits.py", "--message"] if point == "commit-msg" else ["python3", "scripts/fixture-check.py", f"fail-{point}"]
                 rule = config / "checks" / point
                 rule.mkdir()
-                (rule / "rule.toml").write_text(f'id = "{point}"\ndescription = "Fixture gate"\nrun_at = ["{point}"]\n[check]\ncommand = {json.dumps(command)}\ntimeout_seconds = 30\n')
+                (rule / "rule.toml").write_text(f'id = "{point}"\ndescription = "Fixture gate"\nrun_at = ["{point}"]\n[check]\ncommand = {json.dumps(shlex.join(command))}\ntimeout_seconds = 30\n')
             executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
             assert executable, "Install the compatible published Hannes governor first"
             # Exercise configured paths while retaining the separate versioned message policy.

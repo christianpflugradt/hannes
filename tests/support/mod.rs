@@ -8,12 +8,16 @@ pub fn write(root: &Path, path: &str, text: &str) {
 }
 
 pub fn check(root: &Path, id: &str, at: &[&str], script: &str) {
-    let interpreter = if cfg!(windows) { "cmd" } else { "sh" };
+    let command = if cfg!(windows) {
+        "cmd /C @rule/entrypoint"
+    } else {
+        "sh @rule/entrypoint"
+    };
     write(
         root,
         &format!(".hannes/checks/{id}/rule.toml"),
         &format!(
-            "id = {id:?}\ndescription = 'Test check'\nenabled = true\nrun_at = {at:?}\n[check]\nentrypoint = 'entrypoint'\ninterpreter = {interpreter:?}\ntimeout_seconds = 10\n"
+            "id = {id:?}\ndescription = 'Test check'\nenabled = true\nrun_at = {at:?}\n[check]\ncommand = {command:?}\ntimeout_seconds = 10\n"
         ),
     );
     write(root, &format!(".hannes/checks/{id}/entrypoint"), script);

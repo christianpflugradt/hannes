@@ -745,7 +745,7 @@ Every editable configuration field, required/optional marker and default must
 match the README reference. README configuration examples must validate and plan
 offline. Local links/anchors and specification acceptance references must resolve.
 Repository Git hooks run link/specification checks at pre-commit and pre-push;
-pre-push also runs the checker tests and Rust documentation acceptance tests.
+pre-push also runs the Rust documentation acceptance tests.
 CI runs them through check. The manual `mise docs:check` and `mise check` tasks
 remain available to developers; agents rely on Git hooks. Automated checks
 complement editorial review; they do not prove prose understandable.
@@ -779,4 +779,4 @@ Public documentation explains supported behavior; proposals remain in the roadma
 | OUT-001 | `tests/review_contract.rs::review_contract_enforces_boundaries_and_semantic_evidence_locally` |
 | INP-001 | `tests/acceptance.rs::changing_files_during_checks_blocks_pass` |
 | RPT-001 | `tests/configuration.rs::saved_reports_reject_inconsistent_metadata` |
-| REL-001 | `scripts/test_release.py::test_ci_policy_checks_new_messages_without_rejecting_legacy_history` |
+| REL-001 | `scripts/test_release.py::test_only_root_version_changes_and_invalid_versions_leave_files_untouched` |

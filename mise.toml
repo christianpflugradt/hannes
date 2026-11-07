@@ -21,7 +21,7 @@ description = "Install the explicit pre-commit, commit-msg and pre-push hooks"
 run = "sh scripts/setup-git-hooks.sh"
 
 [tasks."hooks:test"]
-description = "Test accepted/rejected commit messages in an isolated Git repository"
+description = "Test managed Git hooks with synthetic rules in an isolated repository"
 run = "python3 scripts/test_commit_hook.py"
 run_windows = "python scripts/test_commit_hook.py"
 
@@ -49,7 +49,7 @@ run_windows = "python scripts/smoke.py target/release/hannes.exe"
 
 [tasks."docs:check"]
 description = "Check documentation links, configuration reference and executable examples"
-run = ["python3 scripts/test_docs.py", "python3 scripts/check-docs.py", "cargo test --locked --test documentation"]
+run = ["python3 scripts/check-docs.py", "cargo test --locked --test documentation"]
 
 [tasks.check]
 description = "Manually run the Hannes pre-push gate (agents use Git hooks)"

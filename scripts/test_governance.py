@@ -89,21 +89,6 @@ class GovernanceTests(unittest.TestCase):
         for bypass in ("continue-on-error", "if:", "||"):
             self.assertNotIn(bypass, verification)
 
-    def test_commit_message_checker_consumes_managed_hook_arguments(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            message = Path(temporary) / "commit message.txt"
-            env = dict(os.environ, HANNES_GIT_HOOK="commit-msg", HANNES_GIT_HOOK_ARG_COUNT="1", HANNES_GIT_HOOK_ARG_1=str(message))
-            def check(environment):
-                return subprocess.run([sys.executable, str(ROOT / "scripts/check-commits.py"), "--message"], env=environment, capture_output=True, text=True)
-            message.write_text("feat: accept managed hook arguments\n")
-            self.assertEqual(check(env).returncode, 0)
-            message.write_text("Invalid message\n")
-            self.assertNotEqual(check(env).returncode, 0)
-            message.write_text("feat: valid message\n")
-            self.assertNotEqual(check(dict(env, HANNES_GIT_HOOK="pre-commit")).returncode, 0)
-            self.assertNotEqual(check(dict(env, HANNES_GIT_HOOK_ARG_COUNT="2")).returncode, 0)
-            self.assertNotEqual(check(dict(env, HANNES_GIT_HOOK_ARG_1="")).returncode, 0)
-
     def test_setup_shim_preserves_custom_paths_and_retires_only_empty_legacy_path(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

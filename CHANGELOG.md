@@ -1,3 +1,9 @@
+## [0.9.0](https://github.com/christianpflugradt/hannes/compare/v0.8.0...v0.9.0) (2026-11-07)
+
+### Features
+
+* propagate execution-point context to rules ([10d3a23](https://github.com/christianpflugradt/hannes/commit/10d3a23b069d8617f9a06b3c324c9cffe60f5c38))
+
 ## [0.8.0](https://github.com/christianpflugradt/hannes/compare/v0.7.0...v0.8.0) (2026-11-07)
 
 ### ⚠ BREAKING CHANGES

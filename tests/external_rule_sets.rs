@@ -48,7 +48,9 @@ fn definitions(root: &Path, path: &str, script: &str) {
     write(
         root,
         &format!("{path}/config.toml"),
-        "id = 'quality'\ndescription = 'Reusable rules'\nrules = ['required-files']\nrun_at = ['check']\n",
+        &format!(
+            "id = 'quality'\ndescription = 'Reusable rules'\nrules = ['{path}/checks/required-files']\nrun_at = ['check']\n"
+        ),
     );
     write(
         root,
@@ -282,11 +284,11 @@ fn invalid_refresh_preserves_previous_valid_state_without_claiming_success() {
     write(
         &f.remote,
         "repository/config.toml",
-        "id = \"quality\"\ndescription = \"Reusable rules\"\nrules = [\"missing\"]\nrun_at = [\"check\"]\n",
+        "id = \"quality\"\ndescription = \"Reusable rules\"\nrules = [\"repository/checks/missing\"]\nrun_at = [\"check\"]\n",
     );
     commit(&f.remote);
     let error = format!("{:#}", f.load(true).unwrap_err());
-    assert!(error.contains("unknown rule"), "{error}");
+    assert!(error.contains("missing or unsafe"), "{error}");
     assert_eq!(f.state(), previous);
     f.load(false).unwrap();
 }
@@ -446,7 +448,7 @@ fn imported_reviews_use_source_instructions_and_consumer_evidence() {
         "repository/config.toml",
         r#"id = "reviews"
 description = "Reusable reviews"
-rules = ["documentation"]
+rules = ["repository/reviews/documentation"]
 run_at = ["check"]
 "#,
     );
@@ -511,7 +513,7 @@ fn imported_check_failure_propagates_and_no_unselected_rule_executes() {
 }
 
 #[test]
-fn source_instruction_paths_cannot_escape_the_selected_directory() {
+fn source_instruction_paths_cannot_escape_the_rule_directory() {
     for instructions in [
         "../software/criteria.md",
         "/tmp/criteria.md",
@@ -530,6 +532,12 @@ prompt = {instructions:?}
 "#
             ),
         );
+        let central = f.remote.join("repository/config.toml");
+        let text = fs::read_to_string(&central).unwrap().replace(
+            "repository/checks/required-files",
+            "repository/reviews/review",
+        );
+        fs::write(central, text).unwrap();
         write(&f.remote, "software/criteria.md", "Outside boundary");
         #[cfg(unix)]
         std::os::unix::fs::symlink("../software", f.remote.join("repository/escape")).unwrap();
@@ -558,7 +566,7 @@ fn cli_refresh_cached_plan_and_offline_hook_keep_existing_lifecycle() {
         &source,
         fs::read_to_string(&source)
             .unwrap()
-            .replace("check", "pre-commit"),
+            .replace("['check']", "['pre-commit']"),
     )
     .unwrap();
     commit(&f.remote);
@@ -622,7 +630,7 @@ fn all_fixed_hooks_execute_imported_rules_offline() {
     write(
         &f.remote,
         "repository/config.toml",
-        "id = 'quality'\ndescription = 'Reusable rules'\nrules = ['required-files']\nrun_at = ['pre-commit', 'commit-msg', 'pre-push']\n",
+        "id = 'quality'\ndescription = 'Reusable rules'\nrules = ['repository/checks/required-files']\nrun_at = ['pre-commit', 'commit-msg', 'pre-push']\n",
     );
     write(
         &f.remote,
@@ -945,7 +953,7 @@ fn independent_mappings_resolve_inheritance_many_to_one_and_offline_execution() 
             .replace("[check]", "run_at = ['own']\n[check]"),
     )
     .unwrap();
-    // A standalone Rule's own assignments must also be mapped.
+    // Additional selected Rules inherit the set assignments.
     write(
         &f.remote,
         "repository/checks/standalone/rule.toml",
@@ -963,6 +971,12 @@ fn independent_mappings_resolve_inheritance_many_to_one_and_offline_execution() 
         "id = 'disabled'\ndescription = 'Disabled'\nenabled = false\nrun_at = ['test']\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
     );
     write(&f.remote, "repository/checks/disabled/index.sh", "exit 1\n");
+    let central = f.remote.join("repository/config.toml");
+    let text = fs::read_to_string(&central).unwrap().replace(
+        "'repository/checks/required-files'",
+        "'repository/checks/required-files', 'repository/checks/standalone', 'repository/checks/disabled'",
+    );
+    fs::write(central, text).unwrap();
     commit(&f.remote);
     mapped_imports(
         &f,
@@ -1320,7 +1334,7 @@ fn import_parameters_preserve_bindings_mappings_resources_and_reference_deduplic
     write(
         &f.remote,
         "repository/config.toml",
-        "id = 'quality'\ndescription = 'Parameterized checks and reviews'\nrules = ['required-files', 'required-files', 'parameter-review']\nrun_at = ['lint', 'test']\n",
+        "id = 'quality'\ndescription = 'Parameterized checks and reviews'\nrules = ['repository/checks/required-files', 'repository/checks/required-files', 'repository/reviews/parameter-review']\nrun_at = ['lint', 'test']\n",
     );
     let check_path = f.remote.join("repository/checks/required-files/rule.toml");
     let declarations = "\n[parameters.scopes_file]\ntype = 'file'\nrequired = true\n[parameters.label]\ntype = 'string'\nrequired = true\n[parameters.optional]\ntype = 'file'\n";
@@ -1488,4 +1502,149 @@ fn import_parameter_values_cannot_leak_to_other_imports_or_undeclared_names() {
     assert_eq!(report.overall, Status::Error);
     assert!(report.results[0].reason.contains("undeclared"));
     assert!(report.results[0].reason.contains("not declared"));
+}
+
+#[test]
+fn shared_rules_are_reused_across_sets_and_points_offline() {
+    let f = Fixture::new();
+    fs::remove_dir_all(f.root.join(".hannes/checks")).unwrap();
+    fs::remove_dir_all(f.root.join(".hannes/reviews")).unwrap();
+    fs::create_dir_all(f.remote.join("rules/checks")).unwrap();
+    fs::rename(
+        f.remote.join("repository/checks/required-files"),
+        f.remote.join("rules/checks/shared"),
+    )
+    .unwrap();
+    write(
+        &f.remote,
+        "rules/checks/shared/resource.txt",
+        "shared resource",
+    );
+    write(
+        &f.remote,
+        "rules/checks/shared/index.sh",
+        "test -s README.md && test -s \"$HANNES_RULE_DIRECTORY/resource.txt\"\n",
+    );
+    write(
+        &f.remote,
+        "rules/reviews/shared/rule.toml",
+        "id = 'documentation'\ndescription = 'Shared review'\n[review]\nprompt = 'prompt.md'\nfiles = ['README.md']\n",
+    );
+    write(
+        &f.remote,
+        "rules/reviews/shared/prompt.md",
+        "Judge consumer documentation.\n",
+    );
+    // Unreferenced definitions are not part of either import.
+    write(&f.remote, "rules/checks/unused/rule.toml", "invalid toml");
+    for (set, point) in [("repository", "pre-push"), ("software", "check")] {
+        write(
+            &f.remote,
+            &format!("{set}/config.toml"),
+            &format!(
+                "id = {set:?}\ndescription = 'Shared rules'\nrules = ['rules/checks/shared', 'rules/checks/shared', 'rules/reviews/shared']\nrun_at = [{point:?}]\n"
+            ),
+        );
+    }
+    commit(&f.remote);
+    write(&f.root, "README.md", "consumer");
+    f.imports(&[("repository", "main"), ("software", "main")]);
+    let project = f.load(true).unwrap();
+    let checks: Vec<_> = project
+        .checks
+        .iter()
+        .filter(|r| r.id.starts_with("git:"))
+        .collect();
+    let reviews: Vec<_> = project
+        .reviews
+        .iter()
+        .filter(|r| r.id.starts_with("git:"))
+        .collect();
+    assert_eq!(checks.len(), 2);
+    assert_eq!(reviews.len(), 2);
+    assert_eq!(checks[0].entrypoint, checks[1].entrypoint);
+    assert_eq!(reviews[0].text, reviews[1].text);
+    for point in ["pre-push", "check"] {
+        let plan = planner::build(&project, Some(point), false).unwrap().plan;
+        assert_eq!(plan.scheduled.len(), 2);
+        assert!(
+            plan.scheduled
+                .iter()
+                .any(|r| r.id.ends_with(":required-files"))
+        );
+    }
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    let report = hannes::verify_project_at(
+        f.load(false).unwrap(),
+        &ReviewMock,
+        hannes::VerificationMode::AllRules,
+        Some("check"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.overall, Status::Pass);
+    assert_eq!(report.results.len(), 2);
+}
+
+#[test]
+fn external_rule_references_reject_unsafe_paths_and_duplicate_ids() {
+    for reference in [
+        "../checks/outside",
+        "/checks/outside",
+        "rules/checks/../../outside",
+        "repository/config.toml",
+        "repository/checks/required-files/rule.toml",
+        "missing/checks/rule",
+    ] {
+        let f = Fixture::new();
+        write(
+            &f.remote,
+            "repository/config.toml",
+            &format!(
+                "id = 'set'\ndescription = 'Unsafe reference'\nrules = [{reference:?}]\nrun_at = ['check']\n"
+            ),
+        );
+        commit(&f.remote);
+        f.imports(&[("repository", "main")]);
+        assert!(f.load(true).is_err(), "accepted {reference}");
+    }
+    let f = Fixture::new();
+    write(
+        &f.remote,
+        "repository/config.toml",
+        "id = 'set'\ndescription = 'Duplicate IDs'\nrules = ['repository/checks/required-files', 'software/checks/required-files']\nrun_at = ['check']\n",
+    );
+    commit(&f.remote);
+    f.imports(&[("repository", "main")]);
+    let error = format!("{:#}", f.load(true).unwrap_err());
+    assert!(error.contains("duplicate"), "{error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn shared_rule_references_reject_symlink_components() {
+    for component in [
+        "rules",
+        "rules/checks/shared",
+        "rules/checks/shared/rule.toml",
+    ] {
+        let f = Fixture::new();
+        write(
+            &f.remote,
+            "rules/checks/shared/rule.toml",
+            "id = 'shared'\ndescription = 'Shared rule'\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+        );
+        write(
+            &f.remote,
+            "repository/config.toml",
+            "id = 'set'\ndescription = 'Symlink'\nrules = ['rules/checks/shared']\nrun_at = ['check']\n",
+        );
+        let path = f.remote.join(component);
+        let target = path.with_extension("original");
+        fs::rename(&path, &target).unwrap();
+        std::os::unix::fs::symlink(target.file_name().unwrap(), path).unwrap();
+        commit(&f.remote);
+        f.imports(&[("repository", "main")]);
+        assert!(f.load(true).is_err(), "accepted symlink {component}");
+    }
 }

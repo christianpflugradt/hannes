@@ -349,7 +349,7 @@ rules = ["repository-readme", "architecture-review"]
 | `id` | Required | Unique set ID: 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Independent of rule IDs. |
 | `description` | Required | Nonblank explanation. |
 | `run_at` | Required | Nonempty list of known execution points. |
-| `rules` | Required | Rule IDs defined in the same scope; repeated references execute once. Empty is allowed; set references are unsupported. |
+| `rules` | Required | Local: Rule IDs in the same scope. External: repository-relative Rule directories (see imports below). Repeated references execute once per binding. Empty is allowed; set references are unsupported. |
 
 Present sets always apply; they have no enabled, blocking or source attributes.
 Remove a set or its rule references to stop using it. Set membership overrides a
@@ -452,11 +452,29 @@ name differently or share targets. No global or individual Rule mapping exists.
 Mapping preserves Rule identity, enabled/blocking state, resources and provenance;
 it changes neither cached files nor revision identity and works offline without
 fetching. No other import fields or Rule overrides are accepted. Remove the import to
-stop using it. A selected directory is its own governance root, with exactly one
-set in `config.toml` and its own `checks/` and `reviews/`. It has no nested
-`.hannes/`, `rule-sets/`, project settings or imports. Its `config.toml` uses the
-same four fields shown for a local Rule Set. References stay within that scope.
-Identical rule IDs across independent sources do not collide; imported identities
+stop using it. A selected directory defines one set in `config.toml`, with the
+same four fields as a local set. External `rules` entries name Rule directories
+relative to the external repository root, for example:
+
+```toml
+id = "security"
+description = "Check for secrets before push and in CI"
+run_at = ["pre-push", "check"]
+rules = ["rules/checks/secret-scan"]
+```
+
+Each referenced directory must be directly under a `checks/` or `reviews/`
+directory and contain `rule.toml` plus its resources. Several sets can reference
+the same directory. Only referenced Rules are loaded; repeated paths load once.
+Distinct referenced directories must have unique Rule IDs within each import.
+Imported parameter tables continue to use those IDs, not directory paths.
+Each import remains a separate execution and parameter binding.
+Absolute paths, parent traversal and symlinks are rejected. Sets cannot reference
+other sets or consumer definitions, and accept no project settings or imports.
+Local sets continue to reference Rule IDs. To migrate an existing external set,
+replace each ID in `rules` with its repository-relative Rule directory; for
+example, `"repository-readme"` becomes `"repository/checks/readme"`.
+Identical rule IDs across independent imports do not collide; imported identities
 and commit provenance remain deterministic.
 
 `pass auf` resolves refs and validates all sources before atomically publishing

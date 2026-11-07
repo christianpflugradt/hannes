@@ -28,7 +28,8 @@ Incomplete snapshots or context preparation block execution. Preview does not
 certify a later source state. Reports use schema 4 and plans use schema 3. Blocking metadata distinguishes
 completed advisory failures from fatal errors; disabled Rules are listed separately.
 
-External Git rule sets use the same resolver in isolated directory scopes. The
+External Git rule sets select shared repository-relative Rule directories, then
+use the same resolver in independent import scopes. The
 loader maps effective points per import, then namespaces validated rules before
 combining the effective result. Mapping accepts only used custom sources and
 consumer-declared custom targets. Unmapped names retain their meaning; many-to-one

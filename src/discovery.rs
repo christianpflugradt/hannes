@@ -1,4 +1,4 @@
-//! Fixed filesystem discovery shared by project roots and imported rule-set roots.
+//! Local discovery and explicit external Rule references share one Rule loader.
 use crate::{
     config::source_path,
     config::{self, Check, Config, Review, RuleDefinition, RuleSet},
@@ -30,18 +30,57 @@ pub(crate) fn load(root: &Path) -> Result<Loaded> {
         let set: RuleSet = document(root, &path)?;
         sets.push((path, set));
     }
-    load_rules(root, &directory, config, sets)
+    let mut directories = Vec::new();
+    for kind in ["checks", "reviews"] {
+        for dir in entries(root, &directory.join(kind))? {
+            directories.push((kind.to_owned(), dir));
+        }
+    }
+    load_rules(root, config, sets, directories)
 }
-pub(crate) fn load_external(root: &Path, consumer: Config) -> Result<Loaded> {
-    let central = PathBuf::from("config.toml");
-    let set: RuleSet = document(root, &central)?;
-    ensure!(
-        root.join("rule-sets")
-            .symlink_metadata()
-            .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
-        "external root must define exactly one rule set in config.toml; rule-sets is unsupported"
-    );
-    load_rules(root, Path::new("."), consumer, vec![(central, set)])
+pub(crate) fn load_external(root: &Path, selected: &Path, consumer: Config) -> Result<Loaded> {
+    let central = selected.join("config.toml");
+    let mut set: RuleSet = document(root, &central)?;
+    let mut directories = std::collections::BTreeMap::new();
+    for reference in &set.rules {
+        let directory = source_path(root, Path::new(reference))
+            .with_context(|| format!("missing or unsafe rule reference {reference:?}"))?;
+        ensure!(
+            directory.is_dir(),
+            "rule reference must name a directory: {reference:?}"
+        );
+        let kind = directory
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|s| s.to_str());
+        ensure!(
+            matches!(kind, Some("checks" | "reviews")),
+            "rule reference must name a directory directly under checks/ or reviews/: {reference:?}"
+        );
+        directories.insert(
+            directory.strip_prefix(root)?.to_path_buf(),
+            kind.unwrap().to_owned(),
+        );
+        ensure!(directories.len() <= MAX_RULES, "at most {MAX_RULES} rules");
+    }
+    let mut loaded = load_rules(
+        root,
+        consumer,
+        vec![],
+        directories
+            .into_iter()
+            .map(|(path, kind)| (kind, path))
+            .collect(),
+    )?;
+    // External paths select definitions; the shared resolver still operates on IDs.
+    set.rules = loaded
+        .checks
+        .iter()
+        .map(|(_, rule)| rule.id.clone())
+        .chain(loaded.reviews.iter().map(|(_, rule)| rule.id.clone()))
+        .collect();
+    loaded.rule_sets.push((central, set));
+    Ok(loaded)
 }
 pub(crate) fn document<T: serde::de::DeserializeOwned>(root: &Path, path: &Path) -> Result<T> {
     let full =
@@ -104,9 +143,9 @@ fn entries(root: &Path, directory: &Path) -> Result<Vec<PathBuf>> {
 
 fn load_rules(
     root: &Path,
-    directory: &Path,
     config: Config,
     rule_sets: Vec<(PathBuf, RuleSet)>,
+    directories: Vec<(String, PathBuf)>,
 ) -> Result<Loaded> {
     let mut loaded = Loaded {
         config,
@@ -114,90 +153,88 @@ fn load_rules(
         checks: vec![],
         reviews: vec![],
     };
-    for kind in ["checks", "reviews"] {
-        for dir in entries(root, &directory.join(kind))? {
-            let full = source_path(root, &dir)?;
-            ensure!(
-                full.is_dir(),
-                "{}: a rule must be a directory",
-                dir.display()
-            );
-            let path = dir.join("rule.toml");
-            let rule: RuleDefinition = document(root, &path)?;
-            match (kind, rule.check, rule.review) {
-                ("checks", Some(check), None) => {
-                    let entrypoint = resource(root, &dir, &check.entrypoint)?;
-                    if let Some(interpreter) = &check.interpreter {
-                        ensure!(
-                            !interpreter.trim().is_empty() && !interpreter.contains('\0'),
-                            "interpreter must name one executable"
-                        );
-                    }
-                    loaded.checks.push((
-                        path.clone(),
-                        Check {
-                            id: rule.id.clone(),
-                            description: rule.description,
-                            enabled: rule.enabled,
-                            blocking: rule.blocking,
-                            entrypoint,
-                            interpreter: check.interpreter,
-                            timeout_seconds: check.timeout_seconds,
-                            run_at: rule.run_at.clone(),
-                            parameters: crate::parameters::Binding::local(rule.parameters),
-                        },
-                    ));
-                }
-                ("reviews", None, Some(review)) => {
-                    let prompt = resource(root, &dir, &review.prompt)?;
+    for (kind, dir) in directories {
+        let full = source_path(root, &dir)?;
+        ensure!(
+            full.is_dir(),
+            "{}: a rule must be a directory",
+            dir.display()
+        );
+        let path = dir.join("rule.toml");
+        let rule: RuleDefinition = document(root, &path)?;
+        match (kind.as_str(), rule.check, rule.review) {
+            ("checks", Some(check), None) => {
+                let entrypoint = resource(root, &dir, &check.entrypoint)?;
+                if let Some(interpreter) = &check.interpreter {
                     ensure!(
-                        Path::new(&review.prompt)
-                            .extension()
-                            .is_some_and(|e| e == "md"),
-                        "review prompt must be Markdown (.md)"
+                        !interpreter.trim().is_empty() && !interpreter.contains('\0'),
+                        "interpreter must name one executable"
                     );
-                    let (text, execution_error) =
-                        match config::read_bounded(&prompt, MAX_INSTRUCTION_BYTES) {
-                            Ok(text) => (text, None),
-                            Err(error)
-                                if error
-                                    .downcast_ref::<std::io::Error>()
-                                    .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
-                            {
-                                (
-                                    String::new(),
-                                    Some(format!("Missing review prompt {}", prompt.display())),
-                                )
-                            }
-                            Err(error) => return Err(error),
-                        };
-                    loaded.reviews.push((
-                        path.clone(),
-                        Review {
-                            id: rule.id.clone(),
-                            description: rule.description,
-                            enabled: rule.enabled,
-                            blocking: rule.blocking,
-                            files: review.files,
-                            context: review.context,
-                            run_at: rule.run_at.clone(),
-                            text,
-                            execution_error,
-                            parameters: crate::parameters::Binding::local(rule.parameters),
-                        },
-                    ));
                 }
-                _ => anyhow::bail!(
-                    "{}: expected exactly one [{}] implementation",
-                    path.display(),
-                    if kind == "checks" { "check" } else { "review" }
-                ),
-            };
-            ensure!(
-                loaded.checks.len() + loaded.reviews.len() <= MAX_RULES,
-                "at most {MAX_RULES} rules"
-            );
-        }
+                loaded.checks.push((
+                    path.clone(),
+                    Check {
+                        id: rule.id.clone(),
+                        description: rule.description,
+                        enabled: rule.enabled,
+                        blocking: rule.blocking,
+                        entrypoint,
+                        interpreter: check.interpreter,
+                        timeout_seconds: check.timeout_seconds,
+                        run_at: rule.run_at.clone(),
+                        parameters: crate::parameters::Binding::local(rule.parameters),
+                    },
+                ));
+            }
+            ("reviews", None, Some(review)) => {
+                let prompt = resource(root, &dir, &review.prompt)?;
+                ensure!(
+                    Path::new(&review.prompt)
+                        .extension()
+                        .is_some_and(|e| e == "md"),
+                    "review prompt must be Markdown (.md)"
+                );
+                let (text, execution_error) =
+                    match config::read_bounded(&prompt, MAX_INSTRUCTION_BYTES) {
+                        Ok(text) => (text, None),
+                        Err(error)
+                            if error
+                                .downcast_ref::<std::io::Error>()
+                                .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+                        {
+                            (
+                                String::new(),
+                                Some(format!("Missing review prompt {}", prompt.display())),
+                            )
+                        }
+                        Err(error) => return Err(error),
+                    };
+                loaded.reviews.push((
+                    path.clone(),
+                    Review {
+                        id: rule.id.clone(),
+                        description: rule.description,
+                        enabled: rule.enabled,
+                        blocking: rule.blocking,
+                        files: review.files,
+                        context: review.context,
+                        run_at: rule.run_at.clone(),
+                        text,
+                        execution_error,
+                        parameters: crate::parameters::Binding::local(rule.parameters),
+                    },
+                ));
+            }
+            _ => anyhow::bail!(
+                "{}: expected exactly one [{}] implementation",
+                path.display(),
+                if kind == "checks" { "check" } else { "review" }
+            ),
+        };
+        ensure!(
+            loaded.checks.len() + loaded.reviews.len() <= MAX_RULES,
+            "at most {MAX_RULES} rules"
+        );
     }
     Ok(loaded)
 }

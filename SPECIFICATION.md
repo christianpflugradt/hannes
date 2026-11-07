@@ -69,9 +69,18 @@ then map effective points and deduplicate before merging. Unmapped names must
 still be known to the consumer. Each import has an independent mapping namespace;
 many sources may share a target. Mapping never changes cached definitions,
 revision identity or provenance and works offline without fetching.
-Each selected directory is an isolated governance root: config.toml defines exactly one Rule Set using the
-same four fields as local sets; checks/ and reviews/ contain its own Rules.
-No extra .hannes or rule-sets directory is used. Sibling/consumer references fail.
+Each selected directory defines exactly one Rule Set in config.toml. Its rules
+are paths relative to the external repository root, such as
+rules/checks/secret-scan or rules/reviews/architecture. Each path names a Rule
+directory directly under checks/ or reviews/; it contains rule.toml and its
+resources. Multiple sets may reference the same directory. Only referenced Rules
+are loaded, repeated paths load once, and distinct directories with duplicate
+Rule IDs fail within a binding. References are resolved to IDs before ordinary
+assignment validation. Each import remains a separate execution/parameter binding.
+No nested imports or references to other sets are supported. Absolute paths,
+parent traversal, symlinks and references outside the repository fail. Local sets
+continue to reference IDs. This replaces external sets' former directory-local
+ID references; migrate each entry to its repository-relative Rule directory.
 Rules are namespaced only after scope-local validation; provenance retains source
 identity, selected path/ref and resolved commit.
 
@@ -94,7 +103,8 @@ There is no configuration version field. Unknown fields, duplicate keys/IDs,
 invalid references and unsafe rule resources fail, including disabled Rules.
 Missing check entrypoints or review prompts are execution errors only when
 selected and enabled.
-No recursive TOML discovery or arbitrary definition placement is supported.
+No recursive TOML discovery is supported. External sets explicitly select Rule
+directories as defined in EXT-001; local definitions use only the paths above.
 Supporting files inside rule directories are data, never governance documents.
 
 Project settings are project, max_display_files (default 5), execution_points
@@ -447,7 +457,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
-| EXT-001 | `tests/external_rule_sets.rs::branch_tag_and_full_commit_share_one_immutable_revision` |
+| EXT-001 | `tests/external_rule_sets.rs::shared_rules_are_reused_across_sets_and_points_offline` |
 | RULE-001 | `tests/execution_points.rs::resolution_obeys_membership_override_union_and_disabled_rules` |
 | REC-001 | `tests/reconciliation.rs::approval_updates_removals_and_idempotency` |
 | ARC-001 | `tests/documentation.rs::documented_provider_scaffold_matches_the_implementation` |

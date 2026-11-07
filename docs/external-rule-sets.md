@@ -1,21 +1,19 @@
 # External Git Rule Sets
 
-An import selects one directory at one Git revision. The selected directory is
-an independent governance root. The [configuration reference](configuration.md)
+An import selects one Rule Set directory at one Git revision. The set references
+Rule directories anywhere inside that repository; multiple sets can share Rules. The [configuration reference](configuration.md)
 lists consumer fields, Rule definitions and execution semantics.
 
 ## A shared repository
 
 ```text
 hannes-governance/
-  repository/
-    config.toml
-    checks/readme/rule.toml
-    checks/readme/index.sh
-  releasable-software/
-    config.toml
-    checks/changelog/rule.toml
-    checks/changelog/index.sh
+  repository/config.toml
+  releasable-software/config.toml
+  rules/checks/readme/rule.toml
+  rules/checks/readme/index.sh
+  rules/checks/changelog/rule.toml
+  rules/checks/changelog/index.sh
 ```
 
 `repository/config.toml`:
@@ -24,10 +22,10 @@ hannes-governance/
 id = "repository"
 description = "General repository governance"
 run_at = ["pre-push", "check"]
-rules = ["repository-readme"]
+rules = ["rules/checks/readme"]
 ```
 
-`repository/checks/readme/rule.toml`:
+`rules/checks/readme/rule.toml`:
 
 ```toml
 id = "repository-readme"
@@ -37,7 +35,7 @@ entrypoint = "index.sh"
 interpreter = "sh"
 ```
 
-`repository/checks/readme/index.sh`:
+`rules/checks/readme/index.sh`:
 
 ```sh
 test -s README.md
@@ -49,10 +47,10 @@ test -s README.md
 id = "releasable-software"
 description = "Release documentation"
 run_at = ["pre-push", "release"]
-rules = ["release-changelog"]
+rules = ["rules/checks/readme", "rules/checks/changelog"]
 ```
 
-`releasable-software/checks/changelog/rule.toml`:
+`rules/checks/changelog/rule.toml`:
 
 ```toml
 id = "release-changelog"
@@ -62,7 +60,7 @@ entrypoint = "index.sh"
 interpreter = "sh"
 ```
 
-`releasable-software/checks/changelog/index.sh`:
+`rules/checks/changelog/index.sh`:
 
 ```sh
 test -s CHANGELOG.md
@@ -86,12 +84,22 @@ path = "releasable-software"
 ref = "v1.2.0"
 ```
 
-Each selected root defines exactly one Rule Set in config.toml and discovers Rules
-from immediate checks/ and reviews/ directories. It has no extra .hannes directory,
-rule-sets directory, consumer settings or nested imports. The set can reference
-only its own Rules. All references are validated, including disabled Rules.
-IDs need only be unique within their own scope. No source or consumer can override
-another scope's Rules. Removing an import stops using that source.
+Each selected directory defines exactly one Rule Set in `config.toml`.
+External `rules` entries are directory paths relative to the repository root,
+not IDs or paths relative to the selected set. A Rule directory must be directly
+under `checks/` or `reviews/` and contain `rule.toml` plus its resources. In this
+example both sets share `rules/checks/readme` without duplicating it.
+Only explicitly referenced Rules are loaded. Unreferenced definitions and other
+sets do not affect the import. Repeated paths load once; distinct directories
+with duplicate Rule IDs in one import fail validation. All selected definitions
+are validated, including disabled Rules. The loader resolves references to IDs
+before the ordinary assignment resolver runs. Local sets still reference IDs.
+
+Each import remains an independent execution and parameter binding, including
+when two sets share a Rule. A set may also assign one Rule to multiple points
+through `run_at`. Removing an import stops using that set. Sets accept no project
+settings, nested imports or references to other sets. For existing external sets,
+replace directory-local IDs in `rules` with repository-relative Rule paths.
 
 Per-import `[imports.execution_points]` maps external custom names to custom names
 already declared by the consumer. The table belongs only to the preceding import.
@@ -160,8 +168,10 @@ locates bundled resources inside the executing Check directory. Explicit
 interpreters receive absolute entrypoint paths. Review prompts load from their
 own Rule directories; context paths and evidence refer to the consumer.
 
-Selected roots, Rule directories, definitions, entrypoints and prompts reject
-symlinks, parent traversal and unexpected file types. Only designated definitions
+Selected set directories, Rule references, definitions, entrypoints and prompts
+reject symlinks, parent traversal and unexpected file types. The external
+repository is the containment boundary for Rule references; entrypoints and
+prompts remain confined to their own Rule directory. Only designated definitions
 are interpreted; supporting TOML is data. Git retrieval disables downloaded hooks
 and initialization scripts and never initializes submodules. Host credential
 helpers and SSH configuration remain trusted integrations.

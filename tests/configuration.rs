@@ -541,7 +541,7 @@ impl External {
                 &remote,
                 &format!("{name}/config.toml"),
                 &format!(
-                    "id = {name:?}\ndescription = 'Reusable set'\nrules = ['readme']\nrun_at = ['check']"
+                    "id = {name:?}\ndescription = 'Reusable set'\nrules = ['{name}/checks/readme']\nrun_at = ['check']"
                 ),
             );
             write(
@@ -661,7 +661,11 @@ fn external_invalid_roots_import_overrides_and_scope_references_fail() {
         f.commit();
         assert!(f.load(true).is_err(), "accepted {suffix}");
     }
-    fs::write(&file, original.replace("'readme'", "'sibling-only'")).unwrap();
+    fs::write(
+        &file,
+        original.replace("repository/checks/readme", "repository/checks/missing"),
+    )
+    .unwrap();
     f.commit();
     assert!(f.load(true).is_err());
     fs::write(&file, &original).unwrap();

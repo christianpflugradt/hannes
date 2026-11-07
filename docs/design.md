@@ -4,9 +4,10 @@
 
 `config` defines the project, Rule and Rule Set schemas and validates loaded
 objects. `discovery` reads only the fixed configuration paths and resolves Rule
-resources within their own directories. Local and imported roots share Rule
+resources within their own directories. Local discovery and explicit external references share Rule
 loading; the central document is intentionally different: project settings locally,
-a single Rule Set in an imported root. `rules` resolves effective assignments;
+a single Rule Set in an imported directory. External sets select repository-relative
+Rule directories; only those definitions are loaded and their IDs enter the resolver. `rules` resolves effective assignments;
 `planner` prepares selection and review context; `checks` uses the shared process
 runner; `reviews` validates provider verdicts; `report` persists results; `terminal`
 renders them. There are no alternative configuration loaders or execution engines.
@@ -167,11 +168,12 @@ results; disabled Rules need neither implementation nor parameter resolution.
 
 ## External source boundaries
 
-`external` supplies isolated documents to the existing discovery/validation flow.
+`external` supplies each import binding to the existing discovery/validation flow.
 `external::cache` owns host Git, shared object storage, immutable checkouts,
 integrity receipts and OS locks. Each selected directory contains exactly one
-local set. The ordinary resolver validates references against only that boundary's
-rules and source execution-point names. Per-import mappings translate effective
+set. Its explicit Rule directory references resolve within the immutable repository
+checkout, allowing multiple sets to share definitions and resources. The ordinary
+resolver validates their IDs and source execution-point names within each binding. Per-import mappings translate effective
 assignments after inheritance; all resulting names must be consumer-known.
 Mappings never affect cache keys or immutable source files. Namespacing follows validation,
 before effective results merge. Local resolution runs first, preventing consumer

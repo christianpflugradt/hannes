@@ -314,8 +314,12 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
             boundary.is_dir(),
             "external rule-set path is not a directory"
         );
-        let mut definitions = crate::discovery::load_external(&boundary, project.config.clone())
-            .context("invalid external rule-set definitions")?;
+        let mut definitions = crate::discovery::load_external(
+            &checkout,
+            Path::new(&import.path),
+            project.config.clone(),
+        )
+        .context("invalid external rule-set definitions")?;
         ensure!(
             definitions.rule_sets.len() == 1,
             "invalid external rule set: selected directory must define exactly one rule set"

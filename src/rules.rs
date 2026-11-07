@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-pub const BUILTIN_POINTS: [&str; 3] = ["pre-commit", "commit-msg", "pre-push"];
+pub const BUILTIN_POINTS: [&str; 4] = ["pre-commit", "commit-msg", "pre-push", "check"];
 
 #[derive(Debug, Clone)]
 pub struct Assignment {
@@ -31,7 +31,7 @@ pub struct EffectiveConfig {
     pub rules: BTreeMap<String, EffectiveRule>,
     pub diagnostics: Vec<String>,
 }
-fn name(value: &str) -> Result<()> {
+pub(crate) fn name(value: &str) -> Result<()> {
     ensure!(
         !value.is_empty()
             && value.len() <= crate::limits::MAX_ID_BYTES

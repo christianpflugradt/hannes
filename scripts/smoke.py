@@ -30,6 +30,7 @@ with tempfile.TemporaryDirectory(prefix="hannes-smoke-") as temporary:
     initial = (root / ".hannes/config.toml").read_bytes()
     run("fang an")
     assert (root / ".hannes/config.toml").read_bytes() == initial
+    run("pass auf --auto-approve")
     run("pass auf")
     run("was ist phase", 3)
     run("mach was")

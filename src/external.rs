@@ -23,6 +23,8 @@ pub struct Import {
     pub path: String,
     #[serde(rename = "ref")]
     pub reference: String,
+    #[serde(default)]
+    pub execution_points: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -160,6 +162,28 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
     );
     // Local semantic errors fail before retrieval; local references cannot reach imports.
     let mut project = config::validate(root.clone(), loaded)?;
+    for import in &imports {
+        for (source, target) in &import.execution_points {
+            let entity = format!(
+                "import {:?} @ {:?}: execution_points {source:?} -> {target:?}",
+                import.path, import.reference
+            );
+            crate::rules::name(source).with_context(|| entity.clone())?;
+            crate::rules::name(target).with_context(|| entity.clone())?;
+            ensure!(
+                !crate::rules::BUILTIN_POINTS.contains(&source.as_str()),
+                "{entity}: built-in source is reserved"
+            );
+            ensure!(
+                !crate::rules::BUILTIN_POINTS.contains(&target.as_str()),
+                "{entity}: built-in target is reserved"
+            );
+            ensure!(
+                project.config.execution_points.custom.contains(target),
+                "{entity}: unknown target; declare it in execution_points.custom"
+            );
+        }
+    }
     if imports.is_empty() && !refresh {
         return Ok(project);
     }
@@ -288,12 +312,42 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
             boundary.is_dir(),
             "external rule-set path is not a directory"
         );
-        let definitions = crate::discovery::load_external(&boundary, project.config.clone())
+        let mut definitions = crate::discovery::load_external(&boundary, project.config.clone())
             .context("invalid external rule-set definitions")?;
         ensure!(
             definitions.rule_sets.len() == 1,
             "invalid external rule set: selected directory must define exactly one rule set"
         );
+        // External roots have no project declarations. Validate all source names
+        // in their own scope before translating effective assignments.
+        let used: std::collections::BTreeSet<String> = definitions
+            .rule_sets
+            .iter()
+            .flat_map(|(_, set)| &set.run_at)
+            .chain(definitions.checks.iter().flat_map(|(_, rule)| &rule.run_at))
+            .chain(
+                definitions
+                    .reviews
+                    .iter()
+                    .flat_map(|(_, rule)| &rule.run_at),
+            )
+            .cloned()
+            .collect();
+        for (source, target) in &import.execution_points {
+            ensure!(
+                used.contains(source),
+                "import {:?} @ {:?}: execution_points {source:?} -> {target:?}: unknown source; source must be used by this imported Rule Set",
+                import.path,
+                import.reference
+            );
+        }
+        definitions.config.execution_points.custom = used
+            .iter()
+            .filter(|point| !crate::rules::BUILTIN_POINTS.contains(&point.as_str()))
+            .cloned()
+            .collect();
+        // Consumer hook mappings do not belong to the external governance scope.
+        definitions.config.hooks = None;
         let mut external = config::validate(root.clone(), definitions)
             .with_context(|| format!("invalid external rule set {:?}", import.path))?;
         ensure!(
@@ -315,6 +369,22 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
                 <= MAX_TOTAL_INSTRUCTION_BYTES,
             "total review instructions exceed {MAX_TOTAL_INSTRUCTION_BYTES} bytes"
         );
+        for effective in external.effective.rules.values_mut() {
+            effective.execution_points = effective
+                .execution_points
+                .iter()
+                .map(|point| import.execution_points.get(point).unwrap_or(point).clone())
+                .collect();
+        }
+        for source in &used {
+            let target = import.execution_points.get(source).unwrap_or(source);
+            ensure!(
+                project.effective.points.contains(target),
+                "import {:?} @ {:?}: execution_points {source:?} -> {target:?}: unknown resulting execution point; declare the custom target in execution_points.custom",
+                import.path,
+                import.reference
+            );
+        }
         let prefix = format!("git:{key}:{}:", import.path);
         for check in &mut external.checks {
             check.id = format!("{prefix}{}", check.id);
@@ -365,6 +435,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
     project.checks.sort_by(|a, b| a.id.cmp(&b.id));
     project.reviews.sort_by(|a, b| a.id.cmp(&b.id));
     project.rule_sets.sort_by(|a, b| a.id.cmp(&b.id));
+    crate::reconciliation::git_mappings(&project)?;
     if refresh {
         let bytes = serde_json::to_vec_pretty(&next)?;
         ensure!(

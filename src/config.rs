@@ -438,13 +438,17 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
                 ".hannes/config.toml: hooks.git: unsupported Git hook: {event}"
             );
             ensure!(
+                point != "check",
+                ".hannes/config.toml: hooks.git.{event}: check is explicitly invoked and cannot be a Git hook target"
+            );
+            ensure!(
                 effective.points.contains(point),
                 ".hannes/config.toml: hooks.git.{event}: unknown execution point: {point}"
             );
         }
     }
     let rule_sets = loaded.rule_sets.into_iter().map(|(_, set)| set).collect();
-    Ok(Project {
+    let project = Project {
         root,
         config,
         provider,
@@ -452,7 +456,9 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
         reviews,
         rule_sets,
         effective,
-    })
+    };
+    crate::reconciliation::git_mappings(&project)?;
+    Ok(project)
 }
 
 pub fn init(root: &Path) -> Result<usize> {

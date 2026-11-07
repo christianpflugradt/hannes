@@ -156,7 +156,9 @@ support depends on Codex and the platform. Unsupported CLI versions fail closed.
 `external::cache` owns host Git, shared object storage, immutable checkouts,
 integrity receipts and OS locks. Each selected directory contains exactly one
 local set. The ordinary resolver validates references against only that boundary's
-rules and the consumer's declared execution points. Namespacing follows validation,
+rules and source execution-point names. Per-import mappings translate effective
+assignments after inheritance; all resulting names must be consumer-known.
+Mappings never affect cache keys or immutable source files. Namespacing follows validation,
 before effective results merge. Local resolution runs first, preventing consumer
 references from modifying imports. No second execution engine is introduced.
 

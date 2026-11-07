@@ -37,6 +37,9 @@ fn project() -> TempDir {
     config::init(dir.path()).unwrap();
     dir
 }
+fn synchronize(root: &Path) {
+    hannes::reconciliation::reconcile(&config::load(root).unwrap(), &mut |_| Ok(true)).unwrap();
+}
 fn path(root: &Path, relative: &str) -> PathBuf {
     root.join(".hannes").join(relative)
 }
@@ -168,7 +171,12 @@ fn validation_does_not_execute_checks_or_provider() {
         "[check]\ninterpreter = \"nonexistent-command-hannes\"",
     );
     assert!(config::load(d.path()).is_ok());
-    assert_eq!(cli(d.path(), &["pass", "auf"]).status.code(), Some(0));
+    assert_eq!(
+        cli(d.path(), &["pass", "auf", "--auto-approve"])
+            .status
+            .code(),
+        Some(0)
+    );
 }
 #[test]
 fn default_run_passes_omits_disabled_and_roundtrips_report() {
@@ -207,6 +215,7 @@ fn failing_check_runs_remaining_and_blocks_provider() {
         "deliberately-failing",
         "aaa-failure",
     );
+    synchronize(d.path());
     let r = hannes::verify(d.path(), &Never).unwrap();
     assert_eq!(r.overall, Status::Fail);
     assert_eq!(r.overall.exit_code(), 1);
@@ -405,6 +414,7 @@ fn no_report_corrupt_report_schema_and_no_color() {
         cli(d.path(), &["was", "ist", "phase"]).status.code(),
         Some(2)
     );
+    synchronize(d.path());
     let out = cli(d.path(), &["--no-color", "mach", "was"]);
     assert!(out.status.success());
     assert!(!out.stdout.contains(&0x1b));
@@ -862,6 +872,7 @@ fn patience_persists_across_processes_and_repositories_and_saturates() {
 #[test]
 fn every_valid_command_works_and_calms_hannes_from_maximum_anger() {
     let d = project();
+    synchronize(d.path());
     let state = tempdir().unwrap();
     for args in [
         vec!["fang", "an"],
@@ -1300,6 +1311,7 @@ fn cli_flushes_rule_start_while_the_check_is_still_running_and_keeps_raw_output_
         "Wait for the test release signal",
     );
     let marker = external.path().join("release");
+    synchronize(d.path());
     let mut child = Command::new(env!("CARGO_BIN_EXE_hannes"))
         .args(["mach", "was"])
         .current_dir(d.path())
@@ -1833,6 +1845,7 @@ fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
             .output()
             .unwrap()
     };
+    synchronize(d.path());
     let output = run(&["mach", "was", "--geiz-ist-geil"]);
     assert!(
         output.status.success(),

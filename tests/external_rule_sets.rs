@@ -86,7 +86,7 @@ impl Fixture {
             r#"project = "My_App"
 max_display_files = 5
 [execution_points]
-custom = ["check"]
+custom = []
 "#,
         );
         definitions(&remote, "repository", "git --version");
@@ -103,7 +103,7 @@ custom = ["check"]
         let base = r#"project = "My_App"
 max_display_files = 5
 [execution_points]
-custom = ["check"]
+custom = []
 "#;
         let mut text = base.to_owned();
         for (path, reference) in selections {
@@ -551,13 +551,24 @@ fn cli_refresh_cached_plan_and_offline_hook_keep_existing_lifecycle() {
     let f = Fixture::new();
     f.imports(&[("repository", "main")]);
     let path = f.root.join(".hannes/config.toml");
-    let text = fs::read_to_string(&path).unwrap();
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace("custom = []", "custom = ['quality']");
+    let source = f.remote.join("repository/config.toml");
     fs::write(
-        &path,
-        format!("{text}\n[hooks.git]\npre-commit = \"check\"\n"),
+        &source,
+        fs::read_to_string(&source)
+            .unwrap()
+            .replace("check", "quality"),
     )
     .unwrap();
-    let plan = cli(&f, &["mach", "was", "--at", "check", "--plan", "--json"]);
+    commit(&f.remote);
+    fs::write(
+        &path,
+        format!("{text}\n[hooks.git]\npre-commit = \"quality\"\n"),
+    )
+    .unwrap();
+    let plan = cli(&f, &["mach", "was", "--at", "quality", "--plan", "--json"]);
     assert_eq!(plan.status.code(), Some(2));
     assert!(
         !f.root.join(".git/hannes").exists(),
@@ -571,13 +582,13 @@ fn cli_refresh_cached_plan_and_offline_hook_keep_existing_lifecycle() {
     );
     assert!(!f.root.join(".hannes/reports/last.json").exists());
     fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
-    let plan = cli(&f, &["mach", "was", "--at", "check", "--plan", "--json"]);
+    let plan = cli(&f, &["mach", "was", "--at", "quality", "--plan", "--json"]);
     assert!(
         plan.status.success(),
         "{}",
         String::from_utf8_lossy(&plan.stderr)
     );
-    let run = cli(&f, &["mach", "was", "--at", "check"]);
+    let run = cli(&f, &["mach", "was", "--at", "quality"]);
     assert!(
         run.status.success(),
         "{}",
@@ -844,4 +855,354 @@ fn moved_tags_refresh_but_cached_execution_remains_on_the_validated_commit() {
     assert_eq!(f.origin().commit, original);
     f.load(true).unwrap();
     assert_eq!(f.origin().commit, updated);
+}
+
+fn mapped_imports(f: &Fixture, mappings: &[(&str, &str)], custom: &[&str]) {
+    let mut text = format!("project = 'My_App'\n[execution_points]\ncustom = {custom:?}\n");
+    for (path, mapping) in mappings {
+        text += &format!(
+            "[[imports]]\ngit = {:?}\npath = {path:?}\nref = 'main'\n{mapping}\n",
+            f.remote.to_str().unwrap()
+        );
+    }
+    write(&f.root, ".hannes/config.toml", &text);
+}
+fn source_points(f: &Fixture, path: &str, points: &[&str]) {
+    let file = f.remote.join(path).join("config.toml");
+    let text = fs::read_to_string(&file)
+        .unwrap()
+        .replace("['check']", &format!("{points:?}"));
+    fs::write(file, text).unwrap();
+}
+
+#[test]
+fn independent_mappings_resolve_inheritance_many_to_one_and_offline_execution() {
+    let f = Fixture::new();
+    source_points(&f, "repository", &["lint", "test"]);
+    source_points(&f, "software", &["lint"]);
+    let member = f.remote.join("repository/checks/required-files/rule.toml");
+    fs::write(
+        &member,
+        fs::read_to_string(&member)
+            .unwrap()
+            .replace("[check]", "run_at = ['own']\n[check]"),
+    )
+    .unwrap();
+    // A standalone Rule's own assignments must also be mapped.
+    write(
+        &f.remote,
+        "repository/checks/standalone/rule.toml",
+        "id = 'standalone'\ndescription = 'Standalone'\nrun_at = ['lint', 'test']\nblocking = false\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+    );
+    write(
+        &f.remote,
+        "repository/checks/standalone/index.sh",
+        "git --version\n",
+    );
+    // Disabled Rules validate, keep metadata and never enter execution results.
+    write(
+        &f.remote,
+        "repository/checks/disabled/rule.toml",
+        "id = 'disabled'\ndescription = 'Disabled'\nenabled = false\nrun_at = ['test']\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+    );
+    write(&f.remote, "repository/checks/disabled/index.sh", "exit 1\n");
+    commit(&f.remote);
+    mapped_imports(
+        &f,
+        &[
+            (
+                "repository",
+                "[imports.execution_points]\nlint = 'verify'\ntest = 'verify'\nown = 'audit'",
+            ),
+            ("software", "[imports.execution_points]\nlint = 'audit'"),
+        ],
+        &["verify", "audit"],
+    );
+    let project = f.load(true).unwrap();
+    let verify = planner::build(&project, Some("verify"), false)
+        .unwrap()
+        .plan;
+    assert_eq!(verify.scheduled.len(), 2);
+    assert_eq!(
+        planner::build(&project, Some("audit"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        1
+    );
+    assert!(
+        project
+            .checks
+            .iter()
+            .any(|r| r.id.ends_with(":standalone") && !r.blocking)
+    );
+    let identities = project.effective.rules.keys().cloned().collect::<Vec<_>>();
+    let before = serde_json::to_value(&project.effective.rules).unwrap();
+    let contents = f.contents();
+    assert!(
+        fs::read_to_string(contents.join("repository/config.toml"))
+            .unwrap()
+            .contains("lint")
+    );
+    let state = f.state();
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    let offline = f.load(false).unwrap();
+    assert_eq!(
+        before,
+        serde_json::to_value(&offline.effective.rules).unwrap()
+    );
+    let report = hannes::verify_project_at(
+        offline,
+        &Never,
+        hannes::VerificationMode::AllRules,
+        Some("verify"),
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(report.overall, Status::Pass);
+    assert_eq!(report.results.len(), 2);
+    assert_eq!(f.state(), state);
+    // Editing only mappings needs no refresh, changes no Rule identity or cache.
+    mapped_imports(
+        &f,
+        &[
+            (
+                "repository",
+                "[imports.execution_points]\nlint = 'verify'\ntest = 'verify'\nown = 'verify'",
+            ),
+            ("software", "[imports.execution_points]\nlint = 'verify'"),
+        ],
+        &["verify"],
+    );
+    let project = f.load(false).unwrap();
+    assert_eq!(
+        planner::build(&project, Some("verify"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        3
+    );
+    assert_eq!(
+        project.effective.rules.keys().cloned().collect::<Vec<_>>(),
+        identities
+    );
+    assert_eq!(f.state(), state);
+}
+
+#[test]
+fn invalid_import_mappings_fail_with_source_target_and_import_context() {
+    let f = Fixture::new();
+    source_points(&f, "repository", &["quality"]);
+    commit(&f.remote);
+    mapped_imports(
+        &f,
+        &[(
+            "repository",
+            "[imports.execution_points]\nquality = 'verify'",
+        )],
+        &["verify"],
+    );
+    f.load(true).unwrap();
+    let state = f.state();
+    for (source, target, reason) in [
+        ("check", "verify", "built-in source"),
+        ("pre-commit", "verify", "built-in source"),
+        ("commit-msg", "verify", "built-in source"),
+        ("pre-push", "verify", "built-in source"),
+        ("quality", "check", "built-in target"),
+        ("quality", "pre-commit", "built-in target"),
+        ("quality", "commit-msg", "built-in target"),
+        ("quality", "pre-push", "built-in target"),
+        ("unknown", "verify", "unknown source"),
+        ("quality", "missing", "unknown target"),
+        ("", "verify", "invalid execution-point"),
+        ("quality", "", "invalid execution-point"),
+        ("Quality", "verify", "invalid execution-point"),
+        ("quality", "bad/name", "invalid execution-point"),
+    ] {
+        mapped_imports(
+            &f,
+            &[(
+                "repository",
+                &format!("[imports.execution_points]\n{source:?} = {target:?}"),
+            )],
+            &["verify"],
+        );
+        let error = format!("{:#}", f.load(false).unwrap_err());
+        assert!(
+            error.contains("repository")
+                && error.contains(source)
+                && error.contains(target)
+                && error.contains(reason),
+            "{error}"
+        );
+        assert_eq!(f.state(), state);
+    }
+    for structure in [
+        "execution_points = []",
+        "execution_points = 'verify'",
+        "execution_points = { quality = ['verify'] }",
+        "execution_points = { quality = { target = 'verify' } }",
+    ] {
+        mapped_imports(&f, &[("repository", structure)], &["verify"]);
+        assert!(f.load(false).is_err(), "{structure}");
+    }
+    mapped_imports(
+        &f,
+        &[(
+            "repository",
+            "[imports.execution_points]\nquality = 'verify'",
+        )],
+        &[],
+    );
+    assert!(format!("{:#}", f.load(false).unwrap_err()).contains("declare"));
+}
+
+#[test]
+fn unmapped_custom_points_require_consumer_declarations_and_keep_names() {
+    let f = Fixture::new();
+    source_points(&f, "repository", &["quality", "audit"]);
+    commit(&f.remote);
+    mapped_imports(&f, &[("repository", "")], &["quality", "audit"]);
+    let project = f.load(true).unwrap();
+    assert_eq!(
+        planner::build(&project, Some("quality"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        1
+    );
+    mapped_imports(
+        &f,
+        &[(
+            "repository",
+            "[imports.execution_points]\nquality = 'verify'",
+        )],
+        &["verify", "audit"],
+    );
+    let project = f.load(false).unwrap();
+    assert_eq!(
+        planner::build(&project, Some("audit"), false)
+            .unwrap()
+            .plan
+            .scheduled
+            .len(),
+        1
+    );
+    mapped_imports(
+        &f,
+        &[(
+            "repository",
+            "[imports.execution_points]\nquality = 'verify'",
+        )],
+        &["verify"],
+    );
+    assert!(
+        format!("{:#}", f.load(false).unwrap_err()).contains("unknown resulting execution point")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn built_in_hooks_execute_imported_and_local_rules_with_message_context() {
+    let f = Fixture::new();
+    source_points(&f, "repository", &["pre-commit", "commit-msg", "pre-push"]);
+    write(
+        &f.remote,
+        "repository/checks/required-files/index.sh",
+        "if [ \"$HANNES_GIT_HOOK\" = commit-msg ]; then\n  test \"$HANNES_GIT_HOOK_ARG_COUNT\" = 1 && test -s \"$HANNES_GIT_HOOK_ARG_1\"\nelse\n  git --version\nfi\n",
+    );
+    commit(&f.remote);
+    f.imports(&[("repository", "main")]);
+    write(
+        &f.root,
+        ".hannes/checks/local/rule.toml",
+        "id = 'local'\ndescription = 'Standalone local hook Rule'\nrun_at = ['pre-commit']\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\n",
+    );
+    write(&f.root, ".hannes/checks/local/index.sh", "git --version\n");
+    write(
+        &f.root,
+        ".hannes/rule-sets/local.toml",
+        "id = 'local-set'\ndescription = 'Local set hook assignments'\nrules = ['always-ok']\nrun_at = ['pre-commit', 'commit-msg', 'pre-push']\n",
+    );
+    let setup = cli(&f, &["pass", "auf", "--auto-approve"]);
+    assert!(
+        setup.status.success(),
+        "{}",
+        String::from_utf8_lossy(&setup.stderr)
+    );
+    let paths = std::env::join_paths(
+        std::iter::once(
+            Path::new(env!("CARGO_BIN_EXE_hannes"))
+                .parent()
+                .unwrap()
+                .to_path_buf(),
+        )
+        .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    let message = f.root.join(".git/COMMIT_EDITMSG");
+    fs::write(&message, "test: message\n").unwrap();
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    for event in ["pre-commit", "commit-msg", "pre-push"] {
+        let path = f.root.join(".git/hooks").join(event);
+        assert!(path.is_file());
+        let mut command = Command::new(path);
+        command
+            .current_dir(&f.root)
+            .env("XDG_CACHE_HOME", &f.cache)
+            .env("PATH", &paths);
+        if event == "commit-msg" {
+            command.arg(&message);
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{event}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let report = hannes::report::read(&f.root).unwrap();
+        assert!(report.results.iter().any(|r| r.id.starts_with("git:")));
+        assert!(report.results.iter().any(|r| r.id == "always-ok"));
+        assert_eq!(
+            report.results.len(),
+            if event == "pre-commit" { 3 } else { 2 }
+        );
+    }
+    assert!(!f.root.join(".git/hooks/check").exists());
+    assert!(!f.root.join(".github").exists());
+}
+
+#[test]
+fn check_only_configuration_creates_no_hooks_or_workflows() {
+    let f = Fixture::new();
+    f.imports(&[]);
+    let file = f.root.join(".hannes/checks/always-ok/rule.toml");
+    fs::write(
+        &file,
+        fs::read_to_string(&file)
+            .unwrap()
+            .replace("pre-push", "check"),
+    )
+    .unwrap();
+    let setup = cli(&f, &["pass", "auf", "--auto-approve"]);
+    assert!(
+        setup.status.success(),
+        "{}",
+        String::from_utf8_lossy(&setup.stderr)
+    );
+    for event in ["pre-commit", "commit-msg", "pre-push", "check"] {
+        assert!(!f.root.join(".git/hooks").join(event).exists());
+    }
+    let run = cli(&f, &["mach", "was", "--at", "check"]);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(hannes::report::read(&f.root).unwrap().results.len(), 1);
+    assert!(!f.root.join(".github").exists());
 }

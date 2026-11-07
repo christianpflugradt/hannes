@@ -42,10 +42,9 @@ fn project(mappings: &str) -> TempDir {
     let file = root.path().join(".hannes/checks/always-ok/rule.toml");
     fs::write(
         &file,
-        fs::read_to_string(&file).unwrap().replace(
-            "[\"pre-push\"]",
-            "['pre-push', 'first', 'second', 'all', 'renamed']",
-        ),
+        fs::read_to_string(&file)
+            .unwrap()
+            .replace("[\"pre-push\"]", "['first', 'second', 'all', 'renamed']"),
     )
     .unwrap();
     mappings_write(root.path(), mappings);
@@ -736,4 +735,37 @@ fn auto_approve_cannot_bypass_hook_recursion_protection() {
             .contains("recursive Hannes hook execution blocked")
     );
     assert_eq!(fs::read(hook(root.path(), "pre-commit")).unwrap(), before);
+}
+
+#[test]
+fn required_hook_assignments_cannot_be_redirected_or_automate_check() {
+    let root = project("");
+    let file = root.path().join(".hannes/checks/always-ok/rule.toml");
+    fs::write(
+        &file,
+        fs::read_to_string(&file)
+            .unwrap()
+            .replace("\"first\"", "\"pre-commit\"")
+            .replace("'first'", "'pre-commit'"),
+    )
+    .unwrap();
+    mappings_write(root.path(), "[hooks.git]\npre-commit = 'second'");
+    let error = format!("{:#}", config::load(root.path()).unwrap_err());
+    assert!(error.contains("enabled Rules require"), "{error}");
+    mappings_write(root.path(), "[hooks.git]\npre-commit = 'check'");
+    assert!(format!("{:#}", config::load(root.path()).unwrap_err()).contains("explicitly invoked"));
+    mappings_write(root.path(), "");
+    synchronize(root.path());
+    assert!(hook(root.path(), "pre-commit").exists());
+    assert!(!hook(root.path(), "pre-push").exists());
+    // Removing effective assignments retires only the now-unneeded managed hook.
+    fs::write(
+        &file,
+        fs::read_to_string(&file)
+            .unwrap()
+            .replace("pre-commit", "check"),
+    )
+    .unwrap();
+    synchronize(root.path());
+    assert!(!hook(root.path(), "pre-commit").exists());
 }

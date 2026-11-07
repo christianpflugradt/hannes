@@ -126,6 +126,7 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
             git: "https://example.invalid/rules.git".into(),
             path: "repository".into(),
             reference: "main".into(),
+            execution_points: Default::default(),
         },
         section(README, "Import rule sets from Git"),
         "",

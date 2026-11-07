@@ -37,8 +37,8 @@ directory: no empty names, separators, absolute paths, parent traversal or symli
 Rule directories, definitions and configuration paths also reject symlinks.
 
 Run `hannes pass auf` after editing. Validation runs no checks or providers.
-Declared Git hooks are reconciled after confirmation; use `--auto-approve` for
-unattended reconciliation. New projects initialized by `hannes fang an` include
+Required Git hooks are derived from effective Rule assignments and reconciled
+after confirmation; use `--auto-approve` for unattended reconciliation. New projects initialized by `hannes fang an` include
 one enabled passing check, one disabled failing check and one disabled review.
 Initialization preserves existing files and installs no hooks.
 
@@ -50,7 +50,7 @@ Initialization preserves existing files and installs no hooks.
 project = "My_App"
 
 [execution_points]
-custom = ["check", "release"]
+custom = ["release"]
 ```
 
 | Field | Required / default | Meaning |
@@ -60,12 +60,16 @@ custom = ["check", "release"]
 | `execution_points` | Optional table | Additional execution contexts. |
 | `execution_points.custom` | Optional; `[]` | Unique names of 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Built-in names are reserved. |
 | `hooks` | Optional; `null` (omitted in TOML) | Desired integrations. |
-| `hooks.git` | Optional; `{}` | Maps `pre-commit`, `commit-msg`, `pre-push` events to known execution points. |
+| `hooks.git` | Optional; `{}` | Optional explicit event mappings. Required hooks are automatic; `check` cannot be a target. A mapping must retain the built-in point when enabled Rules require it. |
 | `imports` | Optional; `[]` | External references, declared only here as `[[imports]]`. |
 
-Built-in points are `pre-commit`, `commit-msg` and `pre-push`. Declare custom
-points in the consumer, including those used by imports. The default execution
-point is `pre-push`.
+Built-in points are `pre-commit`, `commit-msg`, `pre-push` and `check`. The first
+three use Git hooks. `check` is invoked explicitly with `hannes mach was --at check`
+and never triggered automatically. It needs no declaration or CI workflow.
+Consumers decide where to invoke it, including multiple workflows; Hannes does
+not generate workflows, discover them or validate CI integration. Declare custom
+points in the consumer, including unmapped custom points used by imports.
+`release` is an ordinary custom point. The default execution point is `pre-push`.
 
 ### Fields shared by checks and reviews
 
@@ -317,15 +321,32 @@ prepares the same selection without rules, provider calls or reconciliation.
 Add imports only to `.hannes/config.toml`:
 
 ```toml
-[[imports]]
-git = "https://github.com/company/hannes-governance.git"
-path = "repository"
-ref = "v1.2.0"
+project = "My_App"
+
+[execution_points]
+custom = ["verify", "audit"]
 
 [[imports]]
-git = "https://github.com/company/hannes-governance.git"
-path = "releasable-software"
-ref = "v1.2.0"
+git = "https://github.com/example/governance.git"
+path = "repository"
+ref = "v1.0.0"
+
+[[imports]]
+git = "https://github.com/example/governance.git"
+path = "software-quality"
+ref = "v1.0.0"
+
+[imports.execution_points]
+quality = "verify"
+
+[[imports]]
+git = "https://github.com/example/governance.git"
+path = "security"
+ref = "v2.1.0"
+
+[imports.execution_points]
+scan = "audit"
+report = "verify"
 ```
 
 | Field | Required / default | Meaning |
@@ -333,8 +354,21 @@ ref = "v1.2.0"
 | `git` | Required | Repository selector using host Git authentication: HTTP(S), SSH, SCP-style SSH, Git protocol, file URL or consumer-relative local repository. |
 | `path` | Required | Selected directory, or `"."` for repository root; no parents or symlinks. |
 | `ref` | Required | Exact branch, tag or full commit hash, 1–1024 bytes. |
+| `execution_points` | Optional; `{}` | Per-import table mapping external custom names to consumer-declared custom names. |
 
-No other import fields or consumer overrides are accepted. Remove the import to
+The table belongs only to the immediately preceding `[[imports]]`. Sources must
+be custom names used by that imported Rule Set; targets must already appear in
+the consumer's `execution_points.custom`. Names follow the same syntax and limits
+as custom declarations. Built-ins are forbidden on both sides. Unknown names,
+empty/invalid names and structures other than a table of strings fail validation.
+Unmapped points keep their names and must be known to the consumer.
+
+Mappings apply after scope-local Rule Set inheritance. Multiple source points may
+map to one target; a Rule runs once there. Separate imports may map the same source
+name differently or share targets. No global or individual Rule mapping exists.
+Mapping preserves Rule identity, enabled/blocking state, resources and provenance;
+it changes neither cached files nor revision identity and works offline without
+fetching. No other import fields or Rule overrides are accepted. Remove the import to
 stop using it. A selected directory is its own governance root, with exactly one
 set in `config.toml` and its own `checks/` and `reviews/`. It has no nested
 `.hannes/`, `rule-sets/`, project settings or imports. Its `config.toml` uses the

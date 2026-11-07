@@ -44,7 +44,7 @@ fn project() -> TempDir {
     write(
         d.path(),
         ".hannes/config.toml",
-        "project = 'My_App'\n[execution_points]\ncustom = ['check', 'release']\n",
+        "project = 'My_App'\n[execution_points]\ncustom = ['release']\n",
     );
     write(d.path(), "README.md", "# My_App\n");
     d
@@ -575,7 +575,7 @@ impl External {
         git(&self.remote, &["rev-parse", "HEAD"])
     }
     fn imports(&self, selections: &[(&str, &str)]) {
-        let mut text = "project = 'My_App'\n[execution_points]\ncustom = ['check']\n".to_string();
+        let mut text = "project = 'My_App'\n[execution_points]\ncustom = []\n".to_string();
         for (path, reference) in selections {
             text += &format!(
                 "[[imports]]\ngit = {:?}\npath = {path:?}\nref = {reference:?}\n",

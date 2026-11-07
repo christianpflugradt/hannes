@@ -298,15 +298,34 @@ fn desired(
     }))
 }
 
-pub fn inspect(project: &Project) -> Result<Plan> {
-    let (directory, owner) = location(project)?;
-    let empty = BTreeMap::new();
-    let mappings = project
+/// Include hooks required by effective assignments, after local/imported rules merge.
+pub(crate) fn git_mappings(project: &Project) -> Result<BTreeMap<String, String>> {
+    let mut mappings = project
         .config
         .hooks
         .as_ref()
-        .map(|hooks| &hooks.git)
-        .unwrap_or(&empty);
+        .map(|hooks| hooks.git.clone())
+        .unwrap_or_default();
+    for event in GIT_EVENTS {
+        if project
+            .effective
+            .rules
+            .values()
+            .any(|rule| rule.execution_points.contains(*event))
+        {
+            ensure!(
+                mappings.get(*event).is_none_or(|point| point == event),
+                ".hannes/config.toml: hooks.git.{event}: enabled Rules require execution point {event:?}; remove the conflicting hook mapping"
+            );
+            mappings.insert((*event).into(), (*event).into());
+        }
+    }
+    Ok(mappings)
+}
+
+pub fn inspect(project: &Project) -> Result<Plan> {
+    let (directory, owner) = location(project)?;
+    let mappings = git_mappings(project)?;
     let mut changes = Vec::new();
     for event in GIT_EVENTS {
         let path = directory.join(event);
@@ -499,11 +518,8 @@ pub fn prepare(
             GIT_EVENTS.contains(&invocation.event.as_str()),
             "unsupported hook invocation context"
         );
-        let configured = project
-            .config
-            .hooks
-            .as_ref()
-            .and_then(|hooks| hooks.git.get(&invocation.event));
+        let mappings = git_mappings(project)?;
+        let configured = mappings.get(&invocation.event);
         ensure!(
             configured.map(String::as_str) == point && configured.is_some(),
             "hook invocation point does not match configuration; run hannes pass auf manually"

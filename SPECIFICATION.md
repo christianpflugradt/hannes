@@ -48,14 +48,23 @@ Standalone enabled rules use their own assignments. Enabled rules need an effect
 point. Disabled rules remain validated but never run. All references must resolve
 within the same scope, including disabled and overridden assignments. A rule runs
 once per point; checks precede reviews, each kind sorted by ID. Built-in points
-are pre-commit, commit-msg and pre-push; custom names come only from the consumer.
+are pre-commit, commit-msg, pre-push and check. The first three use managed Git
+hooks; check is invoked explicitly and never automatically. Custom names come only
+from the consumer; release has no special behavior.
 The default is pre-push. Empty points succeed without claiming rule PASS.
 
 ## EXT-001: External Git Rule Sets
 
-Only the consumer's config.toml accepts [[imports]], with exactly git/path/ref.
-No overrides or nested imports are supported. Each selected directory is an
-isolated governance root: config.toml defines exactly one Rule Set using the
+Only the consumer's config.toml accepts [[imports]], with git/path/ref
+and optional per-import execution_points mapping.
+No Rule overrides or nested imports are supported. Mapping sources are custom
+points used in that import; targets must be consumer-declared custom points.
+Built-ins cannot be sources or targets. Resolve scope-local assignments first,
+then map effective points and deduplicate before merging. Unmapped names must
+still be known to the consumer. Each import has an independent mapping namespace;
+many sources may share a target. Mapping never changes cached definitions,
+revision identity or provenance and works offline without fetching.
+Each selected directory is an isolated governance root: config.toml defines exactly one Rule Set using the
 same four fields as local sets; checks/ and reviews/ contain its own Rules.
 No extra .hannes or rule-sets directory is used. Sibling/consumer references fail.
 Rules are namespaced only after scope-local validation; provenance retains source
@@ -277,7 +286,7 @@ is the sole exact release pin, consumed by the shared CI setup action and update
 by Renovate GitHub-release PRs without automerge. CI never resolves latest.
 The governor is pinned to published v0.5.0, which supports pass auf --auto-approve.
 
-The three built-in points serve Git hooks. Explicit custom points ci-native,
+The three Git-backed built-in points serve Git hooks. Explicit custom points ci-native,
 ci-tooling, ci-msrv, ci-audit and release-artifacts preserve their former required
 check selections. Shared native validation, tooling regression and dependency
 audit rules use rule sets; remaining rules have their own run_at. The frozen
@@ -298,7 +307,8 @@ hooks noninteractively. Reports use schema 3 and a companion execution record
 stores governor version/digest, execution point, checked commit and exit code.
 See [repository self-integration](docs/self-governance.md) for coverage and setup.
 
-Git hooks are declared in project configuration and reconciled only after explicit confirmation. A bypassable
+Git hooks required by enabled effective assignments are derived automatically
+and reconciled only after explicit confirmation (or pass auf --auto-approve). A bypassable
 local hook verifies working files, not necessarily the pushed commit. Hosted
 Codex authentication is not provisioned and personal tokens are not copied to CI.
 No hosted service, database, autonomous development, universal policy engine,
@@ -325,7 +335,12 @@ Acceptance: `tests/reconciliation.rs::auto_approve_reconciles_noninteractively_w
 
 Project configuration optionally maps hooks.git keys pre-commit, commit-msg, pre-push to
 known execution points. Unknown events, duplicate mappings, invalid values and
-unknown points fail full validation. Existing generated wrappers are reconciled
+unknown points fail full validation. check cannot be a hook target. Explicit
+mappings cannot redirect an event with enabled Rules assigned to its built-in
+point. Required hooks need no declaration, including for imported Rules.
+check has no hook, workflow discovery or CI validation; consumers choose where
+to invoke it, including multiple workflows. Hannes generates no CI workflows.
+Existing generated wrappers are reconciled
 to --at without changing ownership or confirmation behavior.
 
 Git resolves the effective hook path, including worktrees and `core.hooksPath`.

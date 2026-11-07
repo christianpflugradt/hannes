@@ -24,7 +24,7 @@ fn set(id: &str, at: &[&str], ids: &[&str]) -> (PathBuf, config::RuleSet) {
 }
 fn points() -> config::ExecutionPoints {
     config::ExecutionPoints {
-        custom: vec!["check".into(), "release".into()],
+        custom: vec!["release".into()],
     }
 }
 #[test]
@@ -119,5 +119,41 @@ fn invalid_assignments_are_rejected_even_when_disabled_or_overridden() {
         );
     }
     let resolved = rules::resolve(&config::ExecutionPoints::default(), &[], &[]).unwrap();
-    assert_eq!(resolved.points.len(), 3);
+    assert_eq!(resolved.points.len(), 4);
+}
+
+#[test]
+fn four_reserved_points_and_ordinary_custom_points() {
+    let resolved = rules::resolve(
+        &Default::default(),
+        &[assignment(
+            "a",
+            true,
+            &["pre-commit", "commit-msg", "pre-push", "check"],
+        )],
+        &[],
+    )
+    .unwrap();
+    assert_eq!(resolved.rules["a"].execution_points, resolved.points);
+    for point in rules::BUILTIN_POINTS {
+        assert!(
+            rules::resolve(
+                &config::ExecutionPoints {
+                    custom: vec![point.into()]
+                },
+                &[],
+                &[]
+            )
+            .is_err()
+        );
+    }
+    assert!(
+        rules::resolve(
+            &Default::default(),
+            &[assignment("a", true, &["release"])],
+            &[]
+        )
+        .is_err()
+    );
+    assert!(rules::resolve(&points(), &[assignment("a", true, &["release"])], &[]).is_ok());
 }

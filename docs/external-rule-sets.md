@@ -73,7 +73,7 @@ The consumer declares custom points and imports these directories:
 ```toml
 project = "My_App"
 [execution_points]
-custom = ["check", "release"]
+custom = ["release"]
 
 [[imports]]
 git = "https://github.com/company/hannes-governance.git"
@@ -92,6 +92,16 @@ rule-sets directory, consumer settings or nested imports. The set can reference
 only its own Rules. All references are validated, including disabled Rules.
 IDs need only be unique within their own scope. No source or consumer can override
 another scope's Rules. Removing an import stops using that source.
+
+Per-import `[imports.execution_points]` maps external custom names to custom names
+already declared by the consumer. The table belongs only to the preceding import.
+Resolve inheritance first, map effective assignments once, then deduplicate and
+namespace Rules. Built-ins (`pre-commit`, `commit-msg`, `pre-push`, `check`) cannot
+appear on either side. Unknown sources/targets and invalid names are errors.
+Unmapped names stay unchanged and must be consumer-known. Separate imports may
+map the same source differently; multiple sources may share one target. Mapping
+never edits source/cache files or changes import identity, and works offline.
+See the [complete three-import example](../README.md#import-rule-sets-from-git).
 
 ## Refresh, storage and provenance
 

@@ -171,7 +171,9 @@ precedence if snapshot coverage is incomplete, even when some differences are kn
 
 ## Optional Git hook
 
-Git hooks are the first desired-state reconciliation domain. Declare their
+Git hooks are derived automatically from enabled effective assignments to the
+three Git-backed built-ins, including imported Rules. Optional explicit mappings
+can connect other points to events; check is never a hook target. Declare optional
 execution-point mappings in `.hannes/config.toml`, then run `hannes pass auf`:
 
 ```toml

@@ -60,7 +60,8 @@ Checks neither install the governor nor repair project files.
 ## Execution points and required coverage
 
 Every selected rule is mandatory. Each point preserves the exact check membership
-of its configured execution point. Checks run once per binding, ordered by ID. The concrete rule definitions and assignments live in `.hannes/`; product tests
+of its configured execution point. Checks run once per binding, ordered by ID.
+The concrete rule definitions and assignments live in `.hannes/`; product tests
 use independent synthetic configurations.
 
 | Execution point | Required checks |
@@ -151,8 +152,8 @@ synchronization read-only; drift tells the developer to rerun pass auf manually.
 The `commit-msg` point imports `commit-msg/conventional-commits` from
 [the shared Ruleset repository](https://github.com/christianpflugradt/christianpflugradt-rulesets),
 pinned to the full commit in `.hannes/config.toml`. It receives
-`.hannes/commit-scopes.txt` through the `scopes_file` parameter. Governance tests
-require this file to match the scopes in `.githooks/commit-policy`.
+`.hannes/commit-scopes.txt` through the `scopes_file` parameter. Keep this file
+consistent with the scopes in `.githooks/commit-policy`.
 Both message checks consume HANNES_GIT_HOOK_ARG_1 and require exactly one
 commit-msg argument. The imported Rule validates the header, type and scope.
 The local `commit-message` check also enforces Hannes' narrower type allowlist

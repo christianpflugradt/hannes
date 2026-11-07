@@ -945,17 +945,211 @@ fn shared_entrypoints_recheck_missing_and_nonregular_files_before_execution() {
 }
 
 #[test]
+fn string_commands_parse_arguments_without_a_shell() {
+    for (command, expected) in [
+        (
+            "python3 scripts/check-docs.py",
+            vec!["python3", "scripts/check-docs.py"],
+        ),
+        (
+            r#""tools/my tool" 'path with spaces' "two words""#,
+            vec!["tools/my tool", "path with spaces", "two words"],
+        ),
+        (
+            r#"tool '' "" pre"two words"post"#,
+            vec!["tool", "", "", "pretwo wordspost"],
+        ),
+        (
+            r#"tool path\ with\ spaces "a\"b" 'a\b' a\\b"#,
+            vec!["tool", "path with spaces", "a\"b", "a\\b", "a\\b"],
+        ),
+        (
+            r#"tool '$HOME `literal`' \$HOME "\$HOME" "|&;<>()#" \; *.md ~ [ab]?"#,
+            vec![
+                "tool",
+                "$HOME `literal`",
+                "$HOME",
+                "$HOME",
+                "|&;<>()#",
+                ";",
+                "*.md",
+                "~",
+                "[ab]?",
+            ],
+        ),
+        (" \ttool\targument  ", vec!["tool", "argument"]),
+    ] {
+        let d = project();
+        check(
+            d.path(),
+            "parse",
+            "enabled = false",
+            &format!("command = {}", serde_json::to_string(command).unwrap()),
+            "exit 2",
+        );
+        let p = config::load(d.path()).unwrap();
+        assert_eq!(
+            p.checks[0].command.as_ref().unwrap(),
+            &expected,
+            "{command}"
+        );
+        assert!(p.checks[0].entrypoint.is_none());
+    }
+}
+
+#[test]
+fn string_commands_reject_invalid_syntax() {
+    for command in [
+        "",
+        " \t ",
+        "''",
+        "\" \"",
+        "tool 'unfinished",
+        "tool \"unfinished",
+        r"tool \",
+        "tool | other",
+        "tool || other",
+        "tool && other",
+        "tool &",
+        "tool; other",
+        "tool > output",
+        "tool < input",
+        "tool $(other)",
+        "tool `other`",
+        "tool $HOME",
+        "tool \"$HOME\"",
+        "tool \"`other`\"",
+        "(tool)",
+        "tool # comment",
+        "tool\nother",
+        "tool\r\nother",
+        "tool\0",
+        "tool '\n'",
+        "tool \\\nother",
+    ] {
+        let d = project();
+        check(
+            d.path(),
+            "invalid",
+            "enabled = false",
+            &format!("command = {}", serde_json::to_string(command).unwrap()),
+            "exit 0",
+        );
+        let message = error(d.path());
+        assert!(
+            message.contains(".hannes/checks/invalid/rule.toml"),
+            "{command:?}: {message}"
+        );
+        assert!(message.contains("command"), "{command:?}: {message}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn string_command_arguments_reach_the_process_unchanged() {
+    let d = project();
+    write(
+        d.path(),
+        "scripts/argument probe.sh",
+        "printf '<%s>\\n' \"$@\"\n",
+    );
+    check(
+        d.path(),
+        "arguments",
+        "run_at = ['check']",
+        r#"command = '''sh "scripts/argument probe.sh" "" 'two words' '$HOME $(touch unwanted) *.md' escaped\ space "a\"b"'''"#,
+        "exit 2",
+    );
+    let p = config::load(d.path()).unwrap();
+    let result = hannes::checks::execute(&p, &p.checks[0], "check");
+    assert_eq!(result.status, Status::Pass, "{}", result.reason);
+    assert_eq!(
+        result.stdout.unwrap().text,
+        "<>\n<two words>\n<$HOME $(touch unwanted) *.md>\n<escaped space>\n<a\"b>\n"
+    );
+    assert!(!d.path().join("unwanted").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn command_representations_execute_equivalently() {
+    use std::os::unix::fs::PermissionsExt;
+    for (code, expected) in [
+        (0, Status::Pass),
+        (1, Status::Fail),
+        (2, Status::Error),
+        (7, Status::Fail),
+    ] {
+        let d = project();
+        let relative = "scripts/check with spaces.sh";
+        write(
+            d.path(),
+            relative,
+            &format!(
+                "#!/bin/sh\ntest -s README.md || exit 2\ncat \"$HANNES_RULE_DIRECTORY/resource\"\nprintf '\\n%s\\n%s' \"$HANNES_PARAM_LABEL\" \"$HANNES_EXECUTION_POINT\"\nprintf diagnostic >&2\nexit {code}\n"
+            ),
+        );
+        let executable = d.path().join(relative);
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        let quoted = format!("\"{}\"", executable.display());
+        let mut previous = None;
+        for implementation in [
+            format!("command = {}", serde_json::to_string(&quoted).unwrap()),
+            format!("command = {}", serde_json::json!([executable])),
+            format!(
+                "command = {}",
+                serde_json::to_string(&format!("sh {quoted}")).unwrap()
+            ),
+            format!("command = {}", serde_json::json!(["sh", executable])),
+            format!("entrypoint = '{relative}'"),
+            format!("entrypoint = '{relative}'\ninterpreter = 'sh'"),
+        ] {
+            check(
+                d.path(),
+                "equivalent",
+                "run_at = ['check']\nblocking = false\n[parameters.label]\ntype = 'string'\nvalue = 'independent'",
+                &implementation,
+                "exit 2",
+            );
+            write(d.path(), ".hannes/checks/equivalent/resource", "bundled");
+            let p = config::load(d.path()).unwrap();
+            let result = hannes::checks::execute(&p, &p.checks[0], "check");
+            assert_eq!(
+                result.status, expected,
+                "{implementation}: {}",
+                result.reason
+            );
+            assert!(!result.blocking);
+            assert_eq!(result.exit_code, Some(code));
+            let output = (
+                result.reason,
+                result.stdout.unwrap().text,
+                result.stderr.unwrap().text,
+            );
+            assert_eq!(output.1, "bundled\nindependent\ncheck");
+            assert_eq!(output.2, "diagnostic");
+            if let Some(previous) = &previous {
+                assert_eq!(&output, previous, "{implementation}");
+            }
+            previous = Some(output);
+        }
+    }
+}
+
+#[test]
 fn commands_validate_without_execution() {
     for implementation in [
         "",
         "command = []",
         "command = ['']",
         "command = ['   ']",
-        "command = 'git --version'",
         "command = ['git', 1]",
         r#"command = ["git", "\u0000"]"#,
         "command = ['git']\nentrypoint = 'index.sh'",
         "command = ['git']\ninterpreter = 'sh'",
+        "command = 'git --version'\nentrypoint = 'index.sh'",
+        "command = 'git --version'\ninterpreter = 'sh'",
+        "command = 'git --version'\nentrypoint = 'index.sh'\ninterpreter = 'sh'",
     ] {
         let d = project();
         check(
@@ -967,41 +1161,46 @@ fn commands_validate_without_execution() {
         );
         assert!(config::load(d.path()).is_err(), "accepted {implementation}");
     }
-    let d = project();
-    check(
-        d.path(),
-        "missing",
-        "run_at = ['check']",
-        "command = ['hannes-no-such-command', '']",
-        "exit 0",
-    );
-    check(
-        d.path(),
-        "disabled",
-        "enabled = false",
-        "command = ['hannes-no-such-command']",
-        "exit 0",
-    );
-    let p = config::load(d.path()).unwrap();
-    assert!(p.checks.iter().all(|c| c.entrypoint.is_none()));
-    assert_eq!(
-        planner::build(&p, Some("check"), false)
-            .unwrap()
-            .plan
-            .scheduled
-            .len(),
-        1
-    );
-    let report = hannes::verify_project_at(
-        p,
-        &Never,
-        hannes::VerificationMode::AllRules,
-        Some("check"),
-        &mut |_| {},
-    )
-    .unwrap();
-    assert_eq!(report.results.len(), 1);
-    assert_eq!(report.results[0].status, Status::Error);
+    for command in [
+        "['hannes-no-such-command', '']",
+        "\"hannes-no-such-command ''\"",
+    ] {
+        let d = project();
+        check(
+            d.path(),
+            "missing",
+            "run_at = ['check']",
+            &format!("command = {command}"),
+            "exit 0",
+        );
+        check(
+            d.path(),
+            "disabled",
+            "enabled = false",
+            &format!("command = {command}"),
+            "exit 0",
+        );
+        let p = config::load(d.path()).unwrap();
+        assert!(p.checks.iter().all(|c| c.entrypoint.is_none()));
+        assert_eq!(
+            planner::build(&p, Some("check"), false)
+                .unwrap()
+                .plan
+                .scheduled
+                .len(),
+            1
+        );
+        let report = hannes::verify_project_at(
+            p,
+            &Never,
+            hannes::VerificationMode::AllRules,
+            Some("check"),
+            &mut |_| {},
+        )
+        .unwrap();
+        assert_eq!(report.results.len(), 1);
+        assert_eq!(report.results[0].status, Status::Error);
+    }
 }
 
 #[cfg(unix)]

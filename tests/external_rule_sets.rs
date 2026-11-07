@@ -1982,39 +1982,45 @@ fn imported_shared_entrypoints_reject_symlink_escapes() {
 
 #[test]
 fn imported_commands_plan_and_execute_offline() {
-    let f = Fixture::new();
-    write(
-        &f.remote,
-        "repository/checks/required-files/rule.toml",
-        "id = 'required-files'\ndescription = 'Native Git command'\n[check]\ncommand = ['git', '--version']\n",
-    );
-    commit(&f.remote);
-    f.imports(&[("repository", "main"), ("repository", "main")]);
-    f.load(true).unwrap();
-    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
-    let p = f.load(false).unwrap();
-    assert_eq!(
-        planner::build(&p, Some("check"), false)
-            .unwrap()
-            .plan
-            .scheduled
-            .len(),
-        2
-    );
-    let report = hannes::verify_project_at(
-        p,
-        &Never,
-        hannes::VerificationMode::AllRules,
-        Some("check"),
-        &mut |_| {},
-    )
-    .unwrap();
-    assert_eq!(report.overall, Status::Pass);
-    assert_eq!(report.results.len(), 2);
-    assert!(
-        report
-            .results
-            .iter()
-            .all(|r| r.stdout.as_ref().unwrap().text.starts_with("git version"))
-    );
+    for command in ["['git', '--version']", "'git --version'"] {
+        let f = Fixture::new();
+        write(
+            &f.remote,
+            "repository/checks/required-files/rule.toml",
+            &format!(
+                "id = 'required-files'\ndescription = 'Native Git command'\n[check]\ncommand = {command}\n"
+            ),
+        );
+        commit(&f.remote);
+        f.imports(&[("repository", "main"), ("repository", "main")]);
+        f.load(true).unwrap();
+        fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+        let p = f.load(false).unwrap();
+        assert_eq!(
+            planner::build(&p, Some("check"), false)
+                .unwrap()
+                .plan
+                .scheduled
+                .len(),
+            2
+        );
+        let report = hannes::verify_project_at(
+            p,
+            &Never,
+            hannes::VerificationMode::AllRules,
+            Some("check"),
+            &mut |_| {},
+        )
+        .unwrap();
+        assert_eq!(report.overall, Status::Pass);
+        assert_eq!(report.results.len(), 2);
+        assert!(
+            report.results.iter().all(|r| r
+                .stdout
+                .as_ref()
+                .unwrap()
+                .text
+                .starts_with("git version"))
+        );
+    }
 }

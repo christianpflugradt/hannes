@@ -117,7 +117,10 @@ It is not automatically redacted; configure commands to avoid printing secrets.
 ## Configure checks and reviews
 
 See the [configuration reference](configuration.md). A Check lives in
-`.hannes/checks/<name>/` with rule.toml. Filename entrypoints live in that
+`.hannes/checks/<name>/` with rule.toml. Prefer a command string such as
+`[check] command = "python3 scripts/check-docs.py"`; quoting and escaping follow
+the configuration reference, without an implicit shell. Legacy command arrays and
+entrypoint/interpreter forms are deprecated but remain supported. Filename entrypoints live in that
 directory; paths containing `/`, such as `scripts/check-files.py`, resolve from
 the consumer repository root (the source repository root for Git imports).
 Multiple Rules may share a script and still execute independently. Direct execution uses

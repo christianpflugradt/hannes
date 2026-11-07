@@ -183,6 +183,13 @@ tree; inspect provenance to see which external revision a report evaluated.
 
 ## Source resources and trust
 
+Imported Checks accept the same preferred string commands and deprecated arrays
+and entrypoint/interpreter forms as local Checks. Existing examples retain legacy
+syntax for consumers running published v0.12.0. Shared rules must keep legacy
+syntax until all consuming governors support string commands. Command paths stay
+relative to the consuming root; switching an imported entrypoint to a command does
+not preserve its source-root resolution automatically.
+
 Checks keep the consuming project's working directory. HANNES_RULE_DIRECTORY
 locates bundled resources inside the declaring Rule directory, even for shared
 scripts. Explicit interpreters receive absolute entrypoint paths. Review prompts load from their

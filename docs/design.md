@@ -86,9 +86,11 @@ complete baselines. Binary files up to the same size budget are hashed normally.
 
 ## Execution and reporting
 
-Checks run a command argument array directly, run a file entrypoint directly, or
-pass a file entrypoint to one explicit interpreter. All use the same process runner.
-No command-string grammar, implicit shell or language detection is involved.
+Checks tokenize the preferred command string into an argument array at load time.
+Deprecated literal arrays bypass tokenization. Checks run the argument array
+directly, run a file entrypoint directly, or pass a file entrypoint to one explicit
+interpreter. All use the same process runner, without an implicit shell or language
+detection. String quoting and escaping are defined in the configuration reference.
 The consumer remains the working directory; HANNES_RULE_DIRECTORY supplies the
 absolute Rule directory. Exit 0 is PASS, 1 is FAIL and 2 is ERROR; unexpected
 numeric exits produce an explicit FAIL diagnostic.

@@ -230,19 +230,44 @@ retain their existing contracts.
 ## CHK-001: Deterministic checks
 
 [check] requires exactly one of entrypoint or command, including for disabled
-Rules. command is a nonempty array of strings: executable first, then literal
-arguments. The executable must be nonblank and no element may contain NUL. Empty
-arguments are allowed. Programs resolve through PATH or an explicit executable
-path, with the consumer root as working directory. Hannes performs no shell
-parsing, interpolation, globbing or runtime installation. interpreter is accepted
-only with entrypoint. Command availability is checked only during execution;
-missing executables produce per-rule ERROR and offline plans never launch them.
-Parameters, rule-directory context, timeouts, blocking and results use the same
-execution path for commands and files. Review resolution is unchanged.
+Rules. The preferred command syntax is a single string containing an executable
+and arguments. After TOML decoding, spaces and tabs separate arguments outside
+quotes. Single and double quotes group text and are removed; adjacent quoted and
+unquoted segments concatenate, and empty quotes preserve an empty argument.
+Backslash escapes the next character outside single quotes, including inside
+double quotes; inside single quotes it is literal. Unclosed quotes, trailing
+escapes and control characters other than tab are configuration errors.
+Unquoted `|`, `&`, `;`, `<`, `>`, `(`, `)` and `#` are rejected. Unescaped `$` and
+backticks are rejected outside single quotes, including inside double quotes.
+Quoted or escaped special characters are literal arguments. There is no shell,
+operator evaluation, pipeline, redirection, variable expansion, command chaining,
+comment processing or globbing; wildcard and tilde characters remain literal.
 
-Acceptance: `tests/configuration.rs::commands_validate_without_execution`
-and `tests/configuration.rs::commands_preserve_literal_arguments_and_rule_context`
-cover command validation, literal arguments, parameters and per-rule results.
+The deprecated nonempty array syntax remains supported unchanged: executable
+first, then literal arguments, without string-command parsing. The executable
+must be nonblank and no element may contain NUL. Empty arguments are allowed.
+The deprecated entrypoint and interpreter syntax remains supported unchanged.
+No removal or runtime deprecation warning is introduced in this migration step.
+Both command forms are mutually exclusive with entrypoint and interpreter.
+Programs resolve through PATH or an explicit executable path, with the consumer
+root as working directory. Hannes performs no runtime installation.
+Command availability is checked only during execution; missing executables
+produce per-rule ERROR and offline plans never launch them. Parameters,
+rule-directory context, timeouts, blocking and results use the same execution
+path for commands and files. Review resolution is unchanged.
+
+String commands require a release containing this feature. Active repository
+`.hannes/` configurations and external rules intended for the published v0.12.0
+governor must retain legacy syntax until their governor is upgraded.
+
+Acceptance: `tests/configuration.rs::string_commands_parse_arguments_without_a_shell`,
+`tests/configuration.rs::string_commands_reject_invalid_syntax`,
+`tests/configuration.rs::command_representations_execute_equivalently`,
+`tests/configuration.rs::commands_validate_without_execution` and
+`tests/external_rule_sets.rs::imported_commands_plan_and_execute_offline`
+cover quoting, escaping, invalid syntax, conflicts, legacy compatibility, offline
+imports and equivalent execution. Existing process and entrypoint tests retain
+coverage of timeouts, resource confinement and exit-code handling.
 
 For file entrypoints, a filename such as index.sh resolves in the declaring
 Rule directory. A relative path containing `/`, such as scripts/check.py, resolves

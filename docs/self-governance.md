@@ -78,6 +78,8 @@ security and license Rules.
 
 The 16 local [checks](../.hannes/checks) invoke tools directly through command
 arrays. Python scripts without arguments use entrypoint and interpreter instead.
+These legacy forms remain compatible with the published v0.12.0 governor.
+Do not migrate active definitions to string commands until the governor is upgraded.
 There are no index.sh launchers. Each local Rule declares its execution points
 directly; this repository defines no local Rule Sets. External Rule Sets supply
 the commit-message, security and license checks.

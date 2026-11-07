@@ -160,6 +160,7 @@ pub struct RuleDefinition {
 #[serde(deny_unknown_fields)]
 pub struct CheckDefinition {
     pub entrypoint: Option<String>,
+    #[serde(default, deserialize_with = "crate::check_command::deserialize")]
     pub command: Option<Vec<String>>,
     pub interpreter: Option<String>,
     #[serde(default = "default_timeout")]

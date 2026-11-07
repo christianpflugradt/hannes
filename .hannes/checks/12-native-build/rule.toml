@@ -4,5 +4,5 @@ enabled = true
 run_at = ["pre-push", "check", "release-build"]
 
 [check]
-command = ["cargo", "+stable", "build", "--release", "--locked", "--offline"]
+command = "cargo +stable build --release --locked --offline"
 timeout_seconds = 600

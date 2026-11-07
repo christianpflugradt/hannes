@@ -103,8 +103,7 @@ description = "Validate Conventional Commits"
 run_at = ["commit-msg"]
 
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+command = "sh .hannes/checks/commit-message/index.sh"
 
 [parameters.scopes_file]
 type = "file"
@@ -250,10 +249,10 @@ plans do not launch commands. Parameters, working directory, Rule-directory
 context, timeout, output capture and exit codes are shared with file entrypoints.
 `interpreter` is only available with `entrypoint`.
 
-String commands require a Hannes release containing this feature. Keep legacy
-syntax in active `.hannes/` configurations and shared external rules until every
-consuming governor is upgraded. This repository retains its legacy definitions
-and published v0.12.0 governor pin during this migration step.
+String commands require Hannes v0.13.0 or later. Keep legacy syntax in shared
+external rules until every consuming governor is upgraded. This repository uses
+string commands for all local Checks and pins published v0.13.0 for Git hooks and
+CI. Imported Rules retain their compatible legacy syntax.
 
 A filename such as `index.sh` resolves inside the declaring Rule directory.
 A path containing `/`, such as `scripts/check-files.py`, resolves from the

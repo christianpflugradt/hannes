@@ -97,8 +97,7 @@ jobs:
           description = "Record the selected point and return the requested test status"
           run_at = ["check", "action-test"]
           [check]
-          entrypoint = "index.sh"
-          interpreter = "sh"
+          command = "sh .hannes/checks/consumer/index.sh"
           TOML
           cat > .hannes/checks/consumer/index.sh <<'SH'
           printf '%s\n' "$HANNES_EXECUTION_POINT" >> "$RUNNER_TEMP/action-points"

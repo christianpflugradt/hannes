@@ -4,6 +4,5 @@ enabled = true
 run_at = ["pre-push", "check", "release-build"]
 
 [check]
-entrypoint = "scripts/smoke.py"
-interpreter = "python3"
+command = "python3 scripts/smoke.py"
 timeout_seconds = 120

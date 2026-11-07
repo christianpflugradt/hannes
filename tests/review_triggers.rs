@@ -32,6 +32,8 @@ fn commit(root: &Path) -> String {
             "-c",
             "user.email=fixture@example.invalid",
             "-c",
+            "commit.gpgsign=false",
+            "-c",
             "core.hooksPath=/dev/null",
             "commit",
             "-qm",

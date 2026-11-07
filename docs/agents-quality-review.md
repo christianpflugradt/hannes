@@ -38,7 +38,7 @@ hannes mach was --at check
 hannes was ist phase --details
 ```
 
-The repository pins published Hannes v0.12.0 for local hooks and GitHub Actions.
+The repository pins published Hannes v0.13.0 for local hooks and GitHub Actions.
 The active Review disables diff inclusion, and its provider sets
 `timeout_seconds = 0` so the adapter controls request deadlines and retries.
 For a local branch comparison, use the merge-base with the target branch as

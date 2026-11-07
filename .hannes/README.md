@@ -7,9 +7,9 @@ Rule compares LICENSE against the bundled license references byte-for-byte.
 A conditional AGENTS.md quality Review runs only at check through a named Gemini
 REST adapter through the CLI transport. Git hooks and release-build points select checks only.
 
-`checks/*/rule.toml` defines 16 local Rules using direct command arrays or Python
-file entrypoints with an explicit interpreter. Cargo, Python helper and JavaScript
-tests each have one Rule and run at pre-push and again in CI. Cargo build, test,
+`checks/*/rule.toml` defines 16 local Rules using string commands for installed
+tools and Python scripts relative to the consuming repository root. Cargo, Python
+helper and JavaScript tests each have one Rule and run at pre-push and again in CI. Cargo build, test,
 Clippy and MSRV commands and npm tests explicitly select offline mode.
 Each local Rule declares its own run_at; there are no local Rule Sets.
 `config.toml` declares custom points and the external imports.
@@ -24,7 +24,7 @@ hannes mach was --at pre-commit --plan
 hannes was ist phase --details
 ```
 
-The exact published governor pin is v0.12.0 in .hannes-version, shared by local
+The exact published governor pin is v0.13.0 in .hannes-version, shared by local
 hooks and GitHub Actions. The AGENTS.md review excludes the Git diff and its
 Gemini REST provider delegates deadlines to the adapter.
 Do not use a candidate built from this checkout as the governor.

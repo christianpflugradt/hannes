@@ -243,8 +243,9 @@ blocks nested Hannes execution from checker processes.
 Deterministic checks receive `HANNES_GIT_HOOK`, `HANNES_GIT_HOOK_ARG_COUNT` and
 one-based `HANNES_GIT_HOOK_ARG_1`, `HANNES_GIT_HOOK_ARG_2`, etc. Values preserve
 Git's arguments; relative paths are relative to the consuming repository root. For a commit-msg
-execution point, create a Check directory with `[check] entrypoint = "index.sh"` and
-`interpreter = "sh"`. Its index.sh reads the supplied hook arguments:
+execution point, create `.hannes/checks/commit-message/rule.toml` with
+`[check] command = "sh .hannes/checks/commit-message/index.sh"`. Its index.sh reads
+the supplied hook arguments:
 
 ```sh
 #!/bin/sh

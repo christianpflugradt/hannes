@@ -4,5 +4,5 @@ enabled = true
 run_at = ["pre-push", "check"]
 
 [check]
-command = ["cargo", "+1.85.0", "--offline", "check", "--all-targets", "--locked"]
+command = "cargo +1.85.0 --offline check --all-targets --locked"
 timeout_seconds = 600

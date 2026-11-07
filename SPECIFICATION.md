@@ -256,9 +256,10 @@ produce per-rule ERROR and offline plans never launch them. Parameters,
 rule-directory context, timeouts, blocking and results use the same execution
 path for commands and files. Review resolution is unchanged.
 
-String commands require a release containing this feature. Active repository
-`.hannes/` configurations and external rules intended for the published v0.12.0
-governor must retain legacy syntax until their governor is upgraded.
+String commands require Hannes v0.13.0 or later. All active local repository
+Checks use strings with the published v0.13.0 governor. External Rules keep their
+compatible legacy syntax and source-root resource resolution. Consumers running
+older governors must retain legacy syntax until they upgrade.
 
 Acceptance: `tests/configuration.rs::string_commands_parse_arguments_without_a_shell`,
 `tests/configuration.rs::string_commands_reject_invalid_syntax`,
@@ -497,7 +498,7 @@ An executable plan exits 0; a blocked/invalid plan exits 2.
 
 The root `action.yml` is a public composite GitHub Action for GitHub-hosted
 Ubuntu 24.04 x64 and ARM64 runners. Required `version` is an exact stable release
-tag such as `v0.12.0`. Optional `execution-point` defaults to `check`; `run` defaults
+tag such as `v0.13.0`. Optional `execution-point` defaults to `check`; `run` defaults
 to `true` and accepts only `true` or `false`. Installation downloads the matching
 native archive and SHA256SUMS, verifies the checksum, and adds the executable to
 PATH for subsequent steps. With `run: true` it executes
@@ -591,9 +592,9 @@ commit-message arguments and preserving compatible unmanaged content. A setup
 shim only retires this checkout's obsolete .githooks setting when its old event
 files are absent, then delegates to pass auf; custom hook paths are preserved.
 Check subprocesses retain the inherited environment and recursion guard. Local
-Rules use direct command arrays or Python file entrypoints, without per-rule shell
-or Python launchers. Cargo build/test/Clippy/MSRV commands and npm tests explicitly
-select offline mode. The execution-point wrapper additionally sets Cargo/npm
+Rules use string commands for installed tools and consumer-root Python script
+paths, without per-rule shell or Python launchers. Cargo build/test/Clippy/MSRV
+commands and npm tests explicitly select offline mode. The execution-point wrapper additionally sets Cargo/npm
 offline mode and disables Rustup auto-install for Git-backed invocations.
 CI invokes pass auf --auto-approve once before execution. Execution never repairs
 hooks noninteractively. The publish job prepares stable Rust with rustfmt and
@@ -720,7 +721,7 @@ with trigger_not_matched. CI uses an explicit verified baseline, preferring the
 PR merge-base. Summaries distinguish PASS, non-blocking FAIL, ERROR and SKIP.
 The rubric is context only. review.include_diff defaults to true; setting it to
 false excludes the diff. The active repository Review sets include_diff = false
-using published Hannes v0.12.0. Batches separate reviews with different diff
+using published Hannes v0.13.0. Batches separate reviews with different diff
 settings, and no diff is assembled or delivered for a batch that disables it.
 Plain HTTP models use only supplied evidence; generic instructions require no tools or repository access.
 

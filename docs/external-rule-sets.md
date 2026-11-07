@@ -184,9 +184,9 @@ tree; inspect provenance to see which external revision a report evaluated.
 ## Source resources and trust
 
 Imported Checks accept the same preferred string commands and deprecated arrays
-and entrypoint/interpreter forms as local Checks. Existing examples retain legacy
-syntax for consumers running published v0.12.0. Shared rules must keep legacy
-syntax until all consuming governors support string commands. Command paths stay
+and entrypoint/interpreter forms as local Checks. Examples retain legacy syntax
+for older consumers; published v0.13.0 supports these forms unchanged. Shared rules
+must keep legacy syntax until all consuming governors support string commands. Command paths stay
 relative to the consuming root; switching an imported entrypoint to a command does
 not preserve its source-root resolution automatically.
 

@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -62,11 +63,11 @@ class GovernanceTests(unittest.TestCase):
             self.assertEqual({key: value for key, value in check.items() if key != "check"},
                              {key: value for key, value in original.items() if key not in ("command", "timeout_seconds")})
             self.assertEqual(implementation["timeout_seconds"], original["timeout_seconds"])
-            command = original["command"]
-            if command[0] == "python3" and len(command) == 2:
-                self.assertEqual(implementation, {"entrypoint": command[1], "interpreter": "python3", "timeout_seconds": original["timeout_seconds"]})
-            else:
-                self.assertEqual(implementation, {"command": command, "timeout_seconds": original["timeout_seconds"]})
+            self.assertEqual(set(implementation), {"command", "timeout_seconds"})
+            self.assertIsInstance(implementation["command"], str)
+            # Local commands use the common quoting subset of shlex and Hannes.
+            # Keep the pre-migration argument vectors as independent evidence.
+            self.assertEqual(shlex.split(implementation["command"]), original["command"])
             self.assertFalse((ROOT / ".hannes/checks" / rule / "index.sh").exists())
         # The published-governor test below independently checks real resolution.
         for point, expected in BASELINE["execution_points"].items():
@@ -131,6 +132,8 @@ class GovernanceTests(unittest.TestCase):
         executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
         self.assertTrue(executable, "Install the compatible published Hannes release before running governance acceptance")
         self.assertFalse(Path(executable).resolve().is_relative_to(ROOT))
+        version = subprocess.check_output([executable, "--version"], text=True).strip()
+        self.assertEqual(version, "hannes " + (ROOT / ".hannes-version").read_text().strip().removeprefix("v"))
         for point, expected in BASELINE["execution_points"].items():
             with self.subTest(point=point):
                 result = subprocess.run([executable, "mach", "was", "--at", point, "--plan", "--json"], cwd=ROOT, env=dict(os.environ, HANNES_CHANGE_BASE="HEAD"), capture_output=True, text=True)
@@ -223,8 +226,8 @@ class GovernanceTests(unittest.TestCase):
     def test_native_checks_remain_offline_without_a_launcher(self):
         checks = definitions()
         for rule in ("10-clippy", "11-rust-tests", "12-native-build", "23-msrv"):
-            self.assertIn("--offline", checks[rule]["check"]["command"])
-        self.assertEqual(checks["08-release-rules"]["check"]["command"], ["npm", "--offline", "test"])
+            self.assertIn("--offline", shlex.split(checks[rule]["check"]["command"]))
+        self.assertEqual(shlex.split(checks["08-release-rules"]["check"]["command"]), ["npm", "--offline", "test"])
         self.assertFalse((ROOT / "scripts/run-check.py").exists())
         for point in ("pre-push", "check"):
             self.assertTrue({"03-python-tests", "08-release-rules", "11-rust-tests", "22-workflows", "23-msrv"}.issubset(BASELINE["execution_points"][point]))

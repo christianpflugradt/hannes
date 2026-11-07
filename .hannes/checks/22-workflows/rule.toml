@@ -4,5 +4,5 @@ enabled = true
 run_at = ["pre-push", "check"]
 
 [check]
-command = ["actionlint", "-color"]
+command = "actionlint -color"
 timeout_seconds = 120

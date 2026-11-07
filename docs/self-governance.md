@@ -76,13 +76,20 @@ security and license Rules.
 | release-build | 01-format, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke |
 | release-artifacts | 30-release-artifacts |
 
-The 16 local [checks](../.hannes/checks) invoke tools directly through command
-arrays. Python scripts without arguments use entrypoint and interpreter instead.
-These legacy forms remain compatible with the published v0.12.0 governor.
-Do not migrate active definitions to string commands until the governor is upgraded.
+The 16 local [checks](../.hannes/checks) use string commands. Python scripts run
+as `python3 scripts/<name>.py`, relative to the consuming repository root.
+The published v0.13.0 governor supports these commands and the imported Rules'
+legacy entrypoint/interpreter forms without changing their resource resolution.
 There are no index.sh launchers. Each local Rule declares its execution points
 directly; this repository defines no local Rule Sets. External Rule Sets supply
 the commit-message, security and license checks.
+
+The imported commit-message, secret-scan and sensitive-files Checks keep their
+rule-local `index.sh` entrypoints with `sh`. The license Check keeps
+`entrypoint = "scripts/file-reference.py"` with `python3`, resolved from the
+imported repository root. These forms remain supported in v0.13.0. Converting
+them to relative commands here would resolve paths against the consumer instead;
+the imports and external repositories remain unchanged.
 
 All Rust unit, integration, acceptance and documentation tests run in one Cargo
 Rule. Python helper tests use one unittest discovery Rule; test modules use
@@ -206,7 +213,7 @@ Both installers download the pinned release's assets directly, without a GitHub
 Releases API request. Missing tags, assets or valid checksums fail installation;
 there is no fallback to latest. These installation steps need no GitHub token.
 
-The repository uses published Hannes v0.12.0 for both local hooks and CI.
+The repository uses published Hannes v0.13.0 for both local hooks and CI.
 The AGENTS.md review sets include_diff = false and its Gemini provider sets
 timeout_seconds = 0, leaving request deadlines and retries to the REST adapter.
 Candidate binaries remain confined to disposable acceptance fixtures and smoke

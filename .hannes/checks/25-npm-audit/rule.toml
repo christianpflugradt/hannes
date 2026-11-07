@@ -4,5 +4,5 @@ enabled = true
 run_at = ["check"]
 
 [check]
-command = ["npm", "audit", "--audit-level=high"]
+command = "npm audit --audit-level=high"
 timeout_seconds = 180

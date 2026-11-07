@@ -4,6 +4,5 @@ enabled = true
 run_at = ["check"]
 
 [check]
-entrypoint = "scripts/check-commits.py"
-interpreter = "python3"
+command = "python3 scripts/check-commits.py"
 timeout_seconds = 60

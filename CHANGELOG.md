@@ -1,3 +1,9 @@
+## [0.7.0](https://github.com/christianpflugradt/hannes/compare/v0.6.0...v0.7.0) (2026-11-07)
+
+### Features
+
+* **config:** add rule parameters and execution error handling ([b4636da](https://github.com/christianpflugradt/hannes/commit/b4636da30ed3e2a760b2d1c1fc5f827cda33673e))
+
 ## [0.6.0](https://github.com/christianpflugradt/hannes/compare/v0.5.0...v0.6.0) (2026-11-07)
 
 ### ⚠ BREAKING CHANGES

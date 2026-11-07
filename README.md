@@ -952,6 +952,8 @@ is listed in the [TODOs](docs/todo/README.md).
 
 The governor is pinned to published Hannes v0.10.0. See
 [repository self-integration](docs/self-governance.md) for setup and coverage.
+The `repository-conventions` Rule Set tracks `main` and checks LICENSE against
+its permitted reference texts at `pre-push` and `check`.
 
 This repository's deterministic quality checks run through an installed published
 Hannes release. Install development tools with `mise install`, dependencies with
@@ -972,7 +974,7 @@ pinned published governor at the `pre-push` execution point:
 formatting, documentation validation, Clippy, Rust tests, Python helper tests,
 JavaScript release tests, workflow validation, minimum Rust, an optimized
 candidate build, smoke test and the imported
-Security Rule Set against `HEAD`. No reviews or real provider calls run. The governor never comes from the candidate build.
+Security and repository-conventions Rule Sets against `HEAD`. No reviews or real provider calls run. The governor never comes from the candidate build.
 
 `mise docs:check` checks links, specification references, configuration fields and
 executable documentation examples. Individual tasks remain available: `format`,

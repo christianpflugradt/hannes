@@ -1,7 +1,9 @@
 # Hannes repository rules
 
 This repository uses unversioned, self-contained deterministic rules and pinned
-external commit-message and Security Rule Sets at six execution points.
+external commit-message and Security Rule Sets at six execution points, plus
+the unpinned repository-conventions Rule Set at check and pre-push. Its only
+Rule compares LICENSE against the bundled license references byte-for-byte.
 No reviews or provider calls run.
 
 `checks/*/rule.toml` defines 15 local Rules using direct command arrays or Python

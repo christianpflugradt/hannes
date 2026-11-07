@@ -116,6 +116,17 @@ class GovernanceTests(unittest.TestCase):
         release = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertLess(release.index("Install pinned Gitleaks"), release.index("Publish versioned CLI"))
 
+    def test_repository_conventions_import_tracks_main_and_license_target(self):
+        config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
+        imported, = [item for item in config["imports"] if item["path"] == "repository-conventions"]
+        self.assertEqual(imported, {
+            "git": "https://github.com/christianpflugradt/christianpflugradt-rulesets.git",
+            "path": "repository-conventions",
+            "ref": "main",
+            "rule_parameters": {"license": {"target": "LICENSE"}},
+        })
+        self.assertFalse((ROOT / ".hannes/checks/license").exists())
+
     def test_published_governor_can_plan_every_execution_point_without_execution(self):
         executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
         self.assertTrue(executable, "Install the compatible published Hannes release before running governance acceptance")
@@ -130,7 +141,7 @@ class GovernanceTests(unittest.TestCase):
                 imported = [rule for rule in plan["scheduled"] if rule["origin"].get("external")]
                 self.assertEqual([rule["id"] for rule in local], sorted(expected))
                 expected_rules = {"commit-message"} if point == "commit-msg" else (
-                    {"secret-scan", "sensitive-files"} if point in ("check", "pre-push") else set())
+                    {"license", "secret-scan", "sensitive-files"} if point in ("check", "pre-push") else set())
                 self.assertEqual({rule["id"].rsplit(":", 1)[-1] for rule in imported}, expected_rules)
                 self.assertEqual(len(imported), len(expected_rules))
                 declarations = tomllib.loads((ROOT / ".hannes/config.toml").read_text())["imports"]
@@ -138,7 +149,11 @@ class GovernanceTests(unittest.TestCase):
                     self.assertTrue(rule["blocking"])
                     origin = rule["origin"]["external"]
                     declaration, = [item for item in declarations if item["path"] == origin["path"]]
-                    self.assertEqual(origin["commit"], declaration["ref"])
+                    if declaration["path"] != "repository-conventions":
+                        self.assertEqual(origin["commit"], declaration["ref"])
+                    else:
+                        self.assertEqual(declaration["ref"], "main")
+                        self.assertRegex(origin["commit"], r"^[0-9a-f]{40}$")
                 self.assertEqual(set(plan["required_ids"]), set(expected) | {rule["id"] for rule in imported})
                 self.assertEqual(plan["planned_model_calls"], 0)
                 self.assertFalse(plan["omitted"])

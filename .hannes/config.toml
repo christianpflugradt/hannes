@@ -16,3 +16,11 @@ scopes_file = ".hannes/commit-scopes.txt"
 git = "https://github.com/christianpflugradt/christianpflugradt-rulesets.git"
 path = "multi-point/security"
 ref = "6222443fa71627c55bada9d7f80e5595d45ef880"
+
+[[imports]]
+git = "https://github.com/christianpflugradt/christianpflugradt-rulesets.git"
+path = "repository-conventions"
+ref = "main"
+
+[imports.rule_parameters.license]
+target = "LICENSE"

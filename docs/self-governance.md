@@ -63,23 +63,23 @@ of its configured execution point. Checks run once per binding, ordered by ID. T
 [governance fixture](../tests/fixtures/self-governance.json) records
 the commands, activation states, timeouts and required selections; governance
 acceptance compares the local checks in the published governor's actual plans
-with that evidence and separately verifies the imported commit-message and
-security Rules.
+with that evidence and separately verifies the imported commit-message,
+security and license Rules.
 
 | Execution point | Required checks |
 | --- | --- |
 | pre-commit | 01-format, 02-docs |
 | commit-msg | 20-commit-message plus imported commit-message |
-| pre-push (default) | 01-format, 02-docs, 03-python-tests, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke, 22-workflows, 23-msrv plus imported secret-scan and sensitive-files |
-| check | All pre-push checks plus 21-commit-range, 24-rust-audit and 25-npm-audit: 15 rules total |
+| pre-push (default) | 01-format, 02-docs, 03-python-tests, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke, 22-workflows, 23-msrv plus imported license, secret-scan and sensitive-files |
+| check | All pre-push checks plus 21-commit-range, 24-rust-audit and 25-npm-audit: 16 rules total |
 | release-build | 01-format, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke |
 | release-artifacts | 30-release-artifacts |
 
 The 15 local [checks](../.hannes/checks) invoke tools directly through command
 arrays. Python scripts without arguments use entrypoint and interpreter instead.
 There are no index.sh launchers. Each local Rule declares its execution points
-directly; this repository defines no local Rule Sets. External assignments remain
-unchanged.
+directly; this repository defines no local Rule Sets. External Rule Sets supply
+the commit-message, security and license checks.
 
 All Rust unit, integration, acceptance and documentation tests run in one Cargo
 Rule. Python helper tests use one unittest discovery Rule; test modules use
@@ -126,7 +126,8 @@ and retry the push. Do not bypass hooks, force-push or rewrite unrelated work.
 Read hook output or use hannes was ist phase --details for saved output without
 rerunning rules. Address missing tools or hook drift, or report the blocker.
 Prepare the intended commit before the final push: general local checks inspect
-working files, while the imported pre-push security checks inspect HEAD.
+working files, while the imported pre-push security and license checks inspect
+HEAD.
 
 ## Git hooks
 
@@ -160,11 +161,20 @@ contents, including allowed templates; symlink contents are excluded and
 submodules cause ERROR. Scanner configuration comes from the selected snapshot.
 The external Rule Set documents its complete policy and limitations.
 
+The `repository-conventions` import uses `ref = "main"`, without a commit or tag
+pin. It currently includes only the blocking `license`
+Rule at `check` and `pre-push`, with `target = "LICENSE"`. The Rule uses the shared
+`scripts/file-reference.py` entrypoint and resolves bundled references relative
+to `HANNES_RULE_DIRECTORY`. LICENSE must match Apache-2.0,
+PolyForm-Noncommercial-1.0.0 or Unlicense byte-for-byte; this repository uses the
+SPDX Unlicense reference. `check` reads the working-tree file and `pre-push` reads
+HEAD. Missing or nonmatching files produce FAIL; technical errors produce ERROR.
+
 Pre-commit runs before the final message is available. Hooks block on failure and
 never modify the Git index. Local checks verify working files, including
 unstaged edits, which can differ from staged or pushed commits. The imported
-security checks explicitly read `HEAD` at pre-push. Hooks are bypassable; clean
-CI checkouts remain authoritative. General Hannes index/commit inputs remain
+security and license checks explicitly read `HEAD` at pre-push. Hooks are
+bypassable; clean CI checkouts remain authoritative. General Hannes index/commit inputs remain
 future work.
 
 ## CI, pinning and Renovate

@@ -434,7 +434,14 @@ pin. Its sensitive-files and secret-scan checks inspect the working tree at chec
 and HEAD contents at pre-push, without history. The CI quality job explicitly
 runs check with Python 3 and a checksum-verified Gitleaks binary available. The
 release publisher prepares Gitleaks for its managed push hook. Rules and Hannes
-never install these dependencies automatically.
+never install these dependencies automatically. The same points import
+repository-conventions from main without a commit or tag pin. It currently
+contains only the blocking license Rule, with target = "LICENSE". The license
+must match an SPDX reference byte-for-byte: Apache-2.0,
+PolyForm-Noncommercial-1.0.0 or Unlicense. Hannes uses the exact Unlicense text.
+The Rule reads the working tree at check and HEAD at pre-push. Missing or
+nonmatching licenses produce FAIL; technical errors produce ERROR.
+Acceptance: scripts/test_governance.py covers the import and effective selection.
 Checks remain mandatory and no reviews are enabled. Missing tools and errors
 block success. Setup, dependency installation and release publication remain
 outside rule execution.

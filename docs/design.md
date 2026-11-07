@@ -28,7 +28,8 @@ it with external state and builds an ordered plan. The CLI owns confirmation;
 `pass auf` and direct Git-backed `mach was` points share
 inspection/application/verification. Direct `check` and custom points retain the
 repository recursion guard, then execute without inspecting hook locations or
-synchronizing hooks. Managed hook invocations still validate hook context and
+synchronizing hooks. Every Check subprocess receives the repository guard,
+including direct executions without a hook context. Managed hook invocations still validate hook context and
 synchronization read-only; the execution point must equal the Git event.
 The CLI exposes explicit unattended approval through `pass auf --auto-approve`;
 it uses the same inspection, application and verification path as interactive

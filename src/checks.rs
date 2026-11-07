@@ -27,7 +27,7 @@ pub fn execute_with_context(
             check.rule_directory.strip_prefix(&check.source_root)?,
         )?;
         anyhow::ensure!(directory.is_dir(), "Rule directory must be a directory");
-        let command = match (&check.entrypoint, &check.command) {
+        let mut command = match (&check.entrypoint, &check.command) {
             (Some(path), None) => {
                 let entrypoint = crate::config::source_path(
                     &check.source_root,
@@ -60,6 +60,9 @@ pub fn execute_with_context(
             }
             _ => anyhow::bail!("Rule {}: expected one check implementation", check.id),
         };
+        if hook.is_none() {
+            crate::reconciliation::configure_guard(project, &mut command)?;
+        }
         Ok((environment, command))
     })();
     let (environment, mut command) = match prepared {

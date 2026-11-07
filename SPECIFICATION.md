@@ -534,7 +534,11 @@ Generated wrappers pass explicit event, wrapper path and original arguments to
 `mach was`. Hannes validates this context against the repository, identically
 named execution point and hook state, verifies reconciliation read-only and never prompts or edits hooks. Drift
 instructs the user to run `hannes pass auf` manually. Nested execution from checks
-is rejected using a repository-scoped guard. Checks receive `HANNES_GIT_HOOK`,
+is rejected using a repository-scoped guard, including checks started by direct
+execution of Git-backed, check and custom points. The guard also blocks nested
+reconciliation in that repository. Acceptance:
+`tests/reconciliation.rs::direct_execution_blocks_nested_execution_and_reconciliation`.
+Checks receive `HANNES_GIT_HOOK`,
 `HANNES_GIT_HOOK_ARG_COUNT` and one-based `HANNES_GIT_HOOK_ARG_1`, etc.; a dedicated
 checker script reads these without shell expansion by Hannes. `commit-msg` supplies
 the message file in argument 1, unlike pre-commit; no commit policy is hardcoded.

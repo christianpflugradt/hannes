@@ -794,6 +794,51 @@ fn fixed_hooks_select_only_their_own_effective_rules() {
 }
 
 #[test]
+fn direct_execution_blocks_nested_execution_and_reconciliation() {
+    for point in ["check", "first", "pre-push"] {
+        for nested in [
+            format!("mach was --at {point}"),
+            "pass auf --auto-approve".into(),
+        ] {
+            let root = project(&[point]);
+            // Bound the regression case: a missing guard admits one nested run,
+            // which exits successfully instead of recursively launching more runs.
+            checker(
+                root.path(),
+                &format!(
+                    "if [ \"${{HANNES_RECURSION_TEST:-}}\" = 1 ]; then\n echo 'nested execution admitted'\n exit 0\nfi\nexport HANNES_RECURSION_TEST=1\nexec {:?} {nested}\n",
+                    env!("CARGO_BIN_EXE_hannes")
+                ),
+            );
+            if point == "pre-push" {
+                synchronize(root.path());
+            }
+            let output = cli(root.path(), &["mach", "was", "--at", point]);
+            assert_eq!(output.status.code(), Some(2), "{point}: {nested}");
+            let report = hannes::report::read(root.path()).unwrap();
+            let item = &report.results[0];
+            assert_eq!(item.status, hannes::report::Status::Error);
+            assert!(
+                item.stderr
+                    .as_ref()
+                    .unwrap()
+                    .text
+                    .contains("recursive Hannes hook execution blocked")
+            );
+            assert!(
+                !item
+                    .stdout
+                    .as_ref()
+                    .unwrap()
+                    .text
+                    .contains("nested execution admitted")
+            );
+            assert_eq!(report.results.len(), 1);
+        }
+    }
+}
+
+#[test]
 fn only_effective_builtin_assignments_require_hooks() {
     let root = project(&["first", "check"]);
     synchronize(root.path());

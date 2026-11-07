@@ -367,7 +367,9 @@ Hannes marks its sections explicitly, preserves unmanaged commands, and refuses
 ambiguous ownership or unsafe composition. Hooks no longer required by
 effective Rule assignments lose only managed content. Generated hooks verify
 synchronization read-only and direct you to
-`hannes pass auf` on drift. Local hooks are bypassable and verify working files,
+`hannes pass auf` on drift. Checks cannot start another Hannes execution or run
+`hannes pass auf` in the same repository; this also applies to direct CLI runs.
+Local hooks are bypassable and verify working files,
 which may differ from staged or pushed commits. See
 [Git integration and recovery](docs/usage.md#optional-git-hook).
 For explicit governance execution in a fresh CI checkout, no hook setup is needed:

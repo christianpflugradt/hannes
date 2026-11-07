@@ -143,6 +143,12 @@ fn repository_identity(project: &Project) -> Result<(PathBuf, String)> {
     Ok((common, owner))
 }
 
+pub(crate) fn configure_guard(project: &Project, command: &mut Command) -> Result<()> {
+    let (_, owner) = repository_identity(project)?;
+    command.env(GUARD, owner);
+    Ok(())
+}
+
 fn location(project: &Project) -> Result<(PathBuf, String)> {
     let (common, owner) = repository_identity(project)?;
     let directory = PathBuf::from(git(

@@ -1,3 +1,9 @@
+## [0.14.1](https://github.com/christianpflugradt/hannes/compare/v0.14.0...v0.14.1) (2026-11-07)
+
+### Maintenance
+
+* **config:** adopt Hannes v0.14.0 external string commands ([df2d956](https://github.com/christianpflugradt/hannes/commit/df2d956938b638dd8f3c99d66a1c9cf302374806))
+
 ## [0.14.0](https://github.com/christianpflugradt/hannes/compare/v0.13.0...v0.14.0) (2026-11-07)
 
 ### Features

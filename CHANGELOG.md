@@ -1,3 +1,13 @@
+## [0.14.0](https://github.com/christianpflugradt/hannes/compare/v0.13.0...v0.14.0) (2026-11-07)
+
+### Features
+
+* **checks:** resolve explicit command path references ([4a43658](https://github.com/christianpflugradt/hannes/commit/4a4365837d7e1d10a4ed1d95cdff047059601208))
+
+### Maintenance
+
+* **config:** migrate local checks to Hannes v0.13.0 ([5695771](https://github.com/christianpflugradt/hannes/commit/56957711a34666a5165d152a859f05aee8e5fefd))
+
 ## [0.13.0](https://github.com/christianpflugradt/hannes/compare/v0.12.0...v0.13.0) (2026-11-07)
 
 ### Features

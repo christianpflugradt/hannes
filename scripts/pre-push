@@ -1,6 +1,0 @@
-#!/bin/sh
-# Optional, bypassable working-tree check. Does not verify pushed commits.
-set -eu
-root=$(git rev-parse --show-toplevel)
-cd "$root"
-exec hannes mach was

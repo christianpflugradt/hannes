@@ -2024,3 +2024,60 @@ fn imported_commands_plan_and_execute_offline() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn imported_path_references_use_cached_provenance_offline() {
+    use std::os::unix::fs::PermissionsExt;
+    for executable in ["sh @rule/index.sh", "'@source/shared scripts/probe.sh'"] {
+        let f = Fixture::new();
+        let script = "#!/bin/sh\ntest -s README.md || exit 2\ntest \"$PWD\" = \"$(dirname \"$1\")\" || exit 2\ntest \"$2\" = \"$HANNES_RULE_DIRECTORY/index.sh\" || exit 2\ncmp \"$2\" \"$3\" || exit 2\nprintf 'cached paths passed'\n";
+        write(
+            &f.remote,
+            "repository/checks/required-files/index.sh",
+            script,
+        );
+        write(&f.remote, "shared scripts/probe.sh", script);
+        fs::set_permissions(
+            f.remote.join("shared scripts/probe.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        write(&f.root, "README.md", "# Consumer\n");
+        let command = format!(
+            "{executable} @repo/README.md @rule/index.sh '@source/shared scripts/probe.sh'"
+        );
+        write(
+            &f.remote,
+            "repository/checks/required-files/rule.toml",
+            &format!(
+                "id = 'required-files'\ndescription = 'Reference probe'\n[check]\ncommand = {}\n",
+                serde_json::to_string(&command).unwrap()
+            ),
+        );
+        commit(&f.remote);
+        f.imports(&[("repository", "main")]);
+        f.load(true).unwrap();
+        fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+        // Consumer paths must never shadow imported rule/source resources.
+        write(&f.root, "shared scripts/probe.sh", "exit 2");
+        write(&f.root, "index.sh", "exit 2");
+        let p = f.load(false).unwrap();
+        let check = p
+            .checks
+            .iter()
+            .find(|c| c.id.contains("required-files"))
+            .unwrap();
+        assert!(check.source_root.starts_with(&f.cache));
+        assert!(planner::build(&p, Some("check"), false).is_ok());
+        let result = hannes::checks::execute(&p, check, "check");
+        assert_eq!(
+            result.status,
+            Status::Pass,
+            "{} {:?}",
+            result.reason,
+            result.stderr
+        );
+        assert_eq!(result.stdout.unwrap().text, "cached paths passed");
+    }
+}

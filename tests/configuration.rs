@@ -989,7 +989,7 @@ fn string_commands_parse_arguments_without_a_shell() {
         );
         let p = config::load(d.path()).unwrap();
         assert_eq!(
-            p.checks[0].command.as_ref().unwrap(),
+            &**p.checks[0].command.as_ref().unwrap(),
             &expected,
             "{command}"
         );
@@ -1007,6 +1007,18 @@ fn string_commands_reject_invalid_syntax() {
         "tool 'unfinished",
         "tool \"unfinished",
         r"tool \",
+        "tool @unknown/file",
+        "tool @rule",
+        "tool @rule/",
+        "tool @source//file",
+        "tool @repo/../outside",
+        "tool @rule/../outside",
+        "tool @source/a/../../outside",
+        "tool @rule/./file",
+        "tool @repo/C:/file",
+        "tool '@source/dir\\file'",
+        "tool @source//absolute",
+        "tool @literal",
         "tool | other",
         "tool || other",
         "tool && other",
@@ -1273,4 +1285,50 @@ fn direct_commands_use_the_existing_process_runner() {
             .plan
             .plan_id
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn local_path_references_execute_with_consumer_working_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = project();
+    let script = "#!/bin/sh\ntest -s README.md || exit 2\nprintf '<%s>\\n' \"$PWD\" \"$@\"\n";
+    write(d.path(), "scripts/shared tool.sh", script);
+    write(d.path(), ".hannes/checks/paths/rule tool.sh", script);
+    for relative in [
+        "scripts/shared tool.sh",
+        ".hannes/checks/paths/rule tool.sh",
+    ] {
+        fs::set_permissions(d.path().join(relative), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    for executable in [
+        "@rule/rule tool.sh",
+        "@source/scripts/shared tool.sh",
+        "@repo/scripts/shared tool.sh",
+    ] {
+        let command = format!(
+            "\"{executable}\" \"@rule/rule tool.sh\" @repo/README.md \"@source/scripts/shared tool.sh\" @@literal"
+        );
+        check(
+            d.path(),
+            "paths",
+            "run_at = ['check']",
+            &format!("command = {}", serde_json::to_string(&command).unwrap()),
+            "exit 2",
+        );
+        let p = config::load(d.path()).unwrap();
+        let result = hannes::checks::execute(&p, &p.checks[0], "check");
+        assert_eq!(result.status, Status::Pass, "{}", result.reason);
+        let root = d.path().canonicalize().unwrap();
+        assert_eq!(
+            result.stdout.unwrap().text,
+            format!(
+                "<{}>\n<{}>\n<{}>\n<{}>\n<@literal>\n",
+                root.display(),
+                root.join(".hannes/checks/paths/rule tool.sh").display(),
+                root.join("README.md").display(),
+                root.join("scripts/shared tool.sh").display()
+            )
+        );
+    }
 }

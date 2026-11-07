@@ -213,8 +213,66 @@ timeout_seconds = 600
 
 Set exactly one of `command` and `entrypoint`. The first argument is an executable
 name resolved through `PATH`, or an explicit executable path. Relative command
-paths use the consuming root, including for imported commands; they are not
-resolved as bundled Rule resources like file entrypoints.
+paths use the consuming root, including for imported commands; only explicit
+path references resolve against Rule or source directories.
+
+Explicit path references are supported in string commands after tokenization,
+in the executable position and in arguments:
+
+| Prefix | Root |
+| --- | --- |
+| `@rule/` | Directory containing this Rule's `rule.toml`. |
+| `@repo/` | Consuming repository root. |
+| `@source/` | Rule source root: the consuming repository root for local Rules (not `.hannes/` or a Rule Set directory), or the cached imported Git repository root. |
+
+```toml
+[check]
+command = "sh @rule/index.sh"
+```
+
+```toml
+[check]
+command = "python3 @source/scripts/file-reference.py"
+```
+
+```toml
+[check]
+command = "python3 @rule/check.py @repo/pyproject.toml"
+```
+
+Only a token beginning with a supported prefix is resolved; there is no embedded
+substitution (`--file=@repo/data` stays literal). Quote a reference containing
+spaces, such as `"@rule/my script.py"`; its resolved absolute path remains one
+argument and is never tokenized again. Ordinary relative paths still use the
+consumer root. No shell is invoked and the working directory stays that root.
+
+At the start of a string-command token, `@` is reserved. Use `@@` to pass one
+literal leading `@`: `@@rule/file` becomes `@rule/file`, and `@@name` becomes
+`@name`. Quoting or backslash escaping an `@` does not disable resolution,
+because references are recognized after tokenization. Array commands retain all
+arguments literally, including `@` and `@@`.
+
+Reference suffixes must contain nonempty relative components separated by `/`
+on Linux, macOS and Windows. Empty suffixes, repeated/trailing separators, `.`,
+`..`, backslashes and colons (including drive prefixes) are rejected during
+configuration loading, as are unknown prefixes or bare `@` tokens. Use `@@` for
+literal arguments instead. Native absolute paths are produced for the host;
+this does not make an unavailable executable or interpreter portable.
+
+Immediately before execution, referenced paths must exist under the chosen root.
+Symlinks in the root or suffix, including links pointing inside the root, are
+rejected for all three prefixes. Paths are checked with the existing source
+containment checks and canonicalized before being passed to the process. Missing
+or unsafe references produce per-rule ERROR with the token and root; there is no
+fallback search. Files and directories may be referenced; the OS still enforces
+executable permissions. Offline plans validate syntax without requiring referenced
+paths to exist or launching commands. Checks are not a filesystem sandbox, and
+these checks do not eliminate concurrent filesystem replacement races.
+
+Path references require a release containing this feature; v0.13.0 supports
+string commands but does not resolve references. Keep active configurations on
+ordinary commands or legacy entrypoints until their published governor supports
+them. This repository keeps its v0.13.0 governor and active configuration unchanged.
 
 String commands use this grammar **after TOML decoding**:
 

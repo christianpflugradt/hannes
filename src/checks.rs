@@ -54,6 +54,8 @@ pub fn execute_with_context(
                 }
             }
             (None, Some(arguments)) if !arguments.is_empty() => {
+                let arguments =
+                    arguments.resolve(&project.root, &check.source_root, &check.rule_directory)?;
                 let mut command = Command::new(&arguments[0]);
                 command.args(&arguments[1..]);
                 command

@@ -103,7 +103,7 @@ pub struct Check {
     pub enabled: bool,
     pub blocking: bool,
     pub entrypoint: Option<PathBuf>,
-    pub command: Option<Vec<String>>,
+    pub command: Option<crate::check_command::Command>,
     pub source_root: PathBuf,
     pub rule_directory: PathBuf,
     pub interpreter: Option<String>,
@@ -161,7 +161,7 @@ pub struct RuleDefinition {
 pub struct CheckDefinition {
     pub entrypoint: Option<String>,
     #[serde(default, deserialize_with = "crate::check_command::deserialize")]
-    pub command: Option<Vec<String>>,
+    pub command: Option<crate::check_command::Command>,
     pub interpreter: Option<String>,
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,

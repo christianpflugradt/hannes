@@ -256,6 +256,44 @@ produce per-rule ERROR and offline plans never launch them. Parameters,
 rule-directory context, timeouts, blocking and results use the same execution
 path for commands and files. Review resolution is unchanged.
 
+String-command tokens support exactly three explicit path prefixes after
+tokenization: @rule/ uses the declaring Rule directory; @repo/ uses the consumer
+repository root; @source/ uses the imported cached Git repository root, or the
+consumer repository root for local Rules (the local ruleset source root, not
+.hannes/ or a Rule Set directory). References may occupy the executable or any
+argument position. Resolved native absolute paths remain single arguments,
+including spaces; they are never tokenized again. Ordinary paths retain consumer
+root semantics. No shell, expansion, new execution mechanism or working-directory
+change is introduced.
+
+A leading @ reserves a token for references; @@ removes exactly one leading @
+and passes the rest literally. Quoting and escaping do not suppress references.
+Tokens not beginning with @, including --file=@rule/data, are untouched. Arrays
+retain literal @ and @@ tokens and never resolve references.
+
+Reference suffixes use / on every platform and must consist of nonempty relative
+components. Empty suffixes, empty components, trailing separators, ., ..,
+backslashes and colons are configuration errors, including in disabled Rules.
+Unknown prefixes and malformed reserved references are errors with supported
+prefixes and literal-escape guidance. Before each execution, resolve using the
+actual Rule provenance, reject all symlink components under the root and a
+symlink root, enforce source containment and canonicalize the existing path.
+This policy applies to all three prefixes. Missing/unsafe paths are per-rule
+ERRORs without fallback. Files and directories are allowed as arguments; OS
+executable lookup/permissions still apply. Plans validate syntax without
+requiring existence. Existing filesystem race and trust boundaries remain;
+references provide no sandbox.
+
+Path references require a release containing this feature; published v0.13.0
+does not support them. Active repository configuration and external imports
+remain unchanged and compatible with that governor in this step.
+
+Acceptance: `tests/configuration.rs::local_path_references_execute_with_consumer_working_directory`,
+`tests/external_rule_sets.rs::imported_path_references_use_cached_provenance_offline`
+and the offline resolver unit tests cover explicit roots, token boundaries,
+spaces, executable/argument positions, literals, missing paths, symlinks and
+cached shared scripts. Invalid syntax and legacy behavior retain the tests below.
+
 String commands require Hannes v0.13.0 or later. All active local repository
 Checks use strings with the published v0.13.0 governor. External Rules keep their
 compatible legacy syntax and source-root resource resolution. Consumers running

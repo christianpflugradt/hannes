@@ -1,3 +1,13 @@
+## [0.13.0](https://github.com/christianpflugradt/hannes/compare/v0.12.0...v0.13.0) (2026-11-07)
+
+### Features
+
+* **config:** support string check commands ([6b2f86b](https://github.com/christianpflugradt/hannes/commit/6b2f86bcaade8a2ed94c887d8e557d9aae1cf9d7))
+
+### Maintenance
+
+* **config:** adopt Hannes v0.12.0 and enable review context settings ([eec0f53](https://github.com/christianpflugradt/hannes/commit/eec0f5375f556de65b2c622b87398f6045a9fccf))
+
 ## [0.12.0](https://github.com/christianpflugradt/hannes/compare/v0.11.0...v0.12.0) (2026-11-07)
 
 ### Features

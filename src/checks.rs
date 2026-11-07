@@ -18,36 +18,22 @@ pub fn execute_with_context(
 ) -> Item {
     let start = Instant::now();
     let mut item = Item::simple(&check.id, "check", Status::Error, String::new());
-    let arguments = match crate::check_command::parse(&check.command) {
-        Ok(arguments) => arguments,
-        Err(error) => {
-            item.reason = format!("Invalid command in check '{}': {error:#}", check.id);
-            return item;
-        }
-    };
-    let executable = if arguments[0].contains('/') || arguments[0].contains('\\') {
-        project
-            .root
-            .join(&check.working_directory)
-            .join(&arguments[0])
+    item.blocking = check.blocking;
+    let mut command = if let Some(interpreter) = &check.interpreter {
+        let mut command = Command::new(interpreter);
+        command.arg(&check.entrypoint);
+        command
     } else {
-        std::path::PathBuf::from(&arguments[0])
+        Command::new(&check.entrypoint)
     };
-    let mut command = Command::new(executable);
-    command
-        .args(&arguments[1..])
-        .current_dir(project.root.join(&check.working_directory))
-        .stdin(Stdio::null());
-    command.env_remove("HANNES_RULE_SET_SOURCE");
-    if let Some(source) = project.external_sources.get(&check.id) {
-        command.env("HANNES_RULE_SET_SOURCE", source);
-    }
+    command.env("HANNES_RULE_DIRECTORY", check.entrypoint.parent().unwrap());
+    command.current_dir(&project.root).stdin(Stdio::null());
     if let Some(hook) = hook {
         hook.configure(&mut command);
     }
     match process::run(&mut command, Duration::from_secs(check.timeout_seconds)) {
         Ok(output) => {
-            item.status = if output.timed_out {
+            item.status = if output.timed_out || output.status.code() == Some(2) {
                 Status::Error
             } else if output.status.success() {
                 Status::Pass
@@ -56,6 +42,8 @@ pub fn execute_with_context(
             };
             item.reason = if output.timed_out {
                 "Command timed out".into()
+            } else if item.status == Status::Error {
+                "Check reported an execution error (exit 2)".into()
             } else {
                 format!("Command exited: {}", output.status)
             };

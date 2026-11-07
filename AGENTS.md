@@ -58,9 +58,8 @@ and graph data are ignored; they are not prerequisites for building Hannes.
 ## Changes and validation
 
 Prefer focused functions and tests over framework abstractions. Keep dependencies
-lean and Cargo.lock current. Preserve frozen compatibility fixtures under
-`tests/fixtures/compat`; never regenerate old contracts from current types to make
-a regression pass. See docs/design.md for module boundaries and limits.
+lean and Cargo.lock current. Keep tests focused on the single supported
+configuration model. See docs/design.md for module boundaries and limits.
 
 For Rust changes, run `mise run check`, or the equivalent commands in
 CONTRIBUTING.md. Tests must not call Codex, the network or a paid API; Cargo may

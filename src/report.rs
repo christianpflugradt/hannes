@@ -60,6 +60,7 @@ pub struct Item {
     pub id: String,
     pub kind: String,
     pub status: Status,
+    pub blocking: bool,
     pub duration_ms: u64,
     pub reason: String,
     pub findings: Vec<Finding>,
@@ -73,6 +74,7 @@ impl Item {
             id: id.into(),
             kind: kind.into(),
             status,
+            blocking: true,
             duration_ms: 0,
             reason,
             findings: vec![],
@@ -100,13 +102,12 @@ pub struct Report {
     pub provider_usage: Option<TokenUsage>,
     #[serde(default)]
     pub checks_only: bool,
-    #[serde(default)]
-    pub plan: Option<crate::planner::Plan>,
+    pub plan: crate::planner::Plan,
 }
 pub fn overall(items: &[Item]) -> Status {
     if items.iter().any(|x| x.status == Status::Error) {
         Status::Error
-    } else if items.iter().any(|x| x.status == Status::Fail) {
+    } else if items.iter().any(|x| x.status == Status::Fail && x.blocking) {
         Status::Fail
     } else if items.iter().any(|x| x.status == Status::NotRun) {
         Status::Error
@@ -115,6 +116,14 @@ pub fn overall(items: &[Item]) -> Status {
     }
 }
 pub fn write(root: &Path, report: &Report) -> Result<()> {
+    let target = root.join(crate::config::path("reports"));
+    if target
+        .symlink_metadata()
+        .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+    {
+        crate::config::source_path(root, &crate::config::path(""))?;
+        std::fs::create_dir(&target)?;
+    }
     let directory = crate::config::inside(root, &crate::config::path("reports"))?;
     // Reports must be local regular files, never an output symlink into another directory.
     ensure!(
@@ -137,109 +146,70 @@ pub fn read(root: &Path) -> Result<Report> {
         crate::limits::MAX_REPORT_BYTES,
     )?)?;
     ensure!(
-        matches!(report.schema_version, 1..=3),
-        "unsupported report schema {}; rerun hannes mach was",
-        report.schema_version
+        report.schema_version == 4,
+        "unsupported report schema; rerun hannes mach was"
     );
-    if report.schema_version >= 2 {
-        let plan = report.plan.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("report schema {} requires a plan", report.schema_version)
-        })?;
-        ensure!(
-            ((report.schema_version == 2
-                && plan.plan_schema_version == 1
-                && matches!(plan.config_version, 1 | 2)
-                && plan.at.is_empty())
-                || (report.schema_version == 3
-                    && plan.plan_schema_version == 2
-                    && plan.config_version == 3
-                    && !plan.at.is_empty()
-                    && plan.profile.is_empty()
-                    && plan.profile_source.is_empty()
-                    && !plan.gate))
-                && matches!(plan.status.as_str(), "planned" | "blocked")
-                && plan.executable() == plan.blocking_reasons.is_empty()
-                && plan.input.kind == "worktree"
-                && plan.plan_id.len() == 64
-                && plan.plan_id.bytes().all(|b| b.is_ascii_hexdigit())
-                && plan.checks_only == report.checks_only
-                && plan.input.fingerprint == report.snapshot.fingerprint
-                && plan.input.head == report.snapshot.head
-                && plan.input.complete == report.snapshot.complete,
-            "inconsistent report plan/input"
-        );
-        let expected: std::collections::BTreeSet<_> =
-            plan.scheduled.iter().map(|r| (&r.id, &r.kind)).collect();
-        let actual: std::collections::BTreeSet<_> = report
-            .results
-            .iter()
-            .filter(|r| r.kind != "integrity")
-            .map(|r| (&r.id, &r.kind))
-            .collect();
-        ensure!(
-            expected == actual
-                && expected.len() == plan.scheduled.len()
-                && plan
-                    .scheduled
-                    .iter()
-                    .all(|r| matches!(r.kind.as_str(), "check" | "review"))
-                && report
-                    .results
-                    .iter()
-                    .filter(|r| r.kind != "integrity")
-                    .count()
-                    == actual.len(),
-            "inconsistent report rule coverage"
-        );
-        if report.schema_version == 3 {
-            ensure!(
-                plan.scheduled.iter().all(|rule| rule
-                    .origin
-                    .as_ref()
-                    .is_some_and(|origin| origin.execution_points.contains(&plan.at))),
-                "inconsistent report execution-point assignment"
-            );
-        }
-        let required: std::collections::BTreeSet<_> = plan.required_ids.iter().collect();
-        ensure!(
-            if report.schema_version == 3 {
-                required.len() == plan.required_ids.len()
-                    && required == plan.scheduled.iter().map(|r| &r.id).collect()
-                    && plan.omitted.is_empty()
-                    && plan.selection_complete
-            } else if plan.gate {
-                !required.is_empty()
-                    && required.len() == plan.required_ids.len()
-                    && required == plan.scheduled.iter().map(|r| &r.id).collect()
-                    && plan.omitted.is_empty()
-                    && plan.selection_complete
-            } else {
-                required.is_empty()
-            },
-            "inconsistent required gate rules"
-        );
-        ensure!(
-            report.overall != Status::Pass || (plan.executable() && plan.input.complete),
-            "blocked/incomplete plan cannot pass"
-        );
-        if plan.gate && report.overall == Status::Pass {
-            ensure!(
-                plan.executable()
-                    && plan.selection_complete
-                    && !plan.required_ids.is_empty()
-                    && plan.required_ids.iter().all(|id| report
-                        .results
-                        .iter()
-                        .any(|r| &r.id == id && r.status == Status::Pass)),
-                "incomplete gate cannot pass"
-            );
-        }
-    } else {
-        ensure!(
-            report.plan.is_none(),
-            "legacy report cannot certify a profile plan"
-        );
-    }
+    let plan = &report.plan;
+    ensure!(
+        plan.plan_schema_version == 3
+            && !plan.at.is_empty()
+            && matches!(plan.status.as_str(), "planned" | "blocked")
+            && plan.executable() == plan.blocking_reasons.is_empty()
+            && plan.input.kind == "worktree"
+            && plan.plan_id.len() == 64
+            && plan.plan_id.bytes().all(|b| b.is_ascii_hexdigit())
+            && plan.checks_only == report.checks_only
+            && plan.input.fingerprint == report.snapshot.fingerprint
+            && plan.input.head == report.snapshot.head
+            && plan.input.complete == report.snapshot.complete,
+        "inconsistent report plan/input"
+    );
+    let expected: std::collections::BTreeSet<_> =
+        plan.scheduled.iter().map(|r| (&r.id, &r.kind)).collect();
+    let actual: std::collections::BTreeSet<_> = report
+        .results
+        .iter()
+        .filter(|r| r.kind != "integrity")
+        .map(|r| (&r.id, &r.kind))
+        .collect();
+    ensure!(
+        expected == actual
+            && expected.len() == plan.scheduled.len()
+            && plan
+                .scheduled
+                .iter()
+                .all(|r| matches!(r.kind.as_str(), "check" | "review"))
+            && report
+                .results
+                .iter()
+                .filter(|r| r.kind != "integrity")
+                .count()
+                == actual.len(),
+        "inconsistent report rule coverage"
+    );
+    ensure!(
+        plan.scheduled.iter().all(|rule| rule
+            .origin
+            .as_ref()
+            .is_some_and(|o| o.execution_points.contains(&plan.at))
+            && report
+                .results
+                .iter()
+                .any(|item| item.id == rule.id && item.blocking == rule.blocking)),
+        "inconsistent report rule metadata"
+    );
+    let required: std::collections::BTreeSet<_> = plan.required_ids.iter().collect();
+    ensure!(
+        required.len() == plan.required_ids.len()
+            && required == plan.scheduled.iter().map(|r| &r.id).collect()
+            && plan.omitted.is_empty()
+            && plan.selection_complete,
+        "inconsistent required rules"
+    );
+    ensure!(
+        report.overall != Status::Pass || (plan.executable() && plan.input.complete),
+        "blocked/incomplete plan cannot pass"
+    );
     ensure!(
         report.repository == root.canonicalize()?.to_string_lossy(),
         "report belongs to a different repository; rerun hannes mach was"

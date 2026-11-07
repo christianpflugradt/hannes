@@ -18,8 +18,8 @@ execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
 
 
-# Immutable pre-migration evidence, captured before converting active configuration.
-BASELINE = json.loads((ROOT / "tests/fixtures/self-governance-v2.json").read_text())
+# Expected checks and selections for the pinned published governor.
+BASELINE = json.loads((ROOT / "tests/fixtures/self-governance.json").read_text())
 
 def definitions():
     checks, sets = {}, []
@@ -51,14 +51,11 @@ class GovernanceTests(unittest.TestCase):
         self.assertEqual(rule["matchDatasources"], ["github-releases"])
         self.assertIn("config:best-practices", config["extends"])
 
-    def test_rules_preserve_previous_commands_settings_and_required_coverage(self):
+    def test_self_governance_checks_settings_and_required_coverage(self):
         checks, sets = definitions()
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
-        self.assertEqual(config["version"], 3)
-        self.assertNotIn("default_profile", config)
-        self.assertFalse((ROOT / ".hannes/profiles").exists())
         self.assertEqual(config["hooks"]["git"], {p: p for p in ("pre-commit", "commit-msg", "pre-push")})
-        self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["profiles"]) - set(config["hooks"]["git"]))
+        self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["execution_points"]) - set(config["hooks"]["git"]))
         self.assertEqual(set(checks), set(BASELINE["checks"]))
         for rule, check in checks.items():
             original = {key: value for key, value in check.items() if key != "run_at"}
@@ -73,7 +70,7 @@ class GovernanceTests(unittest.TestCase):
             self.assertEqual(len(group["rules"]), len(set(group["rules"])))
             self.assertTrue(set(group["rules"]) <= set(checks))
         # The published-governor test below independently checks real resolution.
-        for point, expected in BASELINE["profiles"].items():
+        for point, expected in BASELINE["execution_points"].items():
             selected = set()
             for rule, check in checks.items():
                 memberships = [group for group in sets if group["enabled"] and rule in group["rules"]]
@@ -86,7 +83,7 @@ class GovernanceTests(unittest.TestCase):
         executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
         self.assertTrue(executable, "Install the compatible published Hannes release before running governance acceptance")
         self.assertFalse(Path(executable).resolve().is_relative_to(ROOT))
-        for point, expected in BASELINE["profiles"].items():
+        for point, expected in BASELINE["execution_points"].items():
             with self.subTest(point=point):
                 result = subprocess.run([executable, "mach", "was", "--at", point, "--plan", "--json"], cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr or result.stdout)

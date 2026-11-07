@@ -93,10 +93,14 @@ pub fn resolve(
             set_ids.insert(&set.id),
             "{entity}: id: duplicate rule-set ID"
         );
+        ensure!(
+            !set.description.trim().is_empty() && !set.description.contains('\0'),
+            "{entity}: description must be nonempty and contain no NUL"
+        );
         let at = references(&set.run_at, &points, &entity)?;
         ensure!(
-            !set.enabled || !at.is_empty(),
-            "{entity}: run_at: active rule set needs at least one execution point"
+            !at.is_empty(),
+            "{entity}: run_at: rule set needs at least one execution point"
         );
         let mut seen = BTreeSet::new();
         for id in &set.rules {
@@ -108,7 +112,7 @@ pub fn resolve(
                 ids.contains_key(id),
                 "{entity}: rules: unknown rule {id:?}; rule sets may reference rules only, never other rule sets"
             );
-            if set.enabled {
+            {
                 let (effective, sets) = memberships.entry(id.clone()).or_default();
                 effective.extend(at.iter().cloned());
                 sets.insert(set.id.clone());
@@ -125,13 +129,13 @@ pub fn resolve(
             .unwrap_or((own.clone(), BTreeSet::new()));
         if !sets.is_empty() && !own.is_empty() {
             diagnostics.push(format!(
-                "{entity}: own run_at is overridden by active rule sets: {}",
+                "{entity}: own run_at is overridden by rule sets: {}",
                 sets.iter().cloned().collect::<Vec<_>>().join(", ")
             ));
         }
         ensure!(
             !rule.enabled || !at.is_empty(),
-            "{entity}: run_at: active rule needs an effective execution point (own run_at or an active rule set)"
+            "{entity}: run_at: active rule needs an effective execution point (own run_at or an rule set)"
         );
         effective.insert(
             id,

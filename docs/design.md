@@ -2,26 +2,19 @@
 
 ## Modules
 
-`cli` parses nested words; `config` loads and strictly validates TOML and initializes
-examples; `checks` executes deterministic commands; `process` handles deadlines
-and capture; `provider` invokes Codex; `reviews` validates final JSON; `git_snapshot`
-fingerprints working files; `report` serializes/persists; `terminal` renders both
-run and status. `discovery` loads version-3 documents with source paths; `rules` validates domain
-references and resolves effective execution points; `planner` selects one point and prepares bounded offline context
-and fingerprints the plan; preview and `lib::verify` share that selection. Plan
-metadata is canonicalized separately from raw snapshots to keep semantic IDs
-stable across TOML formatting and selector order. Report schema 3 saves execution-point plans; historical report schemas stay readable.
-Legacy profile/gate fields in plan deserialization exist only to read historical
-reports and never participate in configuration or rule selection.
+`config` defines the project, Rule and Rule Set schemas and validates loaded
+objects. `discovery` reads only the fixed configuration paths and resolves Rule
+resources within their own directories. Local and imported roots share Rule
+loading; the central document is intentionally different: project settings locally,
+a single Rule Set in an imported root. `rules` resolves effective assignments;
+`planner` prepares selection and review context; `checks` uses the shared process
+runner; `reviews` validates provider verdicts; `report` persists results; `terminal`
+renders them. There are no alternative configuration loaders or execution engines.
 
-Configuration defaults and bounds are shared through `limits` and typed scaffold
-serialization in `config`. Documentation tests check public fields, defaults,
-bounds and examples against those types and constants.
-
-Compatibility is checked with frozen configuration/report fixtures captured from
-pinned historical source. Tests substitute only the repository identity and do
-not generate old schemas from current structs; fixture provenance is recorded in
-[tests/fixtures/compat](../tests/fixtures/compat/README.md).
+Loaded Checks hold their validated absolute entrypoints and optional interpreters.
+Loaded Reviews hold prompt text and consumer-relative context. There is no parallel
+metadata registry. Blocking belongs to each Rule and follows it into plans/results.
+Plan schema 3 and report schema 4 describe output formats, independently of config.
 
 ## Desired-state reconciliation
 
@@ -83,17 +76,15 @@ complete baselines. Binary files up to the same size budget are hashed normally.
 
 ## Execution and reporting
 
-`check_command` validates lexical shell constructs before `shell-words` removes
-quotes and splits arguments. Configuration validation and execution use the same
-parser; the original command string is serialized in configuration. Arrays are
-intentionally unsupported in both configuration versions. Quoted/escaped literals
-remain arguments; shell evaluation is never implicit. Executable availability is
-checked only by process creation, while configuration still validates containment
-of relative paths (including existing ancestors of missing executables).
+Checks run their entrypoint directly, or pass it to one explicit interpreter.
+No command-string grammar, implicit shell or language detection is involved.
+The consumer remains the working directory; HANNES_RULE_DIRECTORY supplies the
+absolute Rule directory. Exit 2 reports execution ERROR, other nonzero exits FAIL.
+Only completed FAIL can be non-blocking; ERROR and NOT_RUN always prevent success.
 
 Commands run sequentially without an implicit shell. Both pipes are drained
 concurrently to EOF, retaining only the first 64 KiB each and their complete byte
-totals. Truncation is recorded. Timeouts are ERROR; signal termination/nonzero exit
+totals. Truncation is recorded. Timeouts are ERROR; signal termination/nonzero exit other than 2
 is FAIL; spawn or capture failure is ERROR. POSIX processes run in separate groups
 and descendants are killed on exit/timeout. Windows uses `taskkill /T /F` for timeout
 cleanup; detached descendants may escape termination. Pipes remaining open beyond
@@ -101,7 +92,7 @@ two seconds produce ERROR. This is not a hostile-process sandbox.
 
 Reports contain UTC timestamps, repository/project, HEAD, manifest/fingerprint,
 per-item status/duration/evidence/output and overall result. ERROR takes precedence,
-then FAIL; NOT_RUN is blocking but does not replace an existing FAIL with ERROR.
+then blocking FAIL; NOT_RUN is blocking but does not replace an existing FAIL with ERROR.
 Provider review durations reflect the shared invocation, not individual model timings;
 do not sum them. Available token usage is recorded once for the shared call;
 missing counters stay unavailable and are never estimated.
@@ -183,14 +174,11 @@ Failed validation can leave reusable cache contents but never changes project
 resolution state. Corrupt immutable entries fail explicitly. See
 [storage, trust and recovery](external-rule-sets.md).
 
-Checks use the consumer root. Review instructions resolve from source documents;
-the loader enforces containment. Imported checks receive an explicit source-path
-environment variable for resources. No argument rewriting or working-directory
+Checks use the consumer root. Review prompts resolve within their Rule directories;
+the loader enforces containment. Checks receive HANNES_RULE_DIRECTORY for resources. No argument rewriting or working-directory
 switch occurs. Providers, snapshots, selection and reports remain shared.
 
-The self-governance migration replaces active profile configuration and checked-in
-hook wrappers with rules, rule sets, execution points and declarative hook
-management. CI reconciles hooks once with pass auf --auto-approve. The exact governor pin is v0.5.0; source builds never replace the published
-governor. No hooks,
-remote services, releases or governed project files are automatically installed or
-repaired as part of loading or execution.
+The repository retains its active governance configuration and published governor
+until a separate release and self-migration. Candidate binaries are exercised only
+in isolated fixture repositories. No hook installation, remote services or releases
+are triggered by loading configuration.

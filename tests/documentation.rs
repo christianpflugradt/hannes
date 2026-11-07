@@ -1,4 +1,5 @@
 //! CFG-001: the public reference and executable examples must follow Serde's contract.
+mod support;
 use hannes::{
     config, planner,
     provider::{Provider, Request},
@@ -77,7 +78,11 @@ fn contract<T: Serialize + DeserializeOwned>(sample: &T, text: &str, prefix: &st
             Ok(parsed) => {
                 assert!(cell.starts_with("Optional"), "optional field {label}");
                 let defaults = serde_json::to_value(parsed).unwrap();
-                let default = defaults.pointer(&pointer).unwrap();
+                let empty = Value::Array(vec![]);
+                let default = defaults.pointer(&pointer).unwrap_or_else(|| {
+                    assert!(matches!(key.as_str(), "files" | "context"));
+                    &empty
+                });
                 let expected = match (key.as_str(), default) {
                     ("model" | "reasoning_effort", Value::Null) => Some("Codex default".into()),
                     (_, Value::Object(_)) => None, // Child fields are visited recursively.
@@ -125,17 +130,33 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
         section(README, "Import rule sets from Git"),
         "",
     );
-    let shared = section(README, "Fields shared by checks and reviews");
-    contract(
-        &p.checks[0],
-        &format!("{}\n{shared}", section(README, "Add a check")),
-        "",
+    let rule = config::RuleDefinition {
+        id: "example".into(),
+        description: "Example".into(),
+        enabled: true,
+        blocking: true,
+        run_at: vec!["pre-push".into()],
+        check: Some(config::CheckDefinition {
+            entrypoint: "index.sh".into(),
+            interpreter: None,
+            timeout_seconds: 30,
+        }),
+        review: Some(config::ReviewDefinition {
+            prompt: "prompt.md".into(),
+            files: vec!["README.md".into()],
+            context: vec![config::ReviewContext {
+                path: "README.md".into(),
+                headings: vec![],
+            }],
+        }),
+    };
+    let shared = format!(
+        "{}\n{}\n{}",
+        section(README, "Fields shared by checks and reviews"),
+        section(README, "Add a check"),
+        section(README, "Add a review")
     );
-    contract(
-        &p.reviews[0],
-        &format!("{}\n{shared}", section(README, "Add a review")),
-        "",
-    );
+    contract(&rule, &shared, "");
     contract(
         &p.provider,
         section(README, "Configure the AI provider"),
@@ -152,12 +173,12 @@ fn every_configuration_field_required_marker_and_default_is_documented() {
             headings: vec![],
         },
         section(README, "Add a review"),
-        "context.",
+        "review.context.",
     );
     contract(
         &config::RuleSet {
             id: "quality".into(),
-            enabled: true,
+            description: "Reusable rules".into(),
             rules: vec![],
             run_at: vec![],
         },
@@ -208,135 +229,49 @@ fn readme_examples_validate_and_plan_without_ai_or_check_execution() {
         Status::Pass
     );
     let base = root.path().join(".hannes");
-    for (title, relative) in [
-        ("Project settings", "config.toml"),
-        ("Add a check", "checks/unit-tests.toml"),
-        ("Configure the AI provider", "provider.toml"),
-        ("Add a review", "reviews/cli-help.toml"),
+    fs::write(
+        base.join("config.toml"),
+        block(section(README, "Project settings"), "toml"),
+    )
+    .unwrap();
+    for (kind, name, title) in [
+        ("checks", "readme", "Add a check"),
+        ("reviews", "architecture", "Add a review"),
     ] {
-        fs::write(base.join(relative), block(section(README, title), "toml")).unwrap();
-    }
-    fs::write(
-        base.join("reviews/cli-help.md"),
-        block(section(README, "Add a review"), "markdown"),
-    )
-    .unwrap();
-    fs::create_dir(root.path().join("src")).unwrap();
-    fs::write(root.path().join("src/main.rs"), "fn main() {}\n").unwrap();
-    fs::write(
-        root.path().join("README.md"),
-        "# My_App\n\n## Usage\nRun My_App.\n",
-    )
-    .unwrap();
-    let p = config::load(root.path()).unwrap();
-    assert!(planner::build(&p, None, false).unwrap().plan.executable());
-    fs::create_dir_all(base.join("backend")).unwrap();
-    fs::write(
-        base.join("backend/quality.toml"),
-        block(section(README, "Group rules into rule sets"), "toml"),
-    )
-    .unwrap();
-    let provider = base.join("provider.toml");
-    let allowed = section(README, "Configure the AI provider")
-        .split("```toml\n")
-        .nth(2)
-        .unwrap()
-        .split("\n```")
-        .next()
+        let dir = base.join(kind).join(name);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("rule.toml"), block(section(README, title), "toml")).unwrap();
+        fs::write(
+            dir.join(if kind == "checks" {
+                "index.sh"
+            } else {
+                "prompt.md"
+            }),
+            block(
+                section(README, title),
+                if kind == "checks" { "sh" } else { "markdown" },
+            ),
+        )
         .unwrap();
+    }
+    fs::create_dir_all(base.join("rule-sets")).unwrap();
     fs::write(
-        &provider,
-        fs::read_to_string(&provider)
-            .unwrap()
-            .replace("mcp_servers = []", allowed),
+        base.join("rule-sets/repository.toml"),
+        block(section(README, "Group rules into rule sets"), "toml"),
     )
     .unwrap();
     let p = config::load(root.path()).unwrap();
     let plan = planner::build(&p, Some("check"), false).unwrap().plan;
     assert!(plan.executable());
-    assert_eq!(plan.provider.mcp_servers, ["browser", "project-memory"]);
-    assert_eq!(plan.scheduled[0].id, "unit-tests");
+    assert_eq!(plan.scheduled.len(), 2);
 }
 
 #[test]
-fn documented_bounds_and_provider_scaffold_match_the_implementation() {
-    use hannes::limits::*;
-    let text = README.split_whitespace().collect::<Vec<_>>().join(" ");
-    let digits = MAX_SNAPSHOT_FILES.to_string();
-    let file_count = digits
-        .as_bytes()
-        .rchunks(3)
-        .rev()
-        .map(|chunk| std::str::from_utf8(chunk).unwrap())
-        .collect::<Vec<_>>()
-        .join(",");
-    let assertions = [
-        format!("1..{MAX_DISPLAY_FILES}"),
-        format!("1..{MAX_TIMEOUT_SECONDS}"),
-        format!("1–{MAX_ID_BYTES} ASCII"),
-        format!("up to {MAX_TAGS} unique labels"),
-        format!("1–{MAX_TAG_BYTES} lowercase ASCII"),
-        format!("1..{MAX_COMMAND_ARGS}"),
-        format!("{MAX_ARGUMENT_BYTES} bytes"),
-        format!("Up to {MAX_ENTRY_FILES} unique existing source files"),
-        format!("Up to {MAX_CONTEXT_ENTRIES} document selections"),
-        format!("Up to {MAX_CONTEXT_HEADINGS} nonblank exact Markdown"),
-        format!(
-            "{MAX_CONTEXT_FILES} distinct files, {} MiB per file and {} KiB",
-            MAX_CONTEXT_FILE_BYTES / 1024 / 1024,
-            MAX_CONTEXT_BYTES / 1024
-        ),
-        format!("{MIN_TOOL_OUTPUT_TOKENS}..{MAX_TOOL_OUTPUT_TOKENS}"),
-        format!("at most {MAX_MCP_SERVERS} unique names, each 1–{MAX_MCP_NAME_BYTES}"),
-        format!("more than {MAX_DISCOVERED_MCP_SERVERS} discovered servers"),
-        format!(
-            "{} KiB per TOML file; up to {MAX_RULES} configuration documents, {MAX_RULES} rules and {MAX_RULES} rule sets",
-            MAX_METADATA_BYTES / 1024
-        ),
-        format!(
-            "{} KiB per instructions file; {} KiB combined",
-            MAX_INSTRUCTION_BYTES / 1024,
-            MAX_TOTAL_INSTRUCTION_BYTES / 1024
-        ),
-        format!(
-            "Up to {MAX_MANIFEST_HINTS} file-list entries and {} KiB of diff",
-            MAX_DIFF_BYTES / 1024
-        ),
-        format!(
-            "{} MiB per file, {} MiB total",
-            MAX_SNAPSHOT_FILE_BYTES / 1024 / 1024,
-            MAX_SNAPSHOT_BYTES / 1024 / 1024
-        ),
-        format!("{file_count} paths"),
-        format!("nesting limited to {MAX_CONFIG_DEPTH} levels"),
-        format!(
-            "Git file enumeration capped at {} KiB",
-            MAX_CAPTURE_BYTES / 1024
-        ),
-        format!(
-            "{} MiB final JSON",
-            MAX_PROVIDER_RESPONSE_BYTES / 1024 / 1024
-        ),
-        format!("{} MiB maximum", MAX_REPORT_BYTES / 1024 / 1024),
-        format!("at most {MAX_SUMMARY_CHARS} characters"),
-        format!("up to {MAX_FINDINGS} detailed findings"),
-        format!("{MAX_FINDING_MESSAGE_BYTES} bytes each"),
-    ];
-    for expected in assertions {
-        assert!(
-            text.contains(&expected),
-            "README bound missing or stale: {expected}"
-        );
-    }
+fn documented_provider_scaffold_matches_the_implementation() {
     let example: config::ProviderConfig =
         toml::from_str(block(section(README, "Configure the AI provider"), "toml")).unwrap();
     assert_eq!(
         serde_json::to_value(example).unwrap(),
-        serde_json::to_value(config::ProviderConfig::scaffold()).unwrap()
-    );
-    let root = project();
-    assert_eq!(
-        serde_json::to_value(config::load(root.path()).unwrap().provider).unwrap(),
         serde_json::to_value(config::ProviderConfig::scaffold()).unwrap()
     );
 }

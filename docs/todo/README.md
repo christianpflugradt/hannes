@@ -6,7 +6,7 @@ specification alone does not complete an implementation.
 
 | Order | TODO | Status | Depends on |
 | --- | --- | --- | --- |
-| 1 | [Profiles and execution plans](01-profiles-and-plans.md) | DONE (`18897c9`) | — |
+| 1 | [Execution points and plans](../execution-points-and-plans.md) | DONE (`18897c9`) | — |
 | 2 | [Per-review MCP permissions and sessions](02-review-mcp-and-sessions.md) | TODO | 1 |
 | 3 | [Inputs and review scope](03-inputs-and-review-scope.md) | TODO | 1, 2 |
 | 4 | [Budgets and gate reports](04-budgets-and-gate-reports.md) | TODO | 1–3 |
@@ -15,9 +15,7 @@ specification alone does not complete an implementation.
 ## Agreed decisions
 
 - Checks are deterministic and use no LLM provider. Reviews produce structured
-  LLM verdicts. Both are rules. Profiles select rules for a particular invocation.
-- Version 1 retains its behavior. New configuration needs an explicit version
-  change; unsupported fields and capabilities fail clearly, never silently degrade.
+  LLM verdicts. Both are rules. Execution Points select Rules for a particular invocation.
 - For planned per-review MCP permissions, omission will mean **no MCPs**. Review permissions
   must be a subset of the provider allow list. An explicit all-provider selection
   will be supported; it never includes unrelated servers from the user's Codex setup.
@@ -43,6 +41,6 @@ For item 5, a documented decision to defer caching is a valid completion; writin
 an unmeasured cache implementation is not required.
 
 The [configuration reference](../configuration.md) describes current
-behavior. The [execution-point specification](../profiles-and-plans.md) contains the
+behavior. The [execution-point specification](../execution-points-and-plans.md) contains the
 detailed contract for item 1; later TODOs extend it without pretending those
 extensions already exist.

@@ -134,7 +134,7 @@
       "timeout_seconds": 180
     }
   },
-  "profiles": {
+  "execution_points": {
     "ci-audit": [
       "24-rust-audit",
       "25-npm-audit"

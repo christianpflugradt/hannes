@@ -8,7 +8,7 @@ Bound waiting and provider activity, and make incomplete verification impossible
 to mistake for a complete gate. Extend existing command/provider deadlines and
 context/output limits rather than introducing an agent control loop.
 
-- Profile budgets cover total elapsed run time, maximum model calls and prepared
+- Run budgets cover total elapsed run time, maximum model calls and prepared
   review-context bytes. Proposed `[budgets]` fields and initial defaults are
   `total_timeout_seconds = 600` (1..3600), `max_model_calls = 4` (1..64), and
   `max_context_bytes = 65536` (1..65536). Invalid values fail validation. These
@@ -45,11 +45,11 @@ context/output limits rather than introducing an agent control loop.
 - [ ] Render compact verdicts/short AI summaries in stdout; keep full findings,
       check output and detailed budget evidence in the saved report/details.
 - [ ] Test deadline cancellation, process cleanup, no retries, partial usage,
-      unsupported hard caps and legacy report reading using fakes.
+      unsupported hard caps and incomplete report rejection using fakes.
 
 ## Done when
 
-A gate passes only if all required rules actually PASS, selection/execution are
+Execution succeeds only if all required Rules complete without ERROR or blocking FAIL, selection/execution are
 complete, and the verified input remains valid. Configuration, provider errors,
 missing findings, exhausted budgets and incomplete snapshots cannot become PASS.
 Partial runs remain inspectable with honest scope and one usage record per actual

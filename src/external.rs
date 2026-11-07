@@ -138,39 +138,12 @@ impl Import {
     }
 }
 
-/// Resolve a source resource without following any symlink component.
-pub(crate) fn source_path(root: &Path, relative: &Path) -> Result<PathBuf> {
-    config::relative(relative)?;
-    let mut path = root.to_path_buf();
-    ensure!(
-        path.symlink_metadata()?.is_dir() && !path.symlink_metadata()?.file_type().is_symlink(),
-        "external source boundary must be a directory, not a symlink"
-    );
-    for part in relative.components() {
-        if let Component::Normal(part) = part {
-            path.push(part);
-            let metadata = path
-                .symlink_metadata()
-                .context("missing external source path")?;
-            ensure!(
-                !metadata.file_type().is_symlink(),
-                "external source symlink traversal is unsupported"
-            );
-        }
-    }
-    ensure!(
-        path.canonicalize()?.starts_with(root.canonicalize()?),
-        "external source escapes selected directory"
-    );
-    Ok(path)
-}
-
 /// Explicit cache selection supports embedders and offline integration tests.
 pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Result<Project> {
     let root = root.canonicalize()?;
     crate::git_snapshot::require_root(&root)?;
-    let mut loaded = crate::discovery::load(&root)?;
-    let mut imports = std::mem::take(&mut loaded.imports);
+    let loaded = crate::discovery::load(&root)?;
+    let mut imports = loaded.config.imports.clone();
     for import in &mut imports {
         import.validate(&root)?;
     }
@@ -186,7 +159,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
         "at most {MAX_RULES} external rule sets"
     );
     // Local semantic errors fail before retrieval; local references cannot reach imports.
-    let mut project = config::validate(root.clone(), loaded, None)?;
+    let mut project = config::validate(root.clone(), loaded)?;
     if imports.is_empty() && !refresh {
         return Ok(project);
     }
@@ -223,13 +196,13 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
             .context("cannot create local Git resolution directory")?;
         cache::Lock::acquire(&state_directory.join("resolution.lock"))?
     } else {
-        source_path(state_directory.parent().unwrap(), Path::new("hannes"))
+        config::source_path(state_directory.parent().unwrap(), Path::new("hannes"))
             .context("external resolution state unavailable or unsafe; run hannes pass auf")?;
         cache::Lock::read(&state_directory.join("resolution.lock"))
             .context("external resolution state unavailable; run hannes pass auf")?
     };
     if !refresh {
-        source_path(&state_directory, Path::new("external-rule-sets.json"))
+        config::source_path(&state_directory, Path::new("external-rule-sets.json"))
             .context("external resolution state unavailable or unsafe; run hannes pass auf")?;
     }
     let previous: State = if refresh {
@@ -304,12 +277,13 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
             checkouts.insert(revision_key, checkout.clone());
             checkout
         };
-        let boundary = source_path(&checkout, Path::new(&import.path)).with_context(|| {
-            format!(
-                "missing or unsafe external rule-set directory {:?}",
-                import.path
-            )
-        })?;
+        let boundary =
+            config::source_path(&checkout, Path::new(&import.path)).with_context(|| {
+                format!(
+                    "missing or unsafe external rule-set directory {:?}",
+                    import.path
+                )
+            })?;
         ensure!(
             boundary.is_dir(),
             "external rule-set path is not a directory"
@@ -320,7 +294,7 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
             definitions.rule_sets.len() == 1,
             "invalid external rule set: selected directory must define exactly one rule set"
         );
-        let mut external = config::validate(root.clone(), definitions, Some(&boundary))
+        let mut external = config::validate(root.clone(), definitions)
             .with_context(|| format!("invalid external rule set {:?}", import.path))?;
         ensure!(
             project.checks.len()
@@ -344,9 +318,6 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
         let prefix = format!("git:{key}:{}:", import.path);
         for check in &mut external.checks {
             check.id = format!("{prefix}{}", check.id);
-            project
-                .external_sources
-                .insert(check.id.clone(), boundary.clone());
         }
         for review in &mut external.reviews {
             review.id = format!("{prefix}{}", review.id);

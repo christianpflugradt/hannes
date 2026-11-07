@@ -1,3 +1,4 @@
+mod support;
 use hannes::{
     config, git_snapshot,
     limits::*,

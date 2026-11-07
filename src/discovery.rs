@@ -1,8 +1,8 @@
-//! Local filesystem loading. Domain resolution lives in `rules`.
+//! Fixed filesystem discovery shared by project roots and imported rule-set roots.
 use crate::{
-    config::{self, Check, Config, Definitions, Review, RuleSet},
+    config::source_path,
+    config::{self, Check, Config, Review, RuleDefinition, RuleSet},
     limits::*,
-    rules::Assignment,
 };
 use anyhow::{Context, Result, ensure};
 use std::{
@@ -10,211 +10,274 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub struct Loaded {
+pub(crate) struct Loaded {
     pub config: Config,
     pub checks: Vec<(PathBuf, Check)>,
     pub reviews: Vec<(PathBuf, Review)>,
     pub rule_sets: Vec<(PathBuf, RuleSet)>,
-    pub assignments: Vec<Assignment>,
-    pub imports: Vec<crate::external::Import>,
 }
-fn discover(root: &Path, directory: &Path, depth: usize, files: &mut Vec<PathBuf>) -> Result<()> {
-    ensure!(
-        depth <= MAX_CONFIG_DEPTH,
-        "{}: configuration nesting exceeds {MAX_CONFIG_DEPTH}",
-        directory.display()
-    );
-    let metadata = root.join(directory).symlink_metadata()?;
-    ensure!(
-        metadata.is_dir() && !metadata.file_type().is_symlink(),
-        "{}: configuration directory must not be a symlink",
-        directory.display()
-    );
-    let mut entries = fs::read_dir(root.join(directory))?.collect::<std::io::Result<Vec<_>>>()?;
-    entries.sort_by_key(|e| e.file_name());
-    for entry in entries {
-        let name = entry.file_name();
-        let name = name.to_str().context("configuration path must be UTF-8")?;
-        if name.starts_with('.') || ["reports", "cache", "caches"].contains(&name) {
-            continue;
-        }
-        let path = directory.join(name);
-        let kind = entry.file_type()?;
+pub(crate) fn load(root: &Path) -> Result<Loaded> {
+    let directory = config::path("");
+    let config = document(root, &directory.join("config.toml"))?;
+    let mut sets = Vec::new();
+    for path in entries(root, &directory.join("rule-sets"))? {
+        let full = source_path(root, &path)?;
         ensure!(
-            !kind.is_symlink(),
-            "{}: configuration symlinks are unsupported",
+            full.is_file() && path.extension().is_some_and(|e| e == "toml"),
+            "{}: expected a rule-set TOML file",
             path.display()
         );
-        if kind.is_dir() {
-            discover(root, &path, depth + 1, files)?;
-        } else {
-            ensure!(
-                kind.is_file(),
-                "{}: configuration entry must be a regular file",
-                path.display()
-            );
-            if path.extension().is_some_and(|e| e == "toml")
-                && path != config::path("provider.toml")
-            {
-                files.push(path);
-                ensure!(
-                    files.len() <= MAX_RULES,
-                    "at most {MAX_RULES} configuration documents"
-                );
-            }
-        }
+        let set: RuleSet = document(root, &path)?;
+        sets.push((path, set));
     }
-    Ok(())
+    load_rules(root, &directory, config, sets)
 }
-pub fn load(root: &Path) -> Result<Loaded> {
-    load_directory(root, &config::path(""), None)
-}
-
-pub(crate) fn load_external(root: &Path, config: Config) -> Result<Loaded> {
-    load_directory(root, Path::new("."), Some(config))
-}
-
-fn load_directory(root: &Path, directory: &Path, fallback: Option<Config>) -> Result<Loaded> {
-    let external = fallback.is_some();
-    let mut files = Vec::new();
-    discover(root, directory, 0, &mut files)?;
-    files.sort();
-    let central = config::path("config.toml");
+pub(crate) fn load_external(root: &Path, consumer: Config) -> Result<Loaded> {
+    let central = PathBuf::from("config.toml");
+    let set: RuleSet = document(root, &central)?;
     ensure!(
-        external || files.contains(&central),
-        "missing {}",
-        central.display()
+        root.join("rule-sets")
+            .symlink_metadata()
+            .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
+        "external root must define exactly one rule set in config.toml; rule-sets is unsupported"
     );
-    let mut loaded = fallback;
-    let mut imports = Vec::new();
-    let mut documents = Vec::new();
-    for path in files {
-        let text = config::read_bounded(&root.join(&path), MAX_METADATA_BYTES)?;
-        // TOML source excerpts could expose credentials in a malformed Git URL.
-        let mut table: toml::Table = toml::from_str(&text).map_err(|error: toml::de::Error| {
-            anyhow::anyhow!("invalid {}: {}", path.display(), error.message())
-        })?;
-        let mut definitions = toml::Table::new();
-        for key in ["checks", "reviews", "rule_sets"] {
-            if let Some(value) = table.remove(key) {
-                definitions.insert(key.into(), value);
-            }
-        }
-        if !external && path == central {
-            loaded = Some(
-                toml::Value::Table(table)
-                    .try_into::<Config>()
-                    .with_context(|| format!("invalid {}", path.display()))?,
-            );
-        } else {
-            ensure!(
-                table.is_empty(),
-                "{}: unknown schema fields {}; use [[checks]], [[reviews]] or [[rule_sets]]",
-                path.display(),
-                table.keys().cloned().collect::<Vec<_>>().join(", ")
-            );
-            ensure!(
-                !definitions.is_empty(),
-                "{}: expected rule or rule-set tables",
-                path.display()
-            );
-        }
-        fn entries<T: serde::de::DeserializeOwned>(
-            table: &mut toml::Table,
-            key: &str,
-            path: &Path,
-        ) -> Result<Vec<T>> {
-            let Some(value) = table.remove(key) else {
-                return Ok(vec![]);
-            };
-            let toml::Value::Array(values) = value else {
-                anyhow::bail!("{}: {key}: expected array tables [[{key}]]", path.display());
-            };
-            values
-                .into_iter()
-                .enumerate()
-                .map(|(index, value)| {
-                    let id = value
-                        .get("id")
-                        .and_then(toml::Value::as_str)
-                        .map(String::from)
-                        .unwrap_or_else(|| format!("entry {}", index + 1));
-                    value
-                        .try_into()
-                        .with_context(|| format!("invalid {}: {key} {id}", path.display()))
-                })
-                .collect()
-        }
-        let mut sets = Vec::new();
-        if let Some(value) = definitions.remove("rule_sets") {
-            let toml::Value::Array(values) = value else {
-                anyhow::bail!("{}: expected array tables [[rule_sets]]", path.display());
-            };
-            for (index, value) in values.into_iter().enumerate() {
-                if value.get("git").is_some() {
-                    ensure!(
-                        !external,
-                        "nested external rule-set imports are unsupported"
-                    );
-                    let import = value.try_into::<crate::external::Import>().with_context(|| format!(
-                        "invalid {}: external rule-set entry {} requires exactly git, path and ref; overrides are unsupported",
-                        path.display(), index + 1))?;
-                    imports.push(import);
-                } else {
-                    let id = value
-                        .get("id")
-                        .and_then(toml::Value::as_str)
-                        .map(String::from)
-                        .unwrap_or_else(|| format!("entry {}", index + 1));
-                    sets.push(
-                        value.try_into::<RuleSet>().with_context(|| {
-                            format!("invalid {}: rule set {id}", path.display())
-                        })?,
-                    );
-                }
-            }
-        }
-        let defs = Definitions {
-            checks: entries(&mut definitions, "checks", &path)?,
-            reviews: entries(&mut definitions, "reviews", &path)?,
-            rule_sets: sets,
-        };
-        documents.push((path, defs));
+    load_rules(root, Path::new("."), consumer, vec![(central, set)])
+}
+pub(crate) fn document<T: serde::de::DeserializeOwned>(root: &Path, path: &Path) -> Result<T> {
+    let full =
+        source_path(root, path).with_context(|| format!("missing or unsafe {}", path.display()))?;
+    let text = config::read_bounded(&full, MAX_METADATA_BYTES)?;
+    toml::from_str(&text).map_err(|e: toml::de::Error| {
+        anyhow::anyhow!("invalid {}: {}", path.display(), e.message())
+    })
+}
+
+fn resource(root: &Path, directory: &Path, filename: &str) -> Result<PathBuf> {
+    ensure!(
+        !filename.is_empty()
+            && filename != "."
+            && filename != ".."
+            && !filename.contains(['/', '\\', ':', '\0'])
+            && !Path::new(filename).is_absolute(),
+        "resource must be a filename directly inside its rule directory: {filename:?}"
+    );
+    let path = source_path(root, &directory.join(filename))?;
+    ensure!(
+        path.is_file(),
+        "resource must be a regular file: {}",
+        path.display()
+    );
+    Ok(path)
+}
+
+fn entries(root: &Path, directory: &Path) -> Result<Vec<PathBuf>> {
+    match root.join(directory).symlink_metadata() {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+        Err(e) => return Err(e.into()),
+        Ok(_) => {}
     }
-    let mut result = Loaded {
-        config: loaded.context("missing config.toml")?,
+    let full = source_path(root, directory)?;
+    ensure!(full.is_dir(), "{} must be a directory", directory.display());
+    let mut entries = fs::read_dir(full)?
+        .map(|e| Ok(directory.join(e?.file_name())))
+        .collect::<Result<Vec<_>>>()?;
+    entries.sort();
+    ensure!(
+        entries.len() <= MAX_RULES,
+        "at most {MAX_RULES} entries in {}",
+        directory.display()
+    );
+    Ok(entries)
+}
+
+fn load_rules(
+    root: &Path,
+    directory: &Path,
+    config: Config,
+    rule_sets: Vec<(PathBuf, RuleSet)>,
+) -> Result<Loaded> {
+    let mut loaded = Loaded {
+        config,
+        rule_sets,
         checks: vec![],
         reviews: vec![],
-        rule_sets: vec![],
-        assignments: vec![],
-        imports,
     };
-    for (source, defs) in documents {
-        for check in defs.checks {
-            result.assignments.push(Assignment {
-                id: check.id.clone(),
-                enabled: check.enabled,
-                run_at: check.run_at.clone(),
-                source: source.clone(),
-            });
-            result.checks.push((source.clone(), check));
+    for kind in ["checks", "reviews"] {
+        for dir in entries(root, &directory.join(kind))? {
+            let full = source_path(root, &dir)?;
+            ensure!(
+                full.is_dir(),
+                "{}: a rule must be a directory",
+                dir.display()
+            );
+            let path = dir.join("rule.toml");
+            let rule: RuleDefinition = document(root, &path)?;
+            match (kind, rule.check, rule.review) {
+                ("checks", Some(check), None) => {
+                    let entrypoint = resource(root, &dir, &check.entrypoint)?;
+                    if let Some(interpreter) = &check.interpreter {
+                        ensure!(
+                            !interpreter.trim().is_empty() && !interpreter.contains('\0'),
+                            "interpreter must name one executable"
+                        );
+                    }
+                    loaded.checks.push((
+                        path.clone(),
+                        Check {
+                            id: rule.id.clone(),
+                            description: rule.description,
+                            enabled: rule.enabled,
+                            blocking: rule.blocking,
+                            entrypoint,
+                            interpreter: check.interpreter,
+                            timeout_seconds: check.timeout_seconds,
+                            run_at: rule.run_at.clone(),
+                        },
+                    ));
+                }
+                ("reviews", None, Some(review)) => {
+                    let prompt = resource(root, &dir, &review.prompt)?;
+                    ensure!(
+                        Path::new(&review.prompt)
+                            .extension()
+                            .is_some_and(|e| e == "md"),
+                        "review prompt must be Markdown (.md)"
+                    );
+                    loaded.reviews.push((
+                        path.clone(),
+                        Review {
+                            id: rule.id.clone(),
+                            description: rule.description,
+                            enabled: rule.enabled,
+                            blocking: rule.blocking,
+                            files: review.files,
+                            context: review.context,
+                            run_at: rule.run_at.clone(),
+                            text: config::read_bounded(&prompt, MAX_INSTRUCTION_BYTES)?,
+                        },
+                    ));
+                }
+                _ => anyhow::bail!(
+                    "{}: expected exactly one [{}] implementation",
+                    path.display(),
+                    if kind == "checks" { "check" } else { "review" }
+                ),
+            };
+            ensure!(
+                loaded.checks.len() + loaded.reviews.len() <= MAX_RULES,
+                "at most {MAX_RULES} rules"
+            );
         }
-        for review in defs.reviews {
-            result.assignments.push(Assignment {
-                id: review.id.clone(),
-                enabled: review.enabled,
-                run_at: review.run_at.clone(),
-                source: source.clone(),
-            });
-            result.reviews.push((source.clone(), review));
-        }
-        result
-            .rule_sets
-            .extend(defs.rule_sets.into_iter().map(|set| (source.clone(), set)));
     }
-    ensure!(
-        result.assignments.len() <= MAX_RULES && result.rule_sets.len() <= MAX_RULES,
-        "at most {MAX_RULES} rules and {MAX_RULES} rule sets"
-    );
-    Ok(result)
+    Ok(loaded)
+}
+
+/// Create missing configuration files without replacing existing files.
+pub(crate) fn init(root: &Path) -> Result<usize> {
+    use std::{fs::OpenOptions, io::Write};
+    let root = root.canonicalize()?;
+    crate::git_snapshot::require_root(&root)?;
+    for relative in [
+        "",
+        "checks",
+        "checks/always-ok",
+        "checks/deliberately-failing",
+        "reviews",
+        "reviews/product-consistency",
+        "reports",
+    ] {
+        let relative = config::path(relative);
+        let full = root.join(&relative);
+        if full
+            .symlink_metadata()
+            .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+        {
+            fs::create_dir(&full)?;
+        }
+        ensure!(
+            source_path(&root, &relative)?.is_dir(),
+            "expected configuration directory"
+        );
+    }
+    let project = root.file_name().unwrap_or_default().to_string_lossy();
+    let config = Config {
+        project: project.into_owned(),
+        max_display_files: MAX_DISPLAY_FILES,
+        execution_points: Default::default(),
+        hooks: None,
+        imports: vec![],
+    };
+    let (entrypoint, pass, fail) = if cfg!(windows) {
+        ("index.cmd", "@git --version\r\n", "@exit /b 1\r\n")
+    } else {
+        (
+            "index.sh",
+            "#!/bin/sh\nexec git --version\n",
+            "#!/bin/sh\nexit 1\n",
+        )
+    };
+    let check = |id: &str, description: &str, enabled: bool| -> Result<String> {
+        Ok(toml::to_string(&RuleDefinition {
+            id: id.into(),
+            description: description.into(),
+            enabled,
+            blocking: true,
+            run_at: vec!["pre-push".into()],
+            check: Some(crate::config::CheckDefinition {
+                entrypoint: entrypoint.into(),
+                interpreter: None,
+                timeout_seconds: 30,
+            }),
+            review: None,
+        })?)
+    };
+    let review = RuleDefinition {
+        id: "product-consistency".into(),
+        description: "Evaluate behavior against documented expectations".into(),
+        enabled: false,
+        blocking: true,
+        run_at: vec!["pre-push".into()],
+        check: None,
+        review: Some(crate::config::ReviewDefinition {
+            prompt: "prompt.md".into(),
+            files: vec![],
+            context: vec![],
+        }),
+    };
+    let files = [
+        ("config.toml".into(), toml::to_string(&config)?),
+        ("provider.toml".into(), toml::to_string(&crate::config::ProviderConfig::scaffold())?),
+        ("checks/always-ok/rule.toml".into(), check("always-ok", "Example deterministic pass", true)?),
+        (format!("checks/always-ok/{entrypoint}"), pass.into()),
+        ("checks/deliberately-failing/rule.toml".into(), check("deliberately-failing", "Disabled example demonstrating failure", false)?),
+        (format!("checks/deliberately-failing/{entrypoint}"), fail.into()),
+        ("reviews/product-consistency/rule.toml".into(), toml::to_string(&review)?),
+        ("reviews/product-consistency/prompt.md".into(), "Evaluate the current working files against documented expectations. Cite concrete file paths and lines. Report uncertainty as ERROR, grounded contradictions as FAIL, and PASS only with evidence. Customize before enabling.\n".into()),
+        ("reports/.gitignore".into(), "*\n!.gitignore\n".into()),
+        ("README.md".into(), include_str!("../docs/configuration.md").into()),
+    ];
+    let mut created = 0;
+    for (relative, text) in files {
+        let full = root.join(config::path(&relative));
+        match OpenOptions::new().write(true).create_new(true).open(&full) {
+            Ok(mut file) => {
+                file.write_all(text.as_bytes())?;
+                #[cfg(unix)]
+                if relative.ends_with(".sh") {
+                    use std::os::unix::fs::PermissionsExt;
+                    file.set_permissions(fs::Permissions::from_mode(0o755))?;
+                }
+                created += 1;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                let existing = source_path(&root, &config::path(&relative))?;
+                ensure!(
+                    existing.is_file(),
+                    "configuration path must be a regular file"
+                );
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(created)
 }

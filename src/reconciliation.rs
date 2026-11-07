@@ -544,7 +544,7 @@ mod tests {
                 .success()
         );
         crate::config::init(root.path()).unwrap();
-        fs::write(root.path().join(".hannes/config.toml"), "version = 3\nproject = 'My_App'\nmax_display_files = 5\n[hooks.git]\npre-commit = 'pre-commit'\npre-push = 'pre-push'\n").unwrap();
+        fs::write(root.path().join(".hannes/config.toml"), "project = 'My_App'\nmax_display_files = 5\n[hooks.git]\npre-commit = 'pre-commit'\npre-push = 'pre-push'\n").unwrap();
         root
     }
 

@@ -1,8 +1,0 @@
-provider = "codex-cli"
-timeout_seconds = 180
-model = "gpt-6.1-sol"
-mcp_servers = []
-
-[review_profile]
-reasoning_effort = "medium"
-tool_output_token_limit = 2000

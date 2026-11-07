@@ -48,9 +48,9 @@ with tempfile.TemporaryDirectory(prefix="hannes-smoke-") as temporary:
     stale = run("was ist phase", 1)
     assert "STALE" in stale and "changed files since verification: 8" in stale
     assert stale.count("(line counts unavailable)") == 5
-    check_path = root / ".hannes/checks/deliberately-failing.toml"
+    check_path = root / ".hannes/checks/deliberately-failing/rule.toml"
     check_path.write_text(check_path.read_text().replace("enabled = false", "enabled = true"))
-    review_path = root / ".hannes/reviews/product-consistency.toml"
+    review_path = root / ".hannes/reviews/product-consistency/rule.toml"
     review_path.write_text(review_path.read_text().replace("enabled = false", "enabled = true"))
     # The failed check must skip the enabled review. Any provider call would fail this assertion.
     run("mach was", 1)

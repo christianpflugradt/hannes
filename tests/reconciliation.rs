@@ -1,5 +1,6 @@
 //! REC-001: isolated configuration, reconciliation and real Git hook execution.
 #![cfg(unix)]
+mod support;
 use hannes::{
     config,
     reconciliation::{self, HookInvocation},
@@ -38,7 +39,7 @@ fn project(mappings: &str) -> TempDir {
     let root = tempfile::tempdir().unwrap();
     ok(git(root.path(), &["init", "--quiet"]));
     config::init(root.path()).unwrap();
-    let file = root.path().join(".hannes/checks/always-ok.toml");
+    let file = root.path().join(".hannes/checks/always-ok/rule.toml");
     fs::write(
         &file,
         fs::read_to_string(&file).unwrap().replace(
@@ -53,7 +54,7 @@ fn project(mappings: &str) -> TempDir {
 fn mappings_write(root: &Path, mappings: &str) {
     fs::write(
         root.join(".hannes/config.toml"),
-        format!("version = 3\nproject = 'My_App'\nmax_display_files = 5\n[execution_points]\ncustom = ['first', 'second', 'all', 'renamed']\n{mappings}\n"),
+        format!("project = 'My_App'\nmax_display_files = 5\n[execution_points]\ncustom = ['first', 'second', 'all', 'renamed']\n{mappings}\n"),
     )
     .unwrap();
 }
@@ -105,7 +106,12 @@ fn hooked_git(root: &Path, args: &[&str]) -> Output {
 }
 fn checker(root: &Path, script: &str) {
     fs::write(root.join("checker.sh"), script).unwrap();
-    fs::write(root.join(".hannes/checks/always-ok.toml"), "[[checks]]\nrun_at = ['first', 'second', 'all', 'renamed']\nid = 'always-ok'\ndescription = 'Hook checker'\nenabled = true\ncommand = 'sh checker.sh'\ntimeout_seconds = 10\n").unwrap();
+    support::check(
+        root,
+        "always-ok",
+        &["first", "second", "all", "renamed"],
+        "exec sh checker.sh",
+    );
 }
 
 #[test]
@@ -132,18 +138,6 @@ fn configuration_validates_every_mapping_and_preserves_provider_validation() {
         mappings_write(root.path(), mappings);
         assert!(config::load(root.path()).is_err(), "{mappings}");
         assert!(!hook(root.path(), "pre-commit").exists());
-    }
-    for version in [1, 2] {
-        mappings_write(root.path(), "[hooks.git]");
-        let path = root.path().join(".hannes/config.toml");
-        fs::write(
-            &path,
-            fs::read_to_string(&path)
-                .unwrap()
-                .replace("version = 3", &format!("version = {version}")),
-        )
-        .unwrap();
-        assert!(config::load(root.path()).is_err());
     }
     mappings_write(root.path(), "");
     let provider = root.path().join(".hannes/provider.toml");
@@ -341,10 +335,7 @@ fn real_commit_hooks_forward_message_path_and_preserve_index_and_worktree() {
         "unstaged\n"
     );
     assert_eq!(git(root.path(), &["ls-files", "--stage"]).stdout, index);
-    assert_eq!(
-        hannes::report::read(root.path()).unwrap().plan.unwrap().at,
-        "second"
-    );
+    assert_eq!(hannes::report::read(root.path()).unwrap().plan.at, "second");
     assert!(
         !hooked_git(root.path(), &["commit", "--allow-empty", "-m", "invalid"])
             .status
@@ -679,7 +670,7 @@ fn auto_approve_reconciles_noninteractively_without_executing_rules() {
             .unwrap()
     );
     // A fresh CI job can execute after setup without another approval.
-    let path = root.path().join(".hannes/checks/always-ok.toml");
+    let path = root.path().join(".hannes/checks/always-ok/rule.toml");
     fs::write(
         &path,
         fs::read_to_string(&path)

@@ -1,97 +1,97 @@
-# External Git rule sets
+# External Git Rule Sets
 
-A reference selects one directory at one Git revision. A repository is a
-distribution mechanism, not another governance entity. The
-[README reference](../README.md#import-rule-sets-from-git) lists all import fields.
+An import selects one directory at one Git revision. The selected directory is
+an independent governance root. The [configuration reference](configuration.md)
+lists consumer fields, Rule definitions and execution semantics.
 
 ## A shared repository
 
-This complete source example contains three independent sets:
-
 ```text
-repository/
-  ruleset.toml
-  rules/readme.toml
-software/
-  ruleset.toml
-  rules/changelog.toml
-rust/
-  ruleset.toml
-  rules/formatting.toml
+hannes-governance/
+  repository/
+    config.toml
+    checks/readme/rule.toml
+    checks/readme/index.sh
+  releasable-software/
+    config.toml
+    checks/changelog/rule.toml
+    checks/changelog/index.sh
 ```
 
-For repository/ruleset.toml:
+`repository/config.toml`:
 
 ```toml
-[[rule_sets]]
 id = "repository"
-enabled = true
-rules = ["readme"]
-run_at = ["pre-push"]
+description = "General repository governance"
+run_at = ["pre-push", "check"]
+rules = ["repository-readme"]
 ```
 
-For repository/rules/readme.toml:
+`repository/checks/readme/rule.toml`:
 
 ```toml
-[[checks]]
-id = "readme"
-description = "Require the consuming project's README"
-enabled = true
-command = "test -f README.md"
-timeout_seconds = 5
+id = "repository-readme"
+description = "Require the consumer README"
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
 ```
 
-For software/ruleset.toml:
+`repository/checks/readme/index.sh`:
+
+```sh
+test -s README.md
+```
+
+`releasable-software/config.toml`:
 
 ```toml
-[[rule_sets]]
-id = "software"
-enabled = true
-rules = ["changelog"]
-run_at = ["pre-push"]
+id = "releasable-software"
+description = "Release documentation"
+run_at = ["pre-push", "release"]
+rules = ["release-changelog"]
 ```
 
-For software/rules/changelog.toml:
+`releasable-software/checks/changelog/rule.toml`:
 
 ```toml
-[[checks]]
-id = "changelog"
-description = "Require the consuming project's changelog"
-enabled = true
-command = "test -f CHANGELOG.md"
-timeout_seconds = 5
+id = "release-changelog"
+description = "Require the consumer changelog"
+[check]
+entrypoint = "index.sh"
+interpreter = "sh"
 ```
 
-For rust/ruleset.toml:
+`releasable-software/checks/changelog/index.sh`:
+
+```sh
+test -s CHANGELOG.md
+```
+
+The consumer declares custom points and imports these directories:
 
 ```toml
-[[rule_sets]]
-id = "rust"
-enabled = true
-rules = ["formatting"]
-run_at = ["check"]
+project = "My_App"
+[execution_points]
+custom = ["check", "release"]
+
+[[imports]]
+git = "https://github.com/company/hannes-governance.git"
+path = "repository"
+ref = "v1.2.0"
+
+[[imports]]
+git = "https://github.com/company/hannes-governance.git"
+path = "releasable-software"
+ref = "v1.2.0"
 ```
 
-For rust/rules/formatting.toml:
-
-```toml
-[[checks]]
-id = "formatting"
-description = "Check Rust formatting"
-enabled = true
-command = "cargo fmt --all -- --check"
-timeout_seconds = 60
-```
-
-The consumer imports these directories as shown in the README and declares
-`[execution_points] custom = ["check"]`. File names are arbitrary. Only selected
-subtrees are parsed as governance configuration. Duplicate imports of the same
-repository selector, normalized directory and reference are errors.
-
-Sets contain rule IDs, never set IDs. They cannot reference sibling or consumer
-rules. The existing resolver validates all references and disabled definitions
-inside each boundary. An active rule referenced only by a disabled set still
-needs its own assignment, exactly as with local definitions.
+Each selected root defines exactly one Rule Set in config.toml and discovers Rules
+from immediate checks/ and reviews/ directories. It has no extra .hannes directory,
+rule-sets directory, consumer settings or nested imports. The set can reference
+only its own Rules. All references are validated, including disabled Rules.
+IDs need only be unique within their own scope. No source or consumer can override
+another scope's Rules. Removing an import stops using that source.
 
 ## Refresh, storage and provenance
 
@@ -135,55 +135,32 @@ tree; inspect provenance to see which external revision a report evaluated.
 
 ## Source resources and trust
 
-Checks retain the consuming project's working directory. For a script stored
-with the imported set, use an explicit launcher, for example:
+Checks keep the consuming project's working directory. HANNES_RULE_DIRECTORY
+locates bundled resources inside the executing Check directory. Explicit
+interpreters receive absolute entrypoint paths. Review prompts load from their
+own Rule directories; context paths and evidence refer to the consumer.
 
-```toml
-command = "sh -c 'exec sh \"$HANNES_RULE_SET_SOURCE/scripts/check.sh\"'"
-```
+Selected roots, Rule directories, definitions, entrypoints and prompts reject
+symlinks, parent traversal and unexpected file types. Only designated definitions
+are interpreted; supporting TOML is data. Git retrieval disables downloaded hooks
+and initialization scripts and never initializes submodules. Host credential
+helpers and SSH configuration remain trusted integrations.
 
-This accesses a source script while keeping the consumer as the working directory.
-The variable is supplied only to imported checks. Hannes performs no implicit
-argument rewriting. Review instructions resolve from the defining document,
-contained within the selected subtree. Review entry/context paths and evidence
-refer to consumer files.
+Checks execute with the Hannes user's permissions. Resource confinement does not
+prevent scripts from accessing other paths, credentials or the network. Import
+executable Rules only from trusted sources. There is no process sandbox.
 
-Selected paths and instruction resources reject parent traversal and symlink
-components. Discovery retains its normal hidden/cache-directory exclusions and
-nesting limit. Git retrieval uses an empty initialization template, disables hooks
-and never initializes submodules. Materialization disables system/global Git
-filters and executes no checkout hooks. Host credential helpers and SSH
-configuration remain trusted integrations.
+## Recovery and limits
 
-Commands, including explicit shells and source scripts, execute as the Hannes
-user. They can modify files and access the environment. Validation and retrieval
-execute none of them. Hannes provides no command sandbox.
+Missing or changed resolution state, missing cached revisions or integrity failures
+require `hannes pass auf`. A failed refresh preserves the last valid state. For
+corrupt immutable entries, remove the affected repository-digest cache directory
+and refresh; Hannes never silently replaces validated revisions. Authentication
+comes from host Git/SSH; Git stderr is suppressed to avoid credential disclosure.
 
-## Troubleshooting and limits
-
-- Missing state or changed import: run `hannes pass auf`.
-- Missing cached revision: reconnect and run `hannes pass auf`.
-- Authentication failure: configure host Git credentials or SSH access and retry.
-  Raw Git stderr is suppressed to avoid exposing credentials.
-- Repository unavailable: check URL, connectivity and access permissions.
-- Invalid reference: check the exact branch/tag/full commit. Unavailable or
-  non-commit references fail.
-- Missing directory: check `path` at the selected revision, including case.
-- Invalid set/reference: ensure exactly one set, no nested imports, boundary-local
-  rule references and centrally declared custom execution points.
-- Corrupt cache: remove the affected repository-digest directory under the cache
-  root, then run `hannes pass auf`. Valid immutable entries are never overwritten.
-- Busy/permission failure: let the other process finish and check cache/Git
-  directory permissions. Lock acquisition is bounded to 30 seconds.
-
-Fetches have a 60-second deadline; local Git operations have a 30-second deadline.
-Cached repositories use the snapshot bounds: 8 MiB per file, 128 MiB total,
-100,000 entries, with 128 directory levels. Configuration retains its 16-level
-discovery bound and 256-document/rule/set limits; the combined configuration has
-at most 256 rules and sets. Resolution JSON is limited to 64 KiB; refs to 1024 bytes.
-
-Supported selectors include HTTPS, HTTP, `ssh://`, SCP-style SSH, `git://`,
-`file://` and local repository paths. Custom remote-helper schemes (including
-`ext::`), URL queries/fragments and repositories containing submodules are
-unsupported. External sets use Unix locking on supported macOS/Linux targets.
-
+Fetches have a 60-second deadline; local Git operations and lock waits have
+30-second deadlines. Cached repositories allow 8 MiB/file, 128 MiB total,
+100,000 entries and 128 directory levels. Metadata is limited to 64 KiB/file;
+the combined configuration allows 256 Rules and 256 Rule Sets. Resolution state
+is limited to 64 KiB; refs to 1024 bytes. Shared-cache locking currently uses Unix
+OS locks; external imports on Windows remain unsupported.

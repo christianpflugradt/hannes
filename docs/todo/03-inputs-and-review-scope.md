@@ -1,6 +1,6 @@
 # TODO 3: Inputs and review scope
 
-Status: TODO. Depends on: [TODO 1](01-profiles-and-plans.md) and
+Status: TODO. Depends on: [TODO 1](../execution-points-and-plans.md) and
 [TODO 2](02-review-mcp-and-sessions.md).
 
 ## Goal and decisions

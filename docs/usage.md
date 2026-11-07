@@ -19,7 +19,7 @@ hannes --version
 installs hooks, stages files or commits. The enabled example uses `git --version`
 and passes without Codex. The deliberately failing check and example review are
 disabled. To demonstrate failure, change `enabled = false` to `enabled = true`
-in `.hannes/checks/deliberately-failing.toml` and run `hannes mach was`.
+in `.hannes/checks/deliberately-failing/rule.toml` and run `hannes mach was`.
 
 Checks and reviews are collectively called **rules**. If neither is defined,
 `mach was` prints `Du hast noch keine Regeln definiert, du Vogel!` alongside the
@@ -29,7 +29,7 @@ report. Defined but disabled rules do not trigger this message.
 external state after confirmation, without running checks or reviews.
 `mach was` validates and reconciles first, then executes selected enabled checks in ID order, then
 selected active reviews in one call if checks passed. It selects rules assigned to the requested execution point. Disabled items never enter results.
-Any failed check prevents spending review tokens; those reviews are `NOT_RUN`.
+Any blocking failed check or execution error prevents spending review tokens; those reviews are `NOT_RUN`.
 
 Use `hannes mach was --geiz-ist-geil` for an execution point containing checks only.
 Points requiring reviews reject this option before running any checks.
@@ -43,7 +43,7 @@ No review result is cached or reused. Earlier reports default to the full scope.
 
 ## Select and preview rules
 
-Use version 3 rules and rule sets to assign named execution points:
+Use Rules and Rule Sets to assign named execution points:
 
 ```sh
 hannes mach was --at pre-push --plan
@@ -53,12 +53,12 @@ hannes mach was --at pre-push
 
 The default point is pre-push. All selected rules are mandatory, including
 reviews. Checks-only rejects a point requiring reviews. Empty points succeed.
-See [execution points and plans](profiles-and-plans.md) and the
+See [execution points and plans](execution-points-and-plans.md) and the
 [configuration reference](configuration.md).
 
 ## Run results
 
-Errors and failures block success. A valid run writes `.hannes/reports/last.json`
+Execution errors and blocking failures prevent success. Non-blocking FAIL stays visible. A valid run writes `.hannes/reports/last.json`
 atomically, including on FAIL/ERROR. Invalid configuration leaves the previous
 report untouched. Reports are ignored and remain local.
 
@@ -80,11 +80,11 @@ Every result row includes a short summary. Review summaries come from the actual
 Codex response, including PASS results; substantive verdicts are PASS/FAIL, while
 provider problems or unavailable evidence remain ERROR. The AI's `reason` is one
 nonempty line of at most 120 characters. Full findings and file/line references
-stay in the local JSON, not in normal stdout. Long execution errors or legacy
+stay in the local JSON, not in normal stdout. Long execution errors or verbose
 summaries are shortened only for display; their complete content stays saved.
 
 Use `hannes was ist phase --details` to inspect full saved findings and captured
-command output separately. It does not run Codex or any check again. Old reports
+command output separately. It does not run Codex or any check again. Saved reports
 remain readable; only `mach was` obtains new provider results.
 
 `was ist phase` reads that report without executing checks or Codex. It reports
@@ -103,32 +103,19 @@ It is not automatically redacted; configure commands to avoid printing secrets.
 
 ## Configure checks and reviews
 
-See the [configuration reference](configuration.md). To add a check, create
-`.hannes/checks/test.toml`:
-
-```toml
-id = "test"
-description = "Run project tests"
-enabled = true
-command = "cargo test --locked"
-working_directory = "."
-timeout_seconds = 300
-```
-
-Commands are strings parsed into one executable and its arguments, without an
-implicit shell. Quotes and escaped spaces preserve single arguments. Validation
-rejects shell operators/expansions and malformed quoting before execution; missing
-executables fail at runtime. Use a task runner or dedicated script to combine
-commands. See the [command syntax reference](../README.md#add-a-check).
-Treat deterministic checks like scripts you trust to run yourself. They are not
-sandboxed. Check outputs or formatters that change relevant files cause an
-integrity ERROR: rerun on stable files.
+See the [configuration reference](configuration.md). A Check lives in
+`.hannes/checks/<name>/` with rule.toml and its entrypoint. Direct execution uses
+the OS; an explicit interpreter receives the absolute entrypoint. The consumer
+root stays the working directory; HANNES_RULE_DIRECTORY locates bundled files.
+Exit 0 is PASS, exit 2 is execution ERROR, other nonzero exits are FAIL. A completed
+non-blocking FAIL permits success; execution errors always block. Checks are
+trusted code, without process sandboxing. Changing evaluated files prevents PASS.
 
 For an optional Codex review:
 
 1. Install a compatible Codex CLI and authenticate using `codex login`.
-2. Customize `.hannes/reviews/product-consistency.md` for your project's criteria.
-3. Set `enabled = true` in `.hannes/reviews/product-consistency.toml`.
+2. Customize `.hannes/reviews/product-consistency/prompt.md` for your project's criteria.
+3. Set `enabled = true` in `.hannes/reviews/product-consistency/rule.toml`.
 4. Run `hannes pass auf`, then `hannes mach was`.
 
 New provider configuration uses `codex-cli`, a 180-second timeout, `gpt-6.1-sol`,
@@ -185,7 +172,7 @@ precedence if snapshot coverage is incomplete, even when some differences are kn
 ## Optional Git hook
 
 Git hooks are the first desired-state reconciliation domain. Declare their
-execution-point mappings in version-3 `.hannes/config.toml`, then run `hannes pass auf`:
+execution-point mappings in `.hannes/config.toml`, then run `hannes pass auf`:
 
 ```toml
 [hooks.git]
@@ -233,9 +220,9 @@ blocks nested Hannes execution from checker processes.
 
 Deterministic checks receive `HANNES_GIT_HOOK`, `HANNES_GIT_HOOK_ARG_COUNT` and
 one-based `HANNES_GIT_HOOK_ARG_1`, `HANNES_GIT_HOOK_ARG_2`, etc. Values preserve
-Git's arguments; relative paths are relative to the repository root, so checkers
-using another working directory must resolve them accordingly. For a commit-msg
-execution point, configure a dedicated script such as `command = "sh scripts/check-message.sh"`:
+Git's arguments; relative paths are relative to the consuming repository root. For a commit-msg
+execution point, create a Check directory with `[check] entrypoint = "index.sh"` and
+`interpreter = "sh"`. Its index.sh reads the supplied hook arguments:
 
 ```sh
 #!/bin/sh
@@ -245,7 +232,7 @@ test "$HANNES_GIT_HOOK_ARG_COUNT" = 1
 exec my-message-checker "$HANNES_GIT_HOOK_ARG_1"
 ```
 
-Hannes does not expand environment variables in command strings. Checks retain
+The script reads environment variables itself; Hannes passes them without expansion. Checks retain
 null stdin; pre-push reference data from stdin is not forwarded. Original Git
 arguments still reach any unmanaged hook commands.
 

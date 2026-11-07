@@ -1,6 +1,6 @@
 # TODO 2: Per-review MCP permissions and sessions
 
-Status: TODO. Depends on: [TODO 1](01-profiles-and-plans.md).
+Status: TODO. Depends on: [TODO 1](../execution-points-and-plans.md).
 
 ## Goal and decisions
 
@@ -9,7 +9,7 @@ reviews that have identical permissions. Provider configuration remains the
 project-wide maximum; it references server definitions in Codex configuration,
 without duplicating credentials or rewriting the user's settings.
 
-Proposed version-2 review metadata:
+Proposed review metadata:
 
 ```toml
 mcp_servers = ["project-memory", "browser"]
@@ -20,8 +20,6 @@ mcp_servers = ["project-memory", "browser"]
   every server from the user's personal configuration.
 - Named permissions must be a subset of the provider allow list. Reject unknown
   names, duplicates and disallowed names; never expand the project allow list.
-- Version-1 reviews retain their existing provider-wide permissions and batching.
-  Migration must document any required explicit version-2 permissions.
 - Group scheduled reviews by identical effective MCP set, provider/model/effort
   settings and input identity. Reviews with different permissions never share a
   session. Each group starts a fresh session; no resumed cross-group history.
@@ -43,7 +41,7 @@ mcp_servers = ["project-memory", "browser"]
 - [ ] Execute isolated groups and validate exact result-ID coverage per group.
 - [ ] Report progress and actual usage once per group, with rule-to-group links;
       do not sum repeated shared durations or token counters.
-- [ ] Update migration guidance and examples; MCPs remain disabled by default.
+- [ ] Update documentation and examples; MCPs remain disabled by default.
 - [ ] Add provider-fake tests covering grouping, restrictions and error handling.
 
 ## Done when

@@ -15,7 +15,7 @@ pub struct Rule {
     pub id: String,
     pub kind: String,
     pub description: String,
-    pub tags: Vec<String>,
+    pub blocking: bool,
     pub selected_by: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::rules::EffectiveRule>,
@@ -61,24 +61,17 @@ pub struct ContextPlan {
 #[serde(deny_unknown_fields)]
 pub struct Plan {
     pub plan_schema_version: u32,
-    pub config_version: u32,
     pub plan_id: String,
     pub status: String,
     pub blocking_reasons: Vec<String>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub at: String,
-    // Historical report metadata only; never used for current selection.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub profile: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub profile_source: String,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub gate: bool,
     pub input: Input,
     pub checks_only: bool,
     pub selection_complete: bool,
     pub scheduled: Vec<Rule>,
     pub omitted: Vec<Omission>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_rules: Vec<Rule>,
     pub required_ids: Vec<String>,
     pub provider: crate::config::ProviderConfig,
     pub provider_availability_checked: bool,
@@ -100,16 +93,13 @@ pub struct PreparedPlan {
 }
 
 fn metadata_path(path: &str) -> bool {
-    if [
-        crate::config::path("config.toml"),
-        crate::config::path("provider.toml"),
-    ]
-    .iter()
-    .any(|p| p == std::path::Path::new(path))
-    {
-        return true;
+    let parts: Vec<_> = path.split('/').collect();
+    match parts.as_slice() {
+        [".hannes", "config.toml" | "provider.toml"] => true,
+        [".hannes", "checks" | "reviews", _, "rule.toml"] => true,
+        [".hannes", "rule-sets", filename] => filename.ends_with(".toml"),
+        _ => false,
     }
-    path.starts_with(".hannes/") && path.ends_with(".toml")
 }
 
 pub fn build(
@@ -131,39 +121,43 @@ pub fn build(
     };
     let mut scheduled = Vec::new();
     let mut omitted = Vec::new();
+    let mut disabled_rules = Vec::new();
     let mut required_ids = Vec::new();
     let mut blocking_reasons = Vec::new();
-    for (id, kind, description, tags, enabled) in project
+    for (id, kind, description, enabled, blocking) in project
         .checks
         .iter()
-        .map(|r| (&r.id, "check", &r.description, &r.tags, r.enabled))
+        .map(|r| (&r.id, "check", &r.description, r.enabled, r.blocking))
         .chain(
             project
                 .reviews
                 .iter()
-                .map(|r| (&r.id, "review", &r.description, &r.tags, r.enabled)),
+                .map(|r| (&r.id, "review", &r.description, r.enabled, r.blocking)),
         )
     {
-        if !selects(id) {
+        if !selects(id) && enabled {
             continue;
         }
         let origin = project.effective.rules.get(id).cloned();
-        let selected_by = vec![format!("at:{name}")];
+        let selected_by = if enabled {
+            vec![format!("at:{name}")]
+        } else {
+            vec![]
+        };
         let rule = Rule {
             id: id.clone(),
             kind: kind.into(),
             description: description.clone(),
-            tags: tags.clone(),
+            blocking,
             selected_by,
             origin,
         };
-        required_ids.push(id.clone());
         if !enabled {
-            omitted.push(Omission {
-                rule,
-                reason: "disabled".into(),
-            });
-        } else if checks_only && kind == "review" {
+            disabled_rules.push(rule);
+            continue;
+        }
+        required_ids.push(id.clone());
+        if checks_only && kind == "review" {
             omitted.push(Omission {
                 rule,
                 reason: "checks_only".into(),
@@ -246,8 +240,7 @@ pub fn build(
     let mut provider = project.provider.clone();
     provider.mcp_servers.sort();
     let mut plan = Plan {
-        plan_schema_version: 2,
-        config_version: project.config.version,
+        plan_schema_version: 3,
         plan_id: String::new(),
         status: if blocking_reasons.is_empty() {
             "planned"
@@ -257,9 +250,6 @@ pub fn build(
         .into(),
         blocking_reasons,
         at: name.into(),
-        profile: String::new(),
-        profile_source: String::new(),
-        gate: false,
         input: Input {
             kind: "worktree".into(),
             head: snapshot.head.clone(),
@@ -271,14 +261,15 @@ pub fn build(
         selection_complete,
         scheduled,
         omitted,
+        disabled_rules,
         required_ids,
         provider,
         provider_availability_checked: false,
         planned_model_calls: usize::from(!active.is_empty()),
         context,
     };
-    // Normalize metadata separately from raw file hashes so TOML formatting, file
-    // names and selector order do not change semantic identity. The report still
+    // Normalize metadata separately from raw file hashes so TOML formatting and
+    // selector order do not change semantic identity. The report still
     // records the exact raw snapshot for stability/freshness comparisons.
     let mut checks: Vec<_> = project
         .checks
@@ -287,9 +278,7 @@ pub fn build(
         .cloned()
         .collect();
     for check in &mut checks {
-        check.tags.sort();
         check.run_at.sort();
-        check.command = shell_words::join(crate::check_command::parse(&check.command)?);
     }
     let mut reviews: Vec<_> = project
         .reviews
@@ -299,7 +288,6 @@ pub fn build(
         .collect();
     for review in &mut reviews {
         review.files.sort();
-        review.tags.sort();
         review.run_at.sort();
         for context in &mut review.context {
             context.headings.sort();
@@ -318,8 +306,8 @@ pub fn build(
         .as_ref()
         .map_or(&[][..], |input| input.excerpts.as_slice());
     let identity = serde_json::json!({
-        "plan_schema_version": 2, "verifier_version": env!("CARGO_PKG_VERSION"),
-        "config_version": project.config.version, "project": project.config.project,
+        "plan_schema_version": 3, "verifier_version": env!("CARGO_PKG_VERSION"),
+        "project": project.config.project,
         "at": name, "checks_only": checks_only, "checks": checks, "reviews": reviews,
         "provider": plan.provider, "head": snapshot.head, "files": files, "context": excerpts,
         "complete": snapshot.complete,

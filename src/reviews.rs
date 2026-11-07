@@ -87,6 +87,7 @@ pub fn parse(
             "PASS/FAIL require at least one evidence path and line"
         );
         let mut item = Item::simple(&verdict.id, "review", verdict.status, verdict.reason);
+        item.blocking = active.iter().find(|r| r.id == verdict.id).unwrap().blocking;
         item.findings = verdict.findings;
         ensure!(
             mapped.insert(verdict.id.clone(), item).is_none(),
@@ -142,7 +143,7 @@ pub fn execute_prepared(
     let result = response
         .verdict
         .and_then(|json| parse(project, active, snapshot, &json));
-    let items = match result {
+    let mut items = match result {
         Ok(mut items) => {
             for item in &mut items {
                 item.duration_ms = start.elapsed().as_millis() as u64;
@@ -158,5 +159,8 @@ pub fn execute_prepared(
             })
             .collect(),
     };
+    for item in &mut items {
+        item.blocking = active.iter().find(|r| r.id == item.id).unwrap().blocking;
+    }
     (items, response.usage)
 }

@@ -10,9 +10,8 @@ behavior. The [roadmap](docs/todo/README.md) contains planned extensions; they a
 not implemented merely because they have a proposal.
 
 The [README configuration reference](README.md#configuration) defines every public
-configuration field, default and limit. The [execution-point contract](docs/profiles-and-plans.md)
-extends this specification for configuration version 3, plan schema 2 and report
-schema 3. These documents must agree; a contradiction must be resolved before work
+configuration field, default and limit. The [execution-point contract](docs/execution-points-and-plans.md)
+extends this specification for plan schema 3 and report schema 4. These documents must agree; a contradiction must be resolved before work
 proceeds, not interpreted as permission to choose either behavior.
 
 ## CLI-001: Commands and project boundaries
@@ -36,110 +35,63 @@ command or redundant examples. Other execution phrases are rejected.
 Run from the Git working-tree root; subdirectory execution is rejected. Hannes
 must not create commits, modify the Git index or silently discover another root.
 
-## RULE-001: Rules, rule sets and execution points
+## RULE-001: Rules, Rule Sets and Execution Points
 
-Configuration version 3 replaces profiles and gates. `.hannes/config.toml`
-declares `[execution_points] custom = [...]`; pre-commit, commit-msg and pre-push
-are always known and reserved. `mach was --at NAME` selects exactly one known
-context (default pre-push). Contexts are independent and may be empty.
+Rules are implemented as Checks or Reviews. Each declares id, description,
+enabled (default true), blocking (default true), optional run_at and exactly one
+implementation table. Rule IDs are unique within a governance scope. Rule Sets
+require id, description, rules and nonempty run_at; no enabled/blocking/source
+fields are accepted. Set IDs are independently unique.
 
-Every discovered TOML document uses `[[checks]]`, `[[reviews]]` and/or
-`[[rule_sets]]`. The central document may contain these tables too. Rule IDs are
-unique across checks/reviews; rule-set IDs are independently unique. Definitions
-are discovered recursively in sorted order, excluding hidden directories and
-reports/cache/caches; symlinks and special entries are rejected, nesting is
-bounded. File names carry no entity semantics. provider.toml remains reserved.
+A present set overrides its rules' own run_at; memberships contribute their union.
+Standalone enabled rules use their own assignments. Enabled rules need an effective
+point. Disabled rules remain validated but never run. All references must resolve
+within the same scope, including disabled and overridden assignments. A rule runs
+once per point; checks precede reviews, each kind sorted by ID. Built-in points
+are pre-commit, commit-msg and pre-push; custom names come only from the consumer.
+The default is pre-push. Empty points succeed without claiming rule PASS.
 
-Rules retain their check/review fields and gain optional `run_at = []`. Rule sets
-require id, enabled and rules, with optional run_at. All references, even disabled
-or overridden ones, must be valid. Active sets require nonempty run_at. Only
-active sets override a rule's own run_at; multiple sets contribute a union.
-Active standalone rules require run_at. Disabled rules never run and need no
-assignment. Own assignments overridden by sets generate a diagnostic. Resolution
-is computed once with source paths and reused by validation, plans and execution.
-Checks precede reviews, ordered by ID, each at most once. Every selected rule is
-mandatory; checks-only cannot omit a required review. Empty contexts succeed.
-Validation never executes rules or creates governed project files.
+## EXT-001: External Git Rule Sets
 
-Loading documents is separate from domain resolution. External Git rule sets use
-the same resolver within isolated source boundaries; see EXT-001. Self-governance uses this model with the existing reconciliation flow and the
-pinned published governor.
+Only the consumer's config.toml accepts [[imports]], with exactly git/path/ref.
+No overrides or nested imports are supported. Each selected directory is an
+isolated governance root: config.toml defines exactly one Rule Set using the
+same four fields as local sets; checks/ and reviews/ contain its own Rules.
+No extra .hannes or rule-sets directory is used. Sibling/consumer references fail.
+Rules are namespaced only after scope-local validation; provenance retains source
+identity, selected path/ref and resolved commit.
 
-Acceptance: `tests/execution_points.rs` covers pure resolution, discovery,
-validation, selection, CLI and existing execution engines.
-
-## EXT-001: External Git rule sets
-
-`[[rule_sets]]` accepts either a local definition or exactly `git`, `path`, `ref`.
-Each selected directory contains exactly one local rule set and its own rules,
-discovered recursively with the existing document syntax. Imports cannot nest,
-reference sibling/consumer rules, or declare consumer settings. The consumer
-cannot override imported definitions. Custom execution points come only from the
-consumer. Each boundary uses the existing semantic resolver before namespaced
-identities are merged; local IDs and reference semantics remain unchanged.
-
-`pass auf` resolves exact branches, tags and full commits using host Git, retrieves
-shared immutable revisions and validates the complete combined configuration
-without executing rules. Only successful full validation atomically publishes
-local resolution state. A failed refresh preserves previous state and returns an
-error. `mach was`, hooks and `--plan` use only that last successful state and
-validated cache contents, without fetching. Missing, changed or corrupt state or
-cache fails with a request to run `hannes pass auf`; no revision substitution.
-State is stored in the project's Git directory, outside working-tree snapshots.
-Repository caches live in the user's platform cache directory. Atomic publication
-and bounded OS file locks serialize concurrent writers; revision contents have
-integrity receipts checked before use. Imports of one repository and commit share
-one checkout. Duplicate identical imports are rejected.
-
-Checks keep the consuming project working directory and command path semantics.
-Review instructions remain relative to their defining document, contained within
-the selected source directory. Review entry/context paths remain consumer-relative.
-Checks receive `HANNES_RULE_SET_SOURCE` for explicit access to source resources;
-Hannes performs no argument rewriting. Import paths and all source resource
-ancestors reject symlinks and parent traversal. Git retrieval/materialization
-executes no repository hooks or initialization scripts. Imported commands are
-trusted code with the permissions of Hannes, not sandboxed code. Credential-bearing
-HTTP URLs are rejected; host Git supplies authentication. Diagnostics never echo
-Git stderr or repository URLs containing credentials.
-
-Acceptance: `tests/external_rule_sets.rs` covers local Git references, isolated
-discovery, cached execution, refresh failure, concurrency and trust boundaries.
+pass auf resolves exact branches, tags and full hashes using host Git, materializes
+shared immutable revisions and validates everything before atomic publication of
+project resolution state. Failure preserves prior state. Execution, hooks and
+plans use the validated cache offline, never substitute revisions, and fail when
+state or contents are missing/corrupt. Git-directory state, shared caches, bounded
+OS locks, integrity receipts and retrieval trust boundaries remain in effect.
+Checks run in the consumer root; HANNES_RULE_DIRECTORY locates bundled resources.
+Imported code has Hannes' permissions and must be trusted; path confinement is
+not a sandbox. Credential-bearing HTTP URLs are rejected and diagnostics never
+echo Git stderr or secret repository selectors.
 
 ## CFG-001: Configuration and initialization
 
-The directory is exactly `.hannes/`, lowercase. Initialization creates version 3:
+One unversioned configuration model uses lowercase .hannes/config.toml, optional
+provider.toml, checks/*/rule.toml, reviews/*/rule.toml and rule-sets/*.toml.
+There is no configuration version field. Unknown fields, duplicate keys/IDs,
+invalid references, missing resources and symlinks fail, including disabled Rules.
+No recursive TOML discovery or arbitrary definition placement is supported.
+Supporting files inside rule directories are data, never governance documents.
 
-```text
-.hannes/
-  config.toml
-  provider.toml
-  checks/always-ok.toml
-  checks/deliberately-failing.toml
-  reviews/product-consistency.toml
-  reviews/product-consistency.md
-  reports/.gitignore
-  README.md
-```
+Project settings are project, max_display_files (default 5), execution_points,
+hooks and imports. The README defines all fields and bounds. Resource filenames
+must be single nonempty names directly in a Rule directory: no separators,
+absolute paths, parent traversal, symlinks or special files. Review prompts are
+UTF-8 Markdown without frontmatter requirements. Checks may bundle helpers.
 
-`reports/last.json` is generated only by verification. Configuration and criteria
-are version-controlled; reports and credentials stay local. Examples use generic
-placeholders such as `My_App`. Initialization derives the project name from the
-directory, enables the `git --version` example check and disables the failing
-check and review. A first run needs neither Codex nor credentials.
-
-Each discovered TOML document defines checks, reviews and/or rule sets using
-explicit array tables. IDs are unique across
-both kinds. `enabled` is the only activation field; `disabled` is rejected.
-Unknown fields, duplicate keys/IDs, invalid values and missing referenced files
-are errors, including in disabled rules and rule sets. Paths must be
-relative to their documented base, remain inside the project, and never traverse
-parents. Symlink escapes and unsupported input must not produce PASS.
-
-New provider scaffolds select `codex-cli`, timeout 180 seconds, `gpt-6.1-sol`, no
-MCP servers, medium reasoning and 2000 retained tokens per tool output. Omitting
-optional model/effort uses Codex defaults; omitting the MCP allow list disables
-all MCPs. Configuration versions 1 and 2 require manual migration to version 3.
-Historical reports remain readable; frozen fixtures are never rewritten.
+fang an creates missing files without replacing edits or installing hooks.
+It scaffolds a passing enabled Check, a disabled failing Check and disabled
+product-consistency Review in self-contained directories. Reports remain local.
+Provider omission uses scaffold defaults: codex-cli, 180 seconds, gpt-6.1-sol,
+medium effort, empty MCP allow list and 2000 retained tool-output tokens.
 
 ## SEL-001: Selection and offline plans
 
@@ -151,41 +103,31 @@ supported. Rules run once, checks first and each kind ordered by ID.
 selection reasons, omissions, required rules, input identity, declared provider
 settings and bounded context sizes, without running checks, Codex, MCPs or network
 calls, changing project/Git state or replacing the report. `--plan --json` uses
-plan schema 2 and structured diagnostics. A plan is neither a cache nor proof
+plan schema 3 and structured diagnostics. A plan is neither a cache nor proof
 that a later input is identical. Provider availability is not checked offline.
 
 `--geiz-ist-geil` runs checks only, without provider discovery, model calls or MCP
 connections. Reviews are excluded from progress/results and the limited scope is
 explicit in terminal output and reports. Full configuration validation still runs.
-Every selected rule is mandatory. A point requiring reviews rejects checks-only
+Every selected rule must execute; only completed non-blocking FAIL is nonfatal. A point requiring reviews rejects checks-only
 execution before any check starts. Empty execution points succeed without proving
 any rule PASS.
 
 ## CHK-001: Deterministic checks
 
-Check commands are strings parsed into one executable and its arguments, executed
-without an implicit shell or stdin. Arrays are rejected. Support whitespace separation, single/double quotes, escaped whitespace
-and quotes, empty quoted arguments, and quoted/escaped literal special characters.
-Reject empty commands/missing executable names, unmatched quotes, trailing escapes, unquoted
-shell operators (`&&`, `||`, `;`, pipes, redirection, background execution),
-substitution, variable expansion and unquoted glob patterns during validation,
-including disabled checks. Single quotes protect all literal content; double
-quotes protect operators/globs but not unescaped shell expansions. Never expand
-variables, globs or substitutions. Errors identify the affected check and explain
-how to use a task runner or dedicated script for command composition.
-They inherit the environment; bare executables resolve through PATH. Relative
-executables resolve from the configured working directory and must remain inside
-the project. Validation does not require an executable to exist or be available;
-missing/non-executable programs fail at runtime. An explicit shell is permitted
-but task runners/dedicated scripts are the recommended composition model.
-Checks are trusted commands, not a
-security sandbox, and should not modify verified files.
+[check] requires entrypoint and accepts optional interpreter and timeout_seconds
+(default 30, 1..=3600). Direct execution uses native OS behavior with no shebang
+parsing or language detection. Explicit interpreters receive the absolute
+entrypoint as one argument; no implicit shell, runtime installation or interpreter
+argument parsing occurs. The consuming root stays the working directory and
+HANNES_RULE_DIRECTORY identifies bundled resources. Unix scripts may need an
+installed interpreter on Windows; arbitrary scripts are not universally portable.
 
-Checks run sequentially. Exit 0 is PASS; nonzero exit or signal is FAIL. Spawn,
-capture failure and timeout are ERROR. Remaining checks run after a failure, but
-reviews do not. Capture the first 64 KiB of each output stream, drain the streams,
-record total bytes/truncation, and clean up child processes on timeout. Raw output
-is not redacted or streamed by default; saved output is available with `--details`.
+Exit 0 is PASS; nonzero is FAIL except exit 2, which explicitly reports an execution
+ERROR. Wrappers map scanner infrastructure errors to 2. Spawn, capture and timeout
+failures are always ERROR. Non-blocking FAIL remains visible and allows success
+and subsequent Reviews. ERROR is fatal regardless of blocking. Stdout/stderr
+capture, process deadlines and cancellation remain shared in process.rs.
 
 ## REV-001: Reviews and provider isolation
 
@@ -278,11 +220,11 @@ Reports are written atomically to `.hannes/reports/last.json`, including FAIL/ER
 when initialized input allows it. Invalid configuration preserves the prior
 report. Save UTC timestamp, repository/project, provider, input identity, rule
 results, durations, findings, output and available usage. ERROR takes precedence
-over FAIL; NOT_RUN blocks success without replacing an existing FAIL with ERROR.
-Disabled rules stay out of results; failed checks leave selected reviews NOT_RUN.
+over blocking FAIL; NOT_RUN blocks success without replacing an existing blocking FAIL with ERROR.
+Disabled Rules stay out of results; blocking failed Checks leave selected Reviews NOT_RUN.
 
-Schema 3 records execution-point plans, required IDs and rule provenance.
-Historical schemas 1 and 2 remain readable as saved evidence. Reject corrupt/inconsistent
+Report schema 4 records plan schema 3, required IDs, blocking and rule provenance.
+Only the current report and plan schemas are accepted. Reject corrupt/inconsistent
 reports and mismatched repositories. Reports are local, unsigned evidence, not
 tamper-proof attestations. Status uses saved selection, not the current default.
 
@@ -328,7 +270,7 @@ Unlicense and checksums. Artifacts must match the tested
 version/source. Normal CI is read-only; only release planning/publishing may
 request write permission. Actions are pinned. See [release policy](docs/releasing.md).
 
-Repository self-integration uses version-3 rules, rule sets and execution points.
+Repository self-integration continues to use its pinned published governor.
 The governor is an installed, previously published binary outside the checkout;
 local candidate builds never govern the source being checked. `.hannes-version`
 is the sole exact release pin, consumed by the shared CI setup action and updated
@@ -339,7 +281,7 @@ The three built-in points serve Git hooks. Explicit custom points ci-native,
 ci-tooling, ci-msrv, ci-audit and release-artifacts preserve their former required
 check selections. Shared native validation, tooling regression and dependency
 audit rules use rule sets; remaining rules have their own run_at. The frozen
-self-governance-v2 fixture records pre-migration commands/settings and selections.
+self-governance fixture records the published governor's required checks and selections.
 Checks remain mandatory and no reviews are enabled. Missing tools and errors
 block success. Setup, dependency installation and release publication remain
 outside rule execution.
@@ -356,7 +298,7 @@ hooks noninteractively. Reports use schema 3 and a companion execution record
 stores governor version/digest, execution point, checked commit and exit code.
 See [repository self-integration](docs/self-governance.md) for coverage and setup.
 
-Git hooks are declared in version-3 configuration and reconciled only after explicit confirmation. A bypassable
+Git hooks are declared in project configuration and reconciled only after explicit confirmation. A bypassable
 local hook verifies working files, not necessarily the pushed commit. Hosted
 Codex authentication is not provisioned and personal tokens are not copied to CI.
 No hosted service, database, autonomous development, universal policy engine,
@@ -381,7 +323,7 @@ writes. Without the flag, noninteractive drift still exits 2. CI can run this
 command once before `mach was --at NAME`; execution itself has no auto-approval.
 Acceptance: `tests/reconciliation.rs::auto_approve_reconciles_noninteractively_without_executing_rules`.
 
-Version 3 optionally maps hooks.git keys pre-commit, commit-msg, pre-push to
+Project configuration optionally maps hooks.git keys pre-commit, commit-msg, pre-push to
 known execution points. Unknown events, duplicate mappings, invalid values and
 unknown points fail full validation. Existing generated wrappers are reconciled
 to --at without changing ownership or confirmation behavior.
@@ -421,17 +363,6 @@ maintaining independent TOML templates. README defaults, limits and scaffold
 examples are checked against those values. Validation, planning and execution
 reuse the same bounds; this does not add configurable fields or change defaults.
 
-## COMPAT-001: Versioned compatibility evidence
-
-Keep immutable configuration/report fixtures from historical source versions.
-Current code must read supported reports and compatible configuration fields
-without silently changing their meaning. The command-string change intentionally
-rejects historical array commands in versions 1 and 2; keep frozen arrays as
-rejection evidence, while historical reports remain readable. Tests may substitute
-repository installation identity, not synthesize
-old field sets by serializing current structs. Preserve old fixtures when adding
-a new version; deliberate breaking changes require an explicit specification.
-
 ## DOC-001: Documentation contract
 
 Every editable configuration field, required/optional marker and default must
@@ -446,24 +377,23 @@ Each essential requirement has a stable ID and representative acceptance tests.
 The table is a navigation aid, not a claim that one test proves every clause.
 Add or update the contract and acceptance cases before implementing behavior;
 update the README/examples and relevant design decisions in the same coherent
-change. Preserve versioned compatibility, run applicable checks, then commit/push.
+change. Keep one coherent configuration model and run applicable checks. Follow the user's Git instructions.
 Public documentation explains supported behavior; proposals remain in the roadmap.
 
 | Requirement | Representative acceptance test |
 | --- | --- |
 | EXT-001 | `tests/external_rule_sets.rs::branch_tag_and_full_commit_share_one_immutable_revision` |
-| RULE-001 | `tests/execution_points.rs::resolution_obeys_active_membership_override_union_and_disabled_rules` |
+| RULE-001 | `tests/execution_points.rs::resolution_obeys_membership_override_union_and_disabled_rules` |
 | REC-001 | `tests/reconciliation.rs::approval_updates_removals_and_idempotency` |
-| ARC-001 | `tests/documentation.rs::documented_bounds_and_provider_scaffold_match_the_implementation` |
-| COMPAT-001 | `tests/compatibility.rs::historical_configs_are_rejected_but_reports_remain_readable` |
+| ARC-001 | `tests/documentation.rs::documented_provider_scaffold_matches_the_implementation` |
 | DOC-001 | `tests/documentation.rs::every_configuration_field_required_marker_and_default_is_documented` |
 | CLI-001 | `tests/acceptance.rs::all_command_paths_and_standard_help` |
-| CFG-001 | `tests/acceptance.rs::validation_rejects_invalid_including_disabled` |
-| SEL-001 | `tests/execution_points.rs::checks_only_cannot_shrink_an_execution_point_and_validation_does_not_repair` |
-| CHK-001 | `tests/check_commands.rs::pass_auf_rejects_invalid_commands_even_when_disabled_without_execution` |
+| CFG-001 | `tests/configuration.rs::strict_configuration_and_implementation_validation` |
+| SEL-001 | `tests/configuration.rs::checks_only_requires_complete_selection` |
+| CHK-001 | `tests/configuration.rs::direct_and_interpreter_execution_keep_consumer_and_resources` |
 | REV-001 | `tests/acceptance.rs::lean_review_transport_disables_unlisted_mcp_and_honors_model_profile_and_allowlist` |
-| PREP-001 | `tests/execution_points.rs::prepared_input_is_shared_with_the_provider_without_rereading_context` |
+| PREP-001 | `tests/configuration.rs::prepared_input_is_shared_without_rereading_resources` |
 | OUT-001 | `tests/review_contract.rs::review_contract_enforces_boundaries_and_semantic_evidence_locally` |
 | INP-001 | `tests/acceptance.rs::changing_files_during_checks_blocks_pass` |
-| RPT-001 | `tests/execution_points.rs::saved_reports_reject_missing_coverage_and_plan_metadata` |
+| RPT-001 | `tests/configuration.rs::saved_reports_reject_inconsistent_metadata` |
 | REL-001 | `scripts/test-release.py::test_ci_policy_checks_new_messages_without_rejecting_legacy_history` |

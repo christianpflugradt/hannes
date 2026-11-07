@@ -1,4 +1,3 @@
-mod check_command;
 pub mod checks;
 pub mod cli;
 pub mod config;
@@ -181,7 +180,7 @@ pub fn verify_project_with_context(
         ));
     }
     if !active.is_empty() {
-        if items.iter().all(|i| i.status == Status::Pass) {
+        if report::overall(&items) == Status::Pass {
             progress(Progress::Phase(
                 "Arbeitsdateien vor dem Codex-Aufruf vergleichen …",
             ));
@@ -189,7 +188,7 @@ pub fn verify_project_with_context(
                 items.push(error);
             }
         }
-        if items.iter().all(|i| i.status == Status::Pass) {
+        if report::overall(&items) == Status::Pass {
             progress(Progress::ReviewBatch {
                 count: active.len(),
                 timeout_seconds: project.provider.timeout_seconds,
@@ -246,8 +245,13 @@ pub fn verify_project_with_context(
             items.push(error);
         }
     }
+    for item in &mut items {
+        if let Some(rule) = plan.scheduled.iter().find(|r| r.id == item.id) {
+            item.blocking = rule.blocking;
+        }
+    }
     let report = Report {
-        schema_version: 3,
+        schema_version: 4,
         timestamp: chrono::Utc::now().to_rfc3339(),
         repository: project.root.to_string_lossy().into_owned(),
         project: project.config.project,
@@ -266,7 +270,7 @@ pub fn verify_project_with_context(
         token_usage: provider_usage.and_then(report::TokenUsage::total),
         provider_usage,
         checks_only,
-        plan: Some(plan),
+        plan,
     };
     progress(Progress::Phase("Report speichern …"));
     report::write(&project.root, &report)?;

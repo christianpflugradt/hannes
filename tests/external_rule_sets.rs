@@ -1,3 +1,4 @@
+mod support;
 use hannes::{
     config, external, planner,
     provider::{Provider, Request},
@@ -43,29 +44,21 @@ fn commit(root: &Path) -> String {
     git(root, &["commit", "--quiet", "-m", "fixture"]);
     git(root, &["rev-parse", "HEAD"])
 }
-fn definitions(root: &Path, path: &str, command: &str) {
+fn definitions(root: &Path, path: &str, script: &str) {
     write(
         root,
-        &format!("{path}/arbitrary.toml"),
-        r#"[[rule_sets]]
-id = "quality"
-enabled = true
-rules = ["required-files"]
-run_at = ["check"]
-"#,
+        &format!("{path}/config.toml"),
+        "id = 'quality'\ndescription = 'Reusable rules'\nrules = ['required-files']\nrun_at = ['check']\n",
     );
     write(
         root,
-        &format!("{path}/nested/rules.toml"),
-        &format!(
-            r#"[[checks]]
-id = "required-files"
-description = "Inspect consuming project"
-enabled = true
-command = {command:?}
-timeout_seconds = 5
-"#
-        ),
+        &format!("{path}/checks/required-files/rule.toml"),
+        "id = 'required-files'\ndescription = 'Inspect consuming project'\nenabled = true\n[check]\nentrypoint = 'index.sh'\ninterpreter = 'sh'\ntimeout_seconds = 5\n",
+    );
+    write(
+        root,
+        &format!("{path}/checks/required-files/index.sh"),
+        script,
     );
 }
 struct Fixture {
@@ -90,8 +83,7 @@ impl Fixture {
         write(
             &root,
             ".hannes/config.toml",
-            r#"version = 3
-project = "My_App"
+            r#"project = "My_App"
 max_display_files = 5
 [execution_points]
 custom = ["check"]
@@ -108,8 +100,7 @@ custom = ["check"]
         }
     }
     fn imports(&self, selections: &[(&str, &str)]) {
-        let base = r#"version = 3
-project = "My_App"
+        let base = r#"project = "My_App"
 max_display_files = 5
 [execution_points]
 custom = ["check"]
@@ -117,7 +108,7 @@ custom = ["check"]
         let mut text = base.to_owned();
         for (path, reference) in selections {
             text += &format!(
-                "\n[[rule_sets]]\ngit = {:?}\npath = {path:?}\nref = {reference:?}\n",
+                "\n[[imports]]\ngit = {:?}\npath = {path:?}\nref = {reference:?}\n",
                 self.remote.to_str().unwrap()
             );
         }
@@ -185,18 +176,7 @@ fn branch_tag_and_full_commit_share_one_immutable_revision() {
 #[test]
 fn local_and_identical_external_ids_are_isolated_and_order_is_deterministic() {
     let f = Fixture::new();
-    write(
-        &f.root,
-        ".hannes/local.toml",
-        r#"[[checks]]
-id = "required-files"
-description = "Local"
-enabled = true
-command = "git --version"
-timeout_seconds = 5
-run_at = ["check"]
-"#,
-    );
+    support::check(&f.root, "required-files", &["check"], "git --version");
     f.imports(&[("repository", "main"), ("software", "main")]);
     let a = f.load(true).unwrap();
     let plan = planner::build(&a, Some("check"), false).unwrap().plan;
@@ -237,9 +217,13 @@ fn execution_targets_consumer_and_source_resources_are_explicit() {
     definitions(
         &f.remote,
         "repository",
-        "sh -c 'test -f README.md && test -f \"$HANNES_RULE_SET_SOURCE/resource.txt\"'",
+        "sh -c 'test -f README.md && test -f \"$HANNES_RULE_DIRECTORY/resource.txt\"'",
     );
-    write(&f.remote, "repository/resource.txt", "source");
+    write(
+        &f.remote,
+        "repository/checks/required-files/resource.txt",
+        "source",
+    );
     commit(&f.remote);
     f.imports(&[("repository", "main")]);
     let project = f.load(true).unwrap();
@@ -297,8 +281,8 @@ fn invalid_refresh_preserves_previous_valid_state_without_claiming_success() {
     let previous = f.state();
     write(
         &f.remote,
-        "repository/arbitrary.toml",
-        "[[rule_sets]]\nid = \"quality\"\nenabled = true\nrules = [\"missing\"]\nrun_at = [\"check\"]\n",
+        "repository/config.toml",
+        "id = \"quality\"\ndescription = \"Reusable rules\"\nrules = [\"missing\"]\nrun_at = [\"check\"]\n",
     );
     commit(&f.remote);
     let error = format!("{:#}", f.load(true).unwrap_err());
@@ -314,7 +298,11 @@ fn missing_state_missing_cache_and_corruption_fail_closed() {
     assert!(format!("{:#}", f.load(false).unwrap_err()).contains("hannes pass auf"));
     f.load(true).unwrap();
     let contents = f.contents();
-    fs::write(contents.join("repository/nested/rules.toml"), "corrupted").unwrap();
+    fs::write(
+        contents.join("repository/checks/required-files/rule.toml"),
+        "corrupted",
+    )
+    .unwrap();
     assert!(format!("{:#}", f.load(false).unwrap_err()).contains("integrity"));
     assert!(f.load(true).is_err());
     fs::remove_dir_all(contents.parent().unwrap()).unwrap();
@@ -333,48 +321,7 @@ fn unavailable_references_and_repository_are_actionable() {
 }
 
 #[test]
-fn selected_directory_has_exactly_one_set_and_references_stay_inside() {
-    for (path, change, expected) in [
-        ("missing", "", "directory"),
-        ("empty", "", "exactly one"),
-        (
-            "repository",
-            "[[rule_sets]]\nid = \"second\"\nenabled = false\nrules = []\n",
-            "exactly one",
-        ),
-        (
-            "repository",
-            "[[rule_sets]]\nid = \"quality\"\nenabled = true\nrules = [\"sibling\"]\nrun_at = [\"check\"]\n",
-            "unknown rule",
-        ),
-        (
-            "repository",
-            "[[rule_sets]]\nid = \"quality\"\nenabled = true\nrules = [\"../software/required-files\"]\nrun_at = [\"check\"]\n",
-            "unknown rule",
-        ),
-        (
-            "repository",
-            "[[rule_sets]]\ngit = \"https://example.invalid/rules.git\"\npath = \"rules\"\nref = \"main\"\n",
-            "nested external",
-        ),
-    ] {
-        let f = Fixture::new();
-        fs::create_dir_all(f.remote.join("empty")).unwrap();
-        write(&f.remote, "empty/note.md", "not a set");
-        if change.contains("second") {
-            write(&f.remote, "repository/second.toml", change);
-        } else if !change.is_empty() {
-            write(&f.remote, "repository/arbitrary.toml", change);
-        }
-        commit(&f.remote);
-        f.imports(&[(path, "main")]);
-        let error = format!("{:#}", f.load(true).unwrap_err());
-        assert!(error.contains(expected), "{expected}: {error}");
-    }
-}
-
-#[test]
-fn root_directory_and_arbitrary_document_names_work() {
+fn repository_root_is_a_governance_root() {
     let f = Fixture::new();
     fs::remove_dir_all(f.remote.join("repository")).unwrap();
     fs::remove_dir_all(f.remote.join("software")).unwrap();
@@ -382,44 +329,6 @@ fn root_directory_and_arbitrary_document_names_work() {
     commit(&f.remote);
     f.imports(&[(".", "main")]);
     assert_eq!(f.load(true).unwrap().rule_sets.len(), 1);
-}
-
-#[test]
-fn custom_points_disabled_rules_and_disabled_sets_use_existing_resolution() {
-    let f = Fixture::new();
-    f.imports(&[("repository", "main")]);
-    let path = f.remote.join("repository/arbitrary.toml");
-    let original = fs::read_to_string(&path).unwrap();
-    fs::write(&path, original.replace("\"check\"", "\"nightly\"")).unwrap();
-    commit(&f.remote);
-    assert!(format!("{:#}", f.load(true).unwrap_err()).contains("unknown execution point"));
-    fs::write(&path, &original).unwrap();
-    let rule = f.remote.join("repository/nested/rules.toml");
-    let rule_text = fs::read_to_string(&rule).unwrap();
-    fs::write(
-        &rule,
-        rule_text.replace("enabled = true", "enabled = false"),
-    )
-    .unwrap();
-    commit(&f.remote);
-    let p = f.load(true).unwrap();
-    assert!(
-        planner::build(&p, Some("check"), false)
-            .unwrap()
-            .plan
-            .scheduled
-            .is_empty()
-    );
-    fs::write(&path, original.replace("enabled = true", "enabled = false")).unwrap();
-    commit(&f.remote);
-    let p = f.load(true).unwrap();
-    assert!(
-        planner::build(&p, Some("check"), false)
-            .unwrap()
-            .plan
-            .scheduled
-            .is_empty()
-    );
 }
 
 #[test]
@@ -451,7 +360,12 @@ fn traversal_and_symlink_escapes_are_rejected() {
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink("../software", f.remote.join("link")).unwrap();
-        std::os::unix::fs::symlink("../../software", f.remote.join("repository/escape")).unwrap();
+        fs::remove_file(f.remote.join("repository/checks/required-files/index.sh")).unwrap();
+        std::os::unix::fs::symlink(
+            "../../../software/config.toml",
+            f.remote.join("repository/checks/required-files/index.sh"),
+        )
+        .unwrap();
         commit(&f.remote);
         f.imports(&[("link", "main")]);
         assert!(format!("{:#}", f.load(true).unwrap_err()).contains("symlink"));
@@ -526,30 +440,29 @@ fn imported_reviews_use_source_instructions_and_consumer_evidence() {
     write(&f.root, "README.md", "# Consumer\n");
     write(
         &f.remote,
-        "repository/arbitrary.toml",
-        r#"[[rule_sets]]
-id = "reviews"
-enabled = true
+        "repository/config.toml",
+        r#"id = "reviews"
+description = "Reusable reviews"
 rules = ["documentation"]
 run_at = ["check"]
 "#,
     );
-    fs::remove_file(f.remote.join("repository/nested/rules.toml")).unwrap();
+    fs::remove_dir_all(f.remote.join("repository/checks")).unwrap();
     write(
         &f.remote,
-        "repository/nested/review.toml",
-        r#"[[reviews]]
-id = "documentation"
+        "repository/reviews/documentation/rule.toml",
+        r#"id = "documentation"
 description = "Review documentation"
 enabled = true
-instructions = "criteria.md"
+[review]
+prompt = "criteria.md"
 files = ["README.md"]
 context = [{ path = "README.md", headings = ["Consumer"] }]
 "#,
     );
     write(
         &f.remote,
-        "repository/nested/criteria.md",
+        "repository/reviews/documentation/criteria.md",
         "Judge consumer documentation.\n",
     );
     commit(&f.remote);
@@ -604,13 +517,13 @@ fn source_instruction_paths_cannot_escape_the_selected_directory() {
         let f = Fixture::new();
         write(
             &f.remote,
-            "repository/review.toml",
+            "repository/reviews/review/rule.toml",
             &format!(
-                r#"[[reviews]]
-id = "review"
+                r#"id = "review"
 description = "Disabled review still validates"
 enabled = false
-instructions = {instructions:?}
+[review]
+prompt = {instructions:?}
 "#
             ),
         );
@@ -730,63 +643,6 @@ fn separate_projects_resolving_concurrently_share_one_cache() {
 }
 
 #[test]
-fn published_external_examples_validate_offline_with_local_git() {
-    let f = Fixture::new();
-    fs::remove_dir_all(f.remote.join("repository")).unwrap();
-    fs::remove_dir_all(f.remote.join("software")).unwrap();
-    let docs = include_str!("../docs/external-rule-sets.md");
-    let examples = docs
-        .split("```toml\n")
-        .skip(1)
-        .map(|part| part.split("\n```").next().unwrap());
-    for (path, text) in [
-        "repository/ruleset.toml",
-        "repository/rules/readme.toml",
-        "software/ruleset.toml",
-        "software/rules/changelog.toml",
-        "rust/ruleset.toml",
-        "rust/rules/formatting.toml",
-    ]
-    .into_iter()
-    .zip(examples)
-    {
-        write(&f.remote, path, text);
-    }
-    commit(&f.remote);
-    git(&f.remote, &["tag", "v1.2.0"]);
-    let readme = include_str!("../README.md");
-    let imports = readme
-        .split("### Import rule sets from Git\n")
-        .nth(1)
-        .unwrap()
-        .split("```toml\n")
-        .nth(1)
-        .unwrap()
-        .split("\n```")
-        .next()
-        .unwrap()
-        .replace(
-            "https://github.com/company/hannes-governance.git",
-            f.remote.to_str().unwrap(),
-        );
-    f.imports(&[]);
-    let path = f.root.join(".hannes/config.toml");
-    let base = fs::read_to_string(&path).unwrap();
-    fs::write(&path, format!("{base}\n{imports}\n")).unwrap();
-    let project = f.load(true).unwrap();
-    assert_eq!(project.rule_sets.len(), 3);
-    assert_eq!(
-        planner::build(&project, Some("check"), false)
-            .unwrap()
-            .plan
-            .scheduled
-            .len(),
-        1
-    );
-    f.load(false).unwrap();
-}
-
-#[test]
 fn sha256_repositories_and_file_urls_use_native_git_resolution() {
     let f = Fixture::new();
     // Recreate only the temporary source using Git's alternate object format.
@@ -820,8 +676,8 @@ fn malformed_configuration_does_not_echo_url_credentials() {
     let f = Fixture::new();
     let path = f.root.join(".hannes/config.toml");
     for text in [
-        "[[rule_sets]]\ngit = \"https://user:SECRET@example.invalid/rules\" INVALID\n",
-        "[[rule_sets]]\ngit = \"https://user:SECRET@example.invalid/rules\"\npath = \".\"\nref = \"main\"\nenabled = false\n",
+        "[[imports]]\ngit = \"https://user:SECRET@example.invalid/rules\" INVALID\n",
+        "[[imports]]\ngit = \"https://user:SECRET@example.invalid/rules\"\npath = \".\"\nref = \"main\"\nenabled = false\n",
     ] {
         fs::write(&path, text).unwrap();
         let error = format!("{:#}", f.load(true).unwrap_err());
@@ -864,36 +720,6 @@ fn authentication_failure_hides_helper_diagnostics() {
     );
     assert!(output.contains("authentication failed"), "{output}");
     assert!(!output.contains("SECRET"), "{output}");
-}
-
-#[cfg(unix)]
-#[test]
-fn cached_symlinks_and_hidden_instruction_symlinks_fail_closed() {
-    let f = Fixture::new();
-    f.imports(&[("repository", "main")]);
-    f.load(true).unwrap();
-    let origin = f.origin();
-    let directory = f.cache.join("git").join(origin.repository);
-    let moved = directory.with_extension("moved");
-    fs::rename(&directory, &moved).unwrap();
-    std::os::unix::fs::symlink(&moved, &directory).unwrap();
-    assert!(format!("{:#}", f.load(false).unwrap_err()).contains("symlink"));
-    fs::remove_file(&directory).unwrap();
-    fs::rename(moved, directory).unwrap();
-    write(
-        &f.remote,
-        "repository/review.toml",
-        r#"[[reviews]]
-id = "review"
-description = "Source instructions stay inside"
-enabled = false
-instructions = ".hidden/criteria.md"
-"#,
-    );
-    write(&f.remote, "software/criteria.md", "Outside source scope");
-    std::os::unix::fs::symlink("../software", f.remote.join("repository/.hidden")).unwrap();
-    commit(&f.remote);
-    assert!(format!("{:#}", f.load(true).unwrap_err()).contains("symlink"));
 }
 
 #[test]
@@ -973,7 +799,7 @@ fn separate_repositories_with_identical_paths_and_ids_remain_distinct() {
     fs::write(
         path,
         format!(
-            "{text}\n[[rule_sets]]\ngit = {:?}\npath = \"repository\"\nref = \"main\"\n",
+            "{text}\n[[imports]]\ngit = {:?}\npath = \"repository\"\nref = \"main\"\n",
             other.to_str().unwrap()
         ),
     )

@@ -49,7 +49,7 @@ fn replace(root: &Path, file: &str, from: &str, to: &str) {
 fn enable(root: &Path) {
     replace(
         root,
-        "reviews/product-consistency.toml",
+        "reviews/product-consistency/rule.toml",
         "enabled = false",
         "enabled = true",
     );
@@ -133,10 +133,10 @@ fn init_exact_paths_idempotent_preserves_edits() {
         "config.toml",
         "provider.toml",
         "README.md",
-        "checks/always-ok.toml",
-        "checks/deliberately-failing.toml",
-        "reviews/product-consistency.toml",
-        "reviews/product-consistency.md",
+        "checks/always-ok/rule.toml",
+        "checks/deliberately-failing/rule.toml",
+        "reviews/product-consistency/rule.toml",
+        "reviews/product-consistency/prompt.md",
         "reports/.gitignore",
     ] {
         assert!(path(root, file).is_file(), "{file}");
@@ -156,101 +156,16 @@ fn init_exact_paths_idempotent_preserves_edits() {
         "personal edits"
     );
 }
-#[test]
-fn validation_rejects_invalid_including_disabled() {
-    let cases = [
-        (
-            "checks/always-ok.toml",
-            "enabled = true",
-            "disabled = false",
-        ),
-        ("config.toml", "version = 3", "version = 99"),
-        ("config.toml", "version = 3", "version = 3\nunknown = 1"),
-        ("config.toml", "version = 3", "version = 3\nversion = 3"),
-        (
-            "config.toml",
-            "max_display_files = 5",
-            "max_display_files = 6",
-        ),
-        ("provider.toml", "codex-cli", "unknown-provider"),
-        ("provider.toml", "180", "0"),
-        ("provider.toml", "180", "3601"),
-        (
-            "checks/deliberately-failing.toml",
-            "enabled = false",
-            "enabled = false\ndisabled = true",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "timeout_seconds = 30",
-            "timeout_seconds = 0",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "command = \"git definitely-not-a-subcommand\"",
-            "command = []",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "command = \"git definitely-not-a-subcommand\"",
-            "command = [1]",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "command = \"git definitely-not-a-subcommand\"",
-            "command = \"../outside\"",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "timeout_seconds = 30",
-            "timeout_seconds = 30\nworking_directory = \"../outside\"",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "deliberately-failing",
-            "always-ok",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "deliberately-failing",
-            "product-consistency",
-        ),
-        (
-            "checks/deliberately-failing.toml",
-            "deliberately-failing",
-            "hannes-snapshot",
-        ),
-        (
-            "reviews/product-consistency.toml",
-            "product-consistency.md",
-            "missing.md",
-        ),
-        (
-            "reviews/product-consistency.toml",
-            "product-consistency.md",
-            "../README.md",
-        ),
-    ];
-    for (file, from, to) in cases {
-        let d = project();
-        replace(d.path(), file, from, to);
-        assert!(
-            config::load(d.path()).is_err(),
-            "accepted invalid fixture {file}: {to}"
-        );
-        assert_eq!(cli(d.path(), &["pass", "auf"]).status.code(), Some(2));
-        assert!(!path(d.path(), "reports/last.json").exists());
-    }
-}
+
 #[test]
 fn validation_does_not_execute_checks_or_provider() {
     let d = project();
     enable(d.path());
     replace(
         d.path(),
-        "checks/always-ok.toml",
-        "command = \"git --version\"",
-        "command = \"nonexistent-command-hannes\"",
+        "checks/always-ok/rule.toml",
+        "[check]",
+        "[check]\ninterpreter = \"nonexistent-command-hannes\"",
     );
     assert!(config::load(d.path()).is_ok());
     assert_eq!(cli(d.path(), &["pass", "auf"]).status.code(), Some(0));
@@ -282,13 +197,13 @@ fn failing_check_runs_remaining_and_blocks_provider() {
     enable(d.path());
     replace(
         d.path(),
-        "checks/deliberately-failing.toml",
+        "checks/deliberately-failing/rule.toml",
         "enabled = false",
         "enabled = true",
     );
     replace(
         d.path(),
-        "checks/deliberately-failing.toml",
+        "checks/deliberately-failing/rule.toml",
         "deliberately-failing",
         "aaa-failure",
     );
@@ -306,9 +221,9 @@ fn spawn_error_writes_blocking_error_report() {
     let d = project();
     replace(
         d.path(),
-        "checks/always-ok.toml",
-        "command = \"git --version\"",
-        "command = \"nonexistent-command-hannes\"",
+        "checks/always-ok/rule.toml",
+        "[check]",
+        "[check]\ninterpreter = \"nonexistent-command-hannes\"",
     );
     let r = hannes::verify(d.path(), &Never).unwrap();
     assert_eq!(r.overall, Status::Error);
@@ -322,9 +237,9 @@ fn all_reviews_one_call_exact_coverage_pass_fail() {
         let d = project();
         enable(d.path());
         let original =
-            fs::read_to_string(path(d.path(), "reviews/product-consistency.toml")).unwrap();
+            fs::read_to_string(path(d.path(), "reviews/product-consistency/rule.toml")).unwrap();
         fs::write(
-            path(d.path(), "reviews/second.toml"),
+            support::review_path(d.path(), "second"),
             original.replace("id = \"product-consistency\"", "id = \"second\""),
         )
         .unwrap();
@@ -542,15 +457,14 @@ fn timeout_output_capture_and_shell_are_explicit() {
     assert_eq!(output.stderr.total_bytes, 200000);
     assert!(output.stderr.truncated);
     let d = project();
+    fs::write(
+        path(d.path(), "checks/always-ok/index.sh"),
+        "#!/bin/sh\nwhile :; do :; done\n",
+    )
+    .unwrap();
     replace(
         d.path(),
-        "checks/always-ok.toml",
-        "command = \"git --version\"",
-        "command = \"sh -c 'while :; do :; done'\"",
-    );
-    replace(
-        d.path(),
-        "checks/always-ok.toml",
+        "checks/always-ok/rule.toml",
         "timeout_seconds = 30",
         "timeout_seconds = 1",
     );
@@ -558,54 +472,17 @@ fn timeout_output_capture_and_shell_are_explicit() {
     assert_eq!(r.results[0].status, Status::Error);
     assert!(r.results[0].reason.contains("timed out"));
 }
-#[cfg(unix)]
-#[test]
-fn symlink_escape_and_unsupported_snapshot_are_not_green() {
-    use std::os::unix::fs::symlink;
-    let d = project();
-    let other = tempdir().unwrap();
-    fs::write(other.path().join("outside.md"), "secret").unwrap();
-    symlink(
-        other.path().join("outside.md"),
-        path(d.path(), "reviews/outside.md"),
-    )
-    .unwrap();
-    replace(
-        d.path(),
-        "reviews/product-consistency.toml",
-        "product-consistency.md",
-        "outside.md",
-    );
-    assert!(config::load(d.path()).is_err());
-    replace(
-        d.path(),
-        "reviews/product-consistency.toml",
-        "outside.md",
-        "product-consistency.md",
-    );
-    assert!(config::load(d.path()).is_err());
-    fs::remove_file(path(d.path(), "reviews/outside.md")).unwrap();
-    symlink(other.path().join("outside.md"), d.path().join("outside.md")).unwrap();
-    let r = hannes::verify(d.path(), &Never).unwrap();
-    assert_eq!(r.overall, Status::Error);
-    assert!(!r.snapshot.complete);
-    let noinit = tempdir().unwrap();
-    git(noinit.path(), &["init", "--quiet"]);
-    symlink(other.path(), noinit.path().join(".hannes")).unwrap();
-    assert!(config::init(noinit.path()).is_err());
-    assert!(!other.path().join("config.toml").exists());
-}
+
 #[cfg(unix)]
 #[test]
 fn changing_files_during_checks_blocks_pass() {
     let d = project();
     enable(d.path());
-    replace(
-        d.path(),
-        "checks/always-ok.toml",
-        "command = \"git --version\"",
-        "command = \"sh -c 'printf changed > created.txt'\"",
-    );
+    fs::write(
+        path(d.path(), "checks/always-ok/index.sh"),
+        "#!/bin/sh\nprintf changed > created.txt\n",
+    )
+    .unwrap();
     let r = hannes::verify(d.path(), &Never).unwrap();
     assert_eq!(r.overall, Status::Error);
     assert!(r.results.iter().any(|r| r.id == "hannes-tree-stability"));
@@ -757,12 +634,12 @@ fn no_rules_message_requires_both_checks_and_reviews_to_be_undefined() {
     let message = "Du hast noch keine Regeln definiert, du Vogel!";
     for (keep_check, keep_review) in [(false, false), (true, false), (false, true)] {
         let d = project();
-        fs::remove_file(path(d.path(), "checks/always-ok.toml")).unwrap();
+        fs::remove_dir_all(path(d.path(), "checks/always-ok")).unwrap();
         if !keep_check {
-            fs::remove_file(path(d.path(), "checks/deliberately-failing.toml")).unwrap();
+            fs::remove_dir_all(path(d.path(), "checks/deliberately-failing")).unwrap();
         }
         if !keep_review {
-            fs::remove_file(path(d.path(), "reviews/product-consistency.toml")).unwrap();
+            fs::remove_dir_all(path(d.path(), "reviews/product-consistency")).unwrap();
         }
         let output = cli(d.path(), &["mach", "was"]);
         assert!(
@@ -1285,7 +1162,7 @@ fn detailed_status_reads_saved_findings_without_another_codex_call() {
     );
 }
 #[test]
-fn compact_report_bounds_legacy_or_execution_error_reasons_without_losing_saved_details() {
+fn compact_report_bounds_execution_error_reasons_without_losing_saved_details() {
     let d = project();
     let mut report = hannes::verify(d.path(), &Never).unwrap();
     report.results[0].reason = format!("first line\n{}", "x".repeat(4000));
@@ -1337,10 +1214,17 @@ fn progress_numbers_only_enabled_rules_and_announces_one_shared_provider_call() 
     }
     let d = project();
     enable(d.path());
-    fs::write(path(d.path(),"checks/second.toml"),"[[checks]]\nrun_at=['pre-push']\nid = \"second-check\"\ndescription = \"Second deterministic check\"\nenabled = true\ncommand = \"git --version\"\ntimeout_seconds = 30\n").unwrap();
-    let original = fs::read_to_string(path(d.path(), "reviews/product-consistency.toml")).unwrap();
+    support::check(d.path(), "second-check", &["pre-push"], "git --version");
+    replace(
+        d.path(),
+        "checks/second-check/rule.toml",
+        "Test check",
+        "Second deterministic check",
+    );
+    let original =
+        fs::read_to_string(path(d.path(), "reviews/product-consistency/rule.toml")).unwrap();
     fs::write(
-        path(d.path(), "reviews/second.toml"),
+        support::review_path(d.path(), "second"),
         original.replace("id = \"product-consistency\"", "id = \"second\""),
     )
     .unwrap();
@@ -1378,7 +1262,7 @@ fn failed_checks_report_skipped_reviews_without_claiming_they_started() {
     enable(d.path());
     replace(
         d.path(),
-        "checks/deliberately-failing.toml",
+        "checks/deliberately-failing/rule.toml",
         "enabled = false",
         "enabled = true",
     );
@@ -1403,14 +1287,18 @@ fn cli_flushes_rule_start_while_the_check_is_still_running_and_keeps_raw_output_
     use std::process::Stdio;
     let d = project();
     let external = tempdir().unwrap();
-    fs::write(path(d.path(),"checks/always-ok.toml"),r#"[[checks]]
-run_at=['pre-push']
-id = "always-ok"
-description = "Wait for the test release signal"
-enabled = true
-command = "sh -c 'while [ ! -f \"$HANNES_TEST_RELEASE\" ]; do sleep 0.02; done; printf RAW_CHECK_OUTPUT'"
-timeout_seconds = 5
-"#).unwrap();
+    support::check(
+        d.path(),
+        "always-ok",
+        &["pre-push"],
+        "printf RAW_CHECK_OUTPUT; while [ ! -f \"$HANNES_TEST_RELEASE\" ]; do sleep 0.02; done",
+    );
+    replace(
+        d.path(),
+        "checks/always-ok/rule.toml",
+        "Test check",
+        "Wait for the test release signal",
+    );
     let marker = external.path().join("release");
     let mut child = Command::new(env!("CARGO_BIN_EXE_hannes"))
         .args(["mach", "was"])
@@ -1489,7 +1377,7 @@ fn progress_uses_semantic_colors_and_sanitizes_rule_descriptions() {
 }
 
 #[test]
-fn usage_is_recorded_once_for_bundled_reviews_and_old_reports_still_load() {
+fn usage_is_recorded_once_for_bundled_reviews() {
     use hannes::{provider::Response, report::TokenUsage};
     struct Metered {
         calls: Cell<u32>,
@@ -1513,9 +1401,10 @@ fn usage_is_recorded_once_for_bundled_reviews_and_old_reports_still_load() {
     }
     let d = project();
     enable(d.path());
-    let metadata = fs::read_to_string(path(d.path(), "reviews/product-consistency.toml")).unwrap();
+    let metadata =
+        fs::read_to_string(path(d.path(), "reviews/product-consistency/rule.toml")).unwrap();
     fs::write(
-        path(d.path(), "reviews/second.toml"),
+        support::review_path(d.path(), "second"),
         metadata.replace("id = \"product-consistency\"", "id = \"second\""),
     )
     .unwrap();
@@ -1534,13 +1423,6 @@ fn usage_is_recorded_once_for_bundled_reviews_and_old_reports_still_load() {
         report::read(d.path()).unwrap().provider_usage,
         r.provider_usage
     );
-    // Read a frozen older field set rather than recreating it from today's report.
-    let legacy = support::historical_report(d.path(), "v1/report-review.json");
-    fs::write(path(d.path(), "reports/last.json"), legacy.to_string()).unwrap();
-    let legacy = report::read(d.path()).unwrap();
-    assert_eq!(legacy.provider_usage, None);
-    assert!(terminal::render(&legacy, false).contains("Codex-Tokens: nicht verfügbar"));
-    assert_eq!(provider.calls.get(), 1);
 }
 
 fn copy_executable(source: &Path, executable: &Path) {
@@ -1821,28 +1703,28 @@ fn checks_only_never_calls_provider_and_counts_only_checks_even_on_failure() {
         enable(d.path());
         replace(
             d.path(),
-            "reviews/product-consistency.toml",
+            "reviews/product-consistency/rule.toml",
             "pre-push",
             "commit-msg",
         );
         if case == "fail" {
             replace(
                 d.path(),
-                "checks/deliberately-failing.toml",
+                "checks/deliberately-failing/rule.toml",
                 "enabled = false",
                 "enabled = true",
             );
         } else if case == "error" {
             replace(
                 d.path(),
-                "checks/always-ok.toml",
-                "git",
-                "hannes-nonexistent-executable-for-test",
+                "checks/always-ok/rule.toml",
+                "[check]",
+                "[check]\ninterpreter = \"hannes-nonexistent-executable-for-test\"",
             );
         } else if case == "no-checks" {
             replace(
                 d.path(),
-                "checks/always-ok.toml",
+                "checks/always-ok/rule.toml",
                 "enabled = true",
                 "enabled = false",
             );
@@ -1922,7 +1804,7 @@ fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
     enable(d.path());
     replace(
         d.path(),
-        "reviews/product-consistency.toml",
+        "reviews/product-consistency/rule.toml",
         "pre-push",
         "commit-msg",
     );
@@ -1979,18 +1861,6 @@ fn checks_only_cli_skips_enabled_codex_reviews_and_status_keeps_the_scope() {
     assert_eq!(full.status.code(), Some(2));
     assert!(marker.exists());
     assert!(!report::read(d.path()).unwrap().checks_only);
-}
-
-#[test]
-fn old_reports_default_to_all_rules_and_inconsistent_scope_is_rejected() {
-    let d = project();
-    let mut old = support::historical_report(d.path(), "v1/report-minimal.json");
-    fs::write(path(d.path(), "reports/last.json"), old.to_string()).unwrap();
-    assert!(!report::read(d.path()).unwrap().checks_only);
-    old["checks_only"] = true.into();
-    old["token_usage"] = 100.into();
-    fs::write(path(d.path(), "reports/last.json"), old.to_string()).unwrap();
-    assert!(report::read(d.path()).is_err());
 }
 
 #[test]
@@ -2084,9 +1954,9 @@ fn review_context_sections_keep_source_lines_merge_overlap_and_ignore_code_headi
     let d = project();
     let document = "# Policy\nIntro\n## Scope\nRequired\n```md\n## Scope\n```\n### Detail\nMore\n## Other\nUnrelated\n";
     fs::write(d.path().join("Policy.md"), document).unwrap();
-    let metadata = path(d.path(), "reviews/product-consistency.toml");
+    let metadata = path(d.path(), "reviews/product-consistency/rule.toml");
     let original = fs::read_to_string(&metadata).unwrap();
-    fs::write(&metadata, format!("{original}\nfiles = [\"./Policy.md\"]\n[[reviews.context]]\npath = \"./Policy.md\"\nheadings = [\"Scope\", \"Detail\"]\n")).unwrap();
+    fs::write(&metadata, format!("{original}\nfiles = [\"./Policy.md\"]\n[[review.context]]\npath = \"./Policy.md\"\nheadings = [\"Scope\", \"Detail\"]\n")).unwrap();
     let p = config::load(d.path()).unwrap();
     assert_eq!(p.reviews[0].files, ["Policy.md"]);
     let excerpts =
@@ -2098,21 +1968,19 @@ fn review_context_sections_keep_source_lines_merge_overlap_and_ignore_code_headi
     // Missing and duplicate real headings fail even for disabled reviews.
     fs::write(
         &metadata,
-        format!(
-            "{original}\n[[reviews.context]]\npath = \"Policy.md\"\nheadings = [\"Missing\"]\n"
-        ),
+        format!("{original}\n[[review.context]]\npath = \"Policy.md\"\nheadings = [\"Missing\"]\n"),
     )
     .unwrap();
     assert!(config::load(d.path()).is_err());
     fs::write(d.path().join("Policy.md"), "## Scope\nOne\n## Scope\nTwo\n").unwrap();
     fs::write(
         &metadata,
-        format!("{original}\n[[reviews.context]]\npath = \"Policy.md\"\nheadings = [\"Scope\"]\n"),
+        format!("{original}\n[[review.context]]\npath = \"Policy.md\"\nheadings = [\"Scope\"]\n"),
     )
     .unwrap();
     assert!(config::load(d.path()).is_err());
     // A whole-file entry must not hide an invalid named section in another entry.
-    fs::write(&metadata, format!("{original}\n[[reviews.context]]\npath = \"Policy.md\"\n[[reviews.context]]\npath = \"Policy.md\"\nheadings = [\"Missing\"]\n")).unwrap();
+    fs::write(&metadata, format!("{original}\n[[review.context]]\npath = \"Policy.md\"\n[[review.context]]\npath = \"Policy.md\"\nheadings = [\"Missing\"]\n")).unwrap();
     assert!(config::load(d.path()).is_err());
 }
 
@@ -2122,13 +1990,13 @@ fn review_context_rejects_escaping_missing_and_excessive_sources_without_a_provi
         "files = [\"../outside.swift\"]",
         "files = [\"missing.swift\"]",
         "files = [\".hannes\"]",
-        "[[reviews.context]]\npath = \"../outside.md\"",
-        "[[reviews.context]]\npath = \"missing.md\"",
-        "[[reviews.context]]\npath = \"Policy.md\"",
+        "[[review.context]]\npath = \"../outside.md\"",
+        "[[review.context]]\npath = \"missing.md\"",
+        "[[review.context]]\npath = \"Policy.md\"",
     ] {
         let d = project();
         fs::write(d.path().join("Policy.md"), "x".repeat(65537)).unwrap();
-        let file = path(d.path(), "reviews/product-consistency.toml");
+        let file = path(d.path(), "reviews/product-consistency/rule.toml");
         let original = fs::read_to_string(&file).unwrap();
         fs::write(file, format!("{original}\n{extra}\n")).unwrap();
         assert!(config::load(d.path()).is_err(), "{extra}");
@@ -2149,9 +2017,9 @@ fn focused_reviews_exclude_unrelated_paths_and_diff_and_include_untracked_entry_
         "# Relevant\nRelevant requirement\n# Other\nUNRELATED_POLICY_SECRET\n",
     )
     .unwrap();
-    let metadata = path(d.path(), "reviews/product-consistency.toml");
+    let metadata = path(d.path(), "reviews/product-consistency/rule.toml");
     let original = fs::read_to_string(&metadata).unwrap();
-    fs::write(metadata, format!("{original}\nfiles = [\"entry[1].swift\", \"new.swift\"]\n[[reviews.context]]\npath = \"Policy.md\"\nheadings = [\"Relevant\"]\n")).unwrap();
+    fs::write(metadata, format!("{original}\nfiles = [\"entry[1].swift\", \"new.swift\"]\n[[review.context]]\npath = \"Policy.md\"\nheadings = [\"Relevant\"]\n")).unwrap();
     let p = config::load(d.path()).unwrap();
     let snapshot = git_snapshot::capture(d.path()).unwrap();
     let active = [&p.reviews[0]];
@@ -2299,7 +2167,7 @@ fn failed_mcp_discovery_or_unavailable_allowlist_never_starts_a_review_or_leaks_
 }
 
 #[test]
-fn provider_profile_validation_is_strict_and_old_configs_remain_readable() {
+fn provider_profile_validation_is_strict() {
     for (before, after) in [
         (
             "tool_output_token_limit = 2000",

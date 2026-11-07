@@ -2,11 +2,11 @@
 
 Hannes checks this repository using an installed published Hannes executable.
 Builds under target/ are candidates under test and never become the governor.
-The repository uses version-3 rules, rule sets and execution points, with no
+The repository retains its existing governance configuration, with no
 reviews or provider calls.
 
 The exact governor pin in [.hannes-version](../.hannes-version) is v0.5.0. This
-published release supports version-3 configuration, execution points and
+published release supports the repository configuration, execution points and
 pass auf --auto-approve for unattended hook reconciliation.
 
 ## Local setup
@@ -52,8 +52,8 @@ caller's environment. Checks neither install the governor nor repair project fil
 ## Execution points and required coverage
 
 Every selected rule is mandatory. Each point preserves the exact check membership
-of its former profile. Checks run once, ordered by their numbered IDs. The
-[immutable migration fixture](../tests/fixtures/self-governance-v2.json) records
+of its configured execution point. Checks run once, ordered by their numbered IDs. The
+[immutable migration fixture](../tests/fixtures/self-governance.json) records
 the previous commands, activation states, timeouts and selections; governance
 acceptance compares the published governor's actual plans with that evidence.
 
@@ -73,7 +73,7 @@ and enabled state. Only the command launcher prefix is added to preserve offline
 hook behavior. The [rule sets](../.hannes/rule-sets.toml) group checks sharing
 execution points; standalone rules reference the same built-in and declared points.
 
-Formatting, documentation, Clippy, Rust acceptance/compatibility tests, deployment
+Formatting, documentation, Clippy, Rust acceptance tests, deployment
 and release regression tests, Conventional Commits, actionlint, minimum Rust 1.85,
 Rust/npm dependency audits and release artifact verification remain required at
 the points shown above. Audits need advisory feeds; release artifact verification

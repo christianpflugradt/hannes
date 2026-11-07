@@ -1,4 +1,6 @@
 id = "my-app-product"
 description = "Compare app behavior with documented expectations"
 enabled = false
-instructions = "product.md"
+run_at = ["pre-push"]
+[review]
+prompt = "prompt.md"

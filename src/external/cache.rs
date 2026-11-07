@@ -431,7 +431,7 @@ pub(super) fn checkout(
 ) -> Result<PathBuf> {
     validate_commit(commit)?;
     let directory = repository_directory(cache, repository)?;
-    super::source_path(cache, &Path::new("git").join(repository))
+    crate::config::source_path(cache, &Path::new("git").join(repository))
         .context("missing or unsafe Git repository cache")?;
     let _lock = if refresh {
         Lock::acquire(&directory.join("cache.lock"))?
@@ -444,7 +444,7 @@ pub(super) fn checkout(
         return validate_revision(&revision, commit);
     }
     ensure!(refresh, "missing cached revision");
-    let bare = super::source_path(&directory, Path::new("objects.git"))
+    let bare = crate::config::source_path(&directory, Path::new("objects.git"))
         .context("missing or unsafe Git object cache")?;
     let temporary = tempfile::tempdir_in(&directory)?;
     let contents = temporary.path().join("contents");

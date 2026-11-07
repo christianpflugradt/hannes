@@ -1,10 +1,10 @@
 use crate::limits::*;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::{self, OpenOptions},
-    io::{Read, Write},
+    fs,
+    io::Read,
     path::{Component, Path, PathBuf},
 };
 
@@ -39,12 +39,14 @@ impl ProviderConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    pub version: u32,
     pub project: String,
+    #[serde(default = "default_display")]
     pub max_display_files: usize,
     #[serde(default)]
     pub execution_points: ExecutionPoints,
     pub hooks: Option<Hooks>,
+    #[serde(default)]
+    pub imports: Vec<crate::external::Import>,
 }
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -84,41 +86,70 @@ pub struct ReviewContext {
     #[serde(default)]
     pub headings: Vec<String>,
 }
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+/// A loaded check with its validated, absolute entrypoint.
+#[derive(Debug, Clone, Serialize)]
 pub struct Check {
     pub id: String,
     pub description: String,
     pub enabled: bool,
-    pub command: String,
-    #[serde(default = "default_directory")]
-    pub working_directory: String,
+    pub blocking: bool,
+    pub entrypoint: PathBuf,
+    pub interpreter: Option<String>,
     pub timeout_seconds: u64,
-    #[serde(default)]
-    pub tags: Vec<String>,
-    #[serde(default)]
     pub run_at: Vec<String>,
 }
-fn default_directory() -> String {
-    ".".into()
-}
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Review {
     pub id: String,
     pub description: String,
     pub enabled: bool,
-    pub instructions: String,
-    #[serde(default)]
+    pub blocking: bool,
     pub files: Vec<String>,
-    #[serde(default)]
     pub context: Vec<ReviewContext>,
-    #[serde(default)]
-    pub tags: Vec<String>,
+    pub run_at: Vec<String>,
+    pub text: String,
+}
+pub(crate) fn default_true() -> bool {
+    true
+}
+fn default_display() -> usize {
+    MAX_DISPLAY_FILES
+}
+fn default_timeout() -> u64 {
+    30
+}
+
+/// The single rule document format used by local and imported rules.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleDefinition {
+    pub id: String,
+    pub description: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub blocking: bool,
     #[serde(default)]
     pub run_at: Vec<String>,
-    #[serde(skip)]
-    pub text: String,
+    pub check: Option<CheckDefinition>,
+    pub review: Option<ReviewDefinition>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckDefinition {
+    pub entrypoint: String,
+    pub interpreter: Option<String>,
+    #[serde(default = "default_timeout")]
+    pub timeout_seconds: u64,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewDefinition {
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<ReviewContext>,
 }
 #[derive(Debug)]
 pub struct Project {
@@ -129,7 +160,6 @@ pub struct Project {
     pub reviews: Vec<Review>,
     pub rule_sets: Vec<RuleSet>,
     pub effective: crate::rules::EffectiveConfig,
-    pub external_sources: BTreeMap<String, PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -143,50 +173,11 @@ pub struct ExecutionPoints {
 #[serde(deny_unknown_fields)]
 pub struct RuleSet {
     pub id: String,
-    pub enabled: bool,
+    pub description: String,
     pub rules: Vec<String>,
-    #[serde(default)]
     pub run_at: Vec<String>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Definitions {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub checks: Vec<Check>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reviews: Vec<Review>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub rule_sets: Vec<RuleSet>,
-}
-
-fn tag(value: &str) -> Result<()> {
-    ensure!(
-        !value.is_empty()
-            && value.len() <= MAX_TAG_BYTES
-            && value.as_bytes()[0].is_ascii_alphanumeric()
-            && value
-                .bytes()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"-_".contains(&c)),
-        "invalid label {value:?}: use 1..{MAX_TAG_BYTES} lowercase ASCII letters, digits, - or _, starting with a letter or digit"
-    );
-    Ok(())
-}
-fn unique(values: &mut [String], label: &str) -> Result<()> {
-    values.sort();
-    ensure!(
-        !values.windows(2).any(|pair| pair[0] == pair[1]),
-        "duplicate {label}"
-    );
-    Ok(())
-}
-fn tags(values: &mut [String]) -> Result<()> {
-    ensure!(values.len() <= MAX_TAGS, "at most {MAX_TAGS} tags per rule");
-    for value in values.iter() {
-        tag(value)?;
-    }
-    unique(values, "rule tag")
-}
 pub fn relative(path: &Path) -> Result<()> {
     ensure!(
         !path.as_os_str().is_empty() && !path.is_absolute(),
@@ -201,6 +192,31 @@ pub fn relative(path: &Path) -> Result<()> {
     );
     Ok(())
 }
+/// Resolve a source resource without following any symlink component.
+pub(crate) fn source_path(root: &Path, relative: &Path) -> Result<PathBuf> {
+    self::relative(relative)?;
+    let mut path = root.to_path_buf();
+    ensure!(
+        path.symlink_metadata()?.is_dir() && !path.symlink_metadata()?.file_type().is_symlink(),
+        "source boundary must be a directory, not a symlink"
+    );
+    for part in relative.components() {
+        if let Component::Normal(part) = part {
+            path.push(part);
+            let metadata = path.symlink_metadata().context("missing source path")?;
+            ensure!(
+                !metadata.file_type().is_symlink(),
+                "source symlink traversal is unsupported"
+            );
+        }
+    }
+    ensure!(
+        path.canonicalize()?.starts_with(root.canonicalize()?),
+        "source escapes selected directory"
+    );
+    Ok(path)
+}
+
 pub fn inside(root: &Path, path: &Path) -> Result<PathBuf> {
     relative(path)?;
     let root = root.canonicalize()?;
@@ -232,11 +248,6 @@ pub fn read_bounded(path: &Path, limit: u64) -> Result<String> {
         limit
     );
     String::from_utf8(bytes).context("file must be UTF-8")
-}
-fn parse<T: serde::de::DeserializeOwned>(root: &Path, path: &Path) -> Result<T> {
-    let full = inside(root, path)?;
-    let text = read_bounded(&full, MAX_METADATA)?;
-    toml::from_str(&text).with_context(|| format!("invalid {}", path.display()))
 }
 fn timeout(value: u64) -> Result<()> {
     ensure!(
@@ -277,23 +288,39 @@ pub fn refresh(root: &Path) -> Result<Project> {
     crate::external::load(root, true, None)
 }
 
-pub(crate) fn validate(
-    root: PathBuf,
-    loaded: crate::discovery::Loaded,
-    source_root: Option<&Path>,
-) -> Result<Project> {
+pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Result<Project> {
+    let assignments: Vec<_> = loaded
+        .checks
+        .iter()
+        .map(|(source, rule)| crate::rules::Assignment {
+            id: rule.id.clone(),
+            enabled: rule.enabled,
+            run_at: rule.run_at.clone(),
+            source: source.clone(),
+        })
+        .chain(
+            loaded
+                .reviews
+                .iter()
+                .map(|(source, rule)| crate::rules::Assignment {
+                    id: rule.id.clone(),
+                    enabled: rule.enabled,
+                    run_at: rule.run_at.clone(),
+                    source: source.clone(),
+                }),
+        )
+        .collect();
     let config = loaded.config;
-    ensure!(
-        config.version == 3,
-        ".hannes/config.toml: unsupported configuration version {}; migrate to version 3 rules and rule sets",
-        config.version
-    );
     nonempty(&config.project, "project").context(".hannes/config.toml")?;
     ensure!(
         (1..=MAX_DISPLAY_FILES).contains(&config.max_display_files),
         ".hannes/config.toml: max_display_files must be 1..={MAX_DISPLAY_FILES}"
     );
-    let provider: ProviderConfig = parse(&root, &self::path("provider.toml"))?;
+    let provider = match root.join(self::path("provider.toml")).symlink_metadata() {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => ProviderConfig::scaffold(),
+        Err(e) => return Err(e.into()),
+        Ok(_) => crate::discovery::document(&root, &self::path("provider.toml"))?,
+    };
     ensure!(
         provider.provider == "codex-cli",
         "unsupported provider: {}; expected codex-cli",
@@ -336,36 +363,10 @@ pub(crate) fn validate(
     }
     let mut ids = BTreeSet::new();
     let mut checks = Vec::new();
-    for (path, mut check) in loaded.checks {
+    for (path, check) in loaded.checks {
         (|| -> Result<()> {
             identity(&check.id, &check.description, &mut ids)?;
-            tags(&mut check.tags)?;
             timeout(check.timeout_seconds)?;
-            let arguments = crate::check_command::parse(&check.command)
-                .with_context(|| format!("Invalid command in check '{}'", check.id))?;
-            let exe = Path::new(&arguments[0]);
-            if exe.is_absolute() || arguments[0].contains('/') || arguments[0].contains('\\') {
-                relative(exe)?;
-                let base = Path::new(&check.working_directory).join(exe);
-                // Validate containment of existing ancestors without requiring the
-                // executable (or its parent directories) to exist in this environment.
-                let mut ancestor = base.as_path();
-                while root
-                    .join(ancestor)
-                    .symlink_metadata()
-                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-                {
-                    ancestor = ancestor
-                        .parent()
-                        .filter(|path| !path.as_os_str().is_empty())
-                        .unwrap_or(Path::new("."));
-                }
-                inside(&root, ancestor)?;
-            }
-            ensure!(
-                inside(&root, Path::new(&check.working_directory))?.is_dir(),
-                "working_directory must be a directory"
-            );
             Ok(())
         })()
         .with_context(|| format!("invalid check '{}' ({})", check.id, path.display()))?;
@@ -376,7 +377,6 @@ pub(crate) fn validate(
     for (path, mut review) in loaded.reviews {
         (|| -> Result<()> {
             identity(&review.id, &review.description, &mut ids)?;
-            tags(&mut review.tags)?;
             ensure!(
                 review.files.len() <= MAX_ENTRY_FILES
                     && review.context.len() <= MAX_CONTEXT_ENTRIES,
@@ -415,21 +415,6 @@ pub(crate) fn validate(
                     nonempty(heading, "context heading")?;
                 }
             }
-            let p = Path::new(&review.instructions);
-            relative(p)?;
-            ensure!(
-                p.extension().is_some_and(|s| s == "md"),
-                "instructions must reference Markdown (.md)"
-            );
-            let full = if let Some(source_root) = source_root {
-                crate::external::source_path(source_root, &path.parent().unwrap().join(p))?
-            } else {
-                let full = inside(&root, &path.parent().unwrap().join(p))?;
-                ensure!(full.starts_with(root.join(self::path("")).canonicalize()?),
-                    "instructions must stay inside .hannes");
-                full
-            };
-            review.text = read_bounded(&full, MAX_INSTRUCTIONS)?;
             nonempty(&review.text, "instructions")?;
             instruction_bytes += review.text.len();
             ensure!(
@@ -444,11 +429,8 @@ pub(crate) fn validate(
     checks.sort_by(|a, b| a.id.cmp(&b.id));
     reviews.sort_by(|a, b| a.id.cmp(&b.id));
     crate::review_context::collect(&root, &reviews.iter().collect::<Vec<_>>())?;
-    let effective = crate::rules::resolve(
-        &config.execution_points,
-        &loaded.assignments,
-        &loaded.rule_sets,
-    )?;
+    let effective =
+        crate::rules::resolve(&config.execution_points, &assignments, &loaded.rule_sets)?;
     if let Some(hooks) = &config.hooks {
         for (event, point) in &hooks.git {
             ensure!(
@@ -470,117 +452,9 @@ pub(crate) fn validate(
         reviews,
         rule_sets,
         effective,
-        external_sources: BTreeMap::new(),
     })
 }
 
 pub fn init(root: &Path) -> Result<usize> {
-    let root = root.canonicalize()?;
-    crate::git_snapshot::require_root(&root)?;
-    for relative in ["", "checks", "reviews", "reports"] {
-        let p = root.join(path(relative));
-        if p.symlink_metadata().is_ok() {
-            ensure!(
-                !p.symlink_metadata()?.file_type().is_symlink() && p.is_dir(),
-                "refusing non-directory or symlink {}",
-                p.display()
-            );
-        } else {
-            fs::create_dir(&p)?;
-        }
-    }
-    let project = root
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
-    let config = Config {
-        version: 3,
-        project,
-        max_display_files: MAX_DISPLAY_FILES,
-        execution_points: ExecutionPoints::default(),
-        hooks: None,
-    };
-    let check = |id: &str, description: &str, enabled: bool, argument: &str| Check {
-        id: id.into(),
-        description: description.into(),
-        enabled,
-        command: format!("git {argument}"),
-        working_directory: default_directory(),
-        timeout_seconds: 30,
-        tags: vec![],
-        run_at: vec!["pre-push".into()],
-    };
-    let review = Review {
-        id: "product-consistency".into(),
-        description: "Evaluate behavior against documented expectations".into(),
-        enabled: false,
-        instructions: "product-consistency.md".into(),
-        files: vec![],
-        context: vec![],
-        tags: vec![],
-        run_at: vec!["pre-push".into()],
-        text: String::new(),
-    };
-    let files = [
-        ("config.toml", scaffold(&config)?),
-        ("provider.toml", scaffold(&ProviderConfig::scaffold())?),
-        ("checks/always-ok.toml", check_scaffold(check("always-ok", "Example deterministic pass", true, "--version"))?),
-        ("checks/deliberately-failing.toml", check_scaffold(check("deliberately-failing", "Disabled example demonstrating failure", false, "definitely-not-a-subcommand"))?),
-        ("reviews/product-consistency.toml", scaffold(&Definitions { reviews: vec![review], ..Definitions::default() })?),
-        ("reviews/product-consistency.md", "Evaluate the current working files against expectations explicitly documented in this project. Inspect relevant changed code and documentation. Do not invent requirements. Cite concrete file paths and line numbers. State uncertainty as ERROR when necessary evidence is unavailable. Report FAIL for a grounded contradiction, PASS only with grounded reasons. Customize this guidance before enabling.\n".into()),
-        ("reports/.gitignore", "*\n!.gitignore\n".into()),
-        ("README.md", include_str!("../docs/configuration.md").into()),
-    ];
-    let mut created = 0;
-    for (path, content) in files {
-        let full = root.join(self::path(path));
-        match OpenOptions::new().write(true).create_new(true).open(&full) {
-            Ok(mut f) => {
-                f.write_all(content.as_bytes())?;
-                created += 1;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(e) => bail!("cannot create {}: {e}", full.display()),
-        }
-    }
-    Ok(created)
-}
-
-/// Serialize real configuration types while omitting empty optional rule fields.
-fn scaffold(value: &impl Serialize) -> Result<String> {
-    let mut table = toml::Value::try_from(value)?;
-    fn trim(value: &mut toml::Value) {
-        match value {
-            toml::Value::Table(table) => {
-                for key in ["tags", "files", "context"] {
-                    if table
-                        .get(key)
-                        .and_then(toml::Value::as_array)
-                        .is_some_and(Vec::is_empty)
-                    {
-                        table.remove(key);
-                    }
-                }
-                for (_, child) in table.iter_mut() {
-                    trim(child);
-                }
-            }
-            toml::Value::Array(array) => {
-                for child in array {
-                    trim(child);
-                }
-            }
-            _ => {}
-        }
-    }
-    trim(&mut table);
-    Ok(toml::to_string(&table)?)
-}
-
-fn check_scaffold(check: Check) -> Result<String> {
-    scaffold(&Definitions {
-        checks: vec![check],
-        ..Definitions::default()
-    })
+    crate::discovery::init(root)
 }

@@ -290,7 +290,7 @@ See [rule sets and execution points](#group-rules-into-rule-sets) for assignment
 
 ### Use a Git hook or CI
 
-Declare Git events and their execution points in version-3 configuration:
+Declare Git events and their execution points in project configuration:
 
 ```toml
 [hooks.git]
@@ -337,57 +337,46 @@ personal login credentials should not be copied into CI.
 
 ### Files and validation
 
-Hannes reads the lowercase `.hannes/` directory in the Git working-tree root:
+Use this fixed layout at the Git working-tree root:
 
 ```text
 .hannes/
-  config.toml                 # Project settings and configuration version.
-  provider.toml               # Codex model, timeout and allowed integrations.
-  checks/*.toml               # Example layout; names and directories are freely chosen.
-  reviews/*.toml              # Definitions use [[reviews]].
-  reviews/*.md                # Criteria referenced by reviews.
-  security/quality.toml       # Example nested rules and rule sets.
-  reports/.gitignore          # Keeps generated reports local.
-  reports/last.json           # Generated results, not configuration.
-  README.md                   # Editable guidance, not parsed settings.
+  config.toml
+  provider.toml
+  checks/readme/
+    rule.toml
+    index.sh
+  reviews/architecture/
+    rule.toml
+    prompt.md
+  rule-sets/repository.toml
+  reports/last.json
 ```
 
-Settings use TOML. Each file below has its own example and field table.
-“Required” means the field must be present. A default applies when an optional
-field is omitted; generated files may explicitly choose a different value.
+`checks/`, `reviews/` and `rule-sets/` are optional. Each immediate rule directory
+requires `rule.toml`. Only `config.toml`, `provider.toml`, `checks/*/rule.toml`,
+`reviews/*/rule.toml` and `rule-sets/*.toml` are governance configuration. Supporting
+files such as `checks/secrets/gitleaks.toml` are data and are never parsed by Hannes.
+Definitions cannot be placed arbitrarily or nested in other directories.
 
-TOML files are discovered recursively in sorted order. Each document may contain
-`[[checks]]`, `[[reviews]]` and `[[rule_sets]]` tables, including `config.toml`.
-File names do not determine the content type. The central `config.toml` is read
-once; `provider.toml` is reserved for provider settings. Hidden entries and
-`reports`, `cache`, `caches` directories are excluded. Symlinks and special files
-are rejected, including internal links; directory nesting is bounded.
-Unknown fields, duplicate keys/IDs and invalid references are errors, including
-in disabled definitions. Errors identify the source document and affected entity
-or schema field. Required nonblank text fields contain no NUL; files use UTF-8.
+Unknown fields, duplicate keys/IDs and invalid references fail validation, even
+for disabled rules. Text uses UTF-8; required text must be nonblank and contain no
+NUL. Resource filenames must name regular files directly inside their own rule
+directory: no empty names, separators, absolute paths, parent traversal or symlinks.
+Rule directories, definitions and configuration paths also reject symlinks.
 
-Referenced paths must exist, be relative to their documented base, and resolve
-inside the project. Absolute paths and parent traversal (`..`) are rejected.
-Review evidence must also be included in the verified snapshot; ignored files
-outside it cannot serve as evidence.
-
-After editing, run `hannes pass auf`. This validates settings, files and selected
-Markdown headings without executing rules. Provider availability is checked only
-when reviews execute. Declared external state is then reconciled after confirmation.
-
-For existing projects using `.Hannes`, rename it to `.hannes` and update path
-references in scripts, criteria and ignore rules. On case-insensitive filesystems,
-rename via an unused temporary name. Keep configuration and reports; run verification
-again to refresh saved paths.
+Run `hannes pass auf` after editing. Validation runs no checks or providers.
+Declared Git hooks are reconciled after confirmation; use `--auto-approve` for
+unattended reconciliation. New projects initialized by `hannes fang an` include
+one enabled passing check, one disabled failing check and one disabled review.
+Initialization preserves existing files and installs no hooks.
 
 ### Project settings
 
 `.hannes/config.toml`:
 
 ```toml
-version = 3
 project = "My_App"
-max_display_files = 5
 
 [execution_points]
 custom = ["check", "release"]
@@ -395,99 +384,102 @@ custom = ["check", "release"]
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `version` | Required | Exactly `3`. Earlier profile configurations require manual migration. |
-| `project` | Required | Nonblank display name. Initialization uses the project directory name. |
-| `max_display_files` | Required | Integer `1..5`: maximum changed paths shown in status, not a verification limit. |
-| `execution_points` | Optional table | Declares additional execution contexts. |
-| `execution_points.custom` | Optional; `[]` | Unique custom names: 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Built-in names are reserved. |
-| `hooks` | Optional; `null` (omitted in TOML) | Desired external integrations. No mappings by default. |
-| `hooks.git` | Optional; `{}` | Git event-to-execution-point table; keys are `pre-commit`, `commit-msg`, `pre-push`. Values must be known execution points. |
+| `project` | Required | Nonblank display name. |
+| `max_display_files` | Optional; `5` | Integer `1..5`: changed paths shown in status. |
+| `execution_points` | Optional table | Additional execution contexts. |
+| `execution_points.custom` | Optional; `[]` | Unique names of 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Built-in names are reserved. |
+| `hooks` | Optional; `null` (omitted in TOML) | Desired integrations. |
+| `hooks.git` | Optional; `{}` | Maps `pre-commit`, `commit-msg`, `pre-push` events to known execution points. |
+| `imports` | Optional; `[]` | External references, declared only here as `[[imports]]`. |
+
+Built-in points are `pre-commit`, `commit-msg` and `pre-push`. Declare custom
+points in the consumer, including those used by imports. The default execution
+point is `pre-push`.
 
 ### Fields shared by checks and reviews
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `id` | Required | Case-sensitive ID, unique across checks and reviews: 1–80 ASCII letters, digits, `-` or `_`. Prefix `hannes-` is reserved. |
-| `description` | Required | Nonblank explanation shown in progress output. |
-| `enabled` | Required | `true` to make the rule available for execution; `false` to validate it without running it. |
-| `tags` | Optional; `[]` | Descriptive metadata: up to 32 unique labels. Each uses 1–32 lowercase ASCII letters, digits, `-` or `_`, starting with a letter/digit. |
-| `run_at` | Optional; `[]` | Known execution points. Required effectively for an active rule; active rule sets override this list. |
-
-A **Rule** is either a deterministic check or an AI review. A **Rule Set** names
-a group of rule IDs. An **Execution Point** names an independent execution context.
-`pre-commit`, `commit-msg` and `pre-push` are always available and cannot be
-redeclared. Other names must appear in `execution_points.custom`.
-
+| `id` | Required | Case-sensitive ID unique across checks/reviews in its source scope; 1–80 ASCII letters, digits, `-`, `_`; `hannes-` is reserved. |
+| `description` | Required | Nonblank explanation. |
+| `enabled` | Optional; `true` | False rules are validated but never executed or included in results. Plans list them under `disabled_rules`. |
+| `blocking` | Optional; `true` | A completed FAIL prevents success when true. ERROR is always fatal. |
+| `run_at` | Optional; `[]` | Own execution points; overridden by membership in Rule Sets. Enabled rules need an effective assignment. |
+| `check` | Optional; `null` | Check implementation; required for a check rule and mutually exclusive with `review`. |
+| `review` | Optional; `null` | Review implementation; required for a review rule and mutually exclusive with `check`. |
 
 ### Add a check
 
-For a Rust application, create `.hannes/checks/unit-tests.toml`:
+Create `.hannes/checks/readme/rule.toml`:
 
 ```toml
-[[checks]]
-id = "unit-tests"
+id = "repository-readme"
+description = "Require a nonempty README"
 run_at = ["pre-push", "check"]
-description = "Run unit and integration tests"
-enabled = true
-command = "cargo test --locked"
-working_directory = "."
-timeout_seconds = 120
+
+[check]
+entrypoint = "index.sh"
 ```
 
-Use commands appropriate to your application. Separate tests, formatting and
-compilation into individual checks when you want individual progress and results.
-Validate with `hannes pass auf`, then execute with `hannes mach was --geiz-ist-geil`.
+Create `.hannes/checks/readme/index.sh`:
 
-In addition to the [shared fields](#fields-shared-by-checks-and-reviews):
+```sh
+#!/bin/sh
+test -s README.md
+```
+
+On Unix, make it executable with `chmod +x .hannes/checks/readme/index.sh`.
+Hannes executes the file directly; the OS handles permissions and shebangs.
+Hannes does not infer languages, parse shebangs or install runtimes. Direct
+execution uses native OS behavior on Windows; Unix shell scripts may need an
+explicitly installed shell and do not necessarily run natively.
+
+Alternatively, use an explicit interpreter. For example, a Python check uses:
+
+```toml
+[check]
+entrypoint = "index.py"
+interpreter = "python3"
+timeout_seconds = 30
+```
+
+Create `index.py` in that rule directory containing:
+
+```python
+from pathlib import Path
+raise SystemExit(0 if Path("README.md").is_file() else 1)
+```
+
+This runs `python3 <absolute-entrypoint>` with no implicit shell. The interpreter
+is one executable name or path, with no argument parsing. The entrypoint needs
+neither a shebang nor executable permission in this mode. Missing interpreters
+produce a clear startup ERROR.
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `command` | Required | String parsed into `1..256` elements: executable first, then arguments. Each parsed element is at most 32768 bytes and contains no NUL; the executable must be nonblank. Arrays are rejected. |
-| `working_directory` | Optional; `"."` | Existing working directory relative to the project root. |
-| `timeout_seconds` | Required | Integer `1..3600`: this check's time limit in seconds. |
+| `check.entrypoint` | Required | Filename directly within this check directory. |
+| `check.interpreter` | Optional; `null` | Executable used to run the entrypoint. Omitted means direct execution. |
+| `check.timeout_seconds` | Optional; `30` | Integer `1..3600`; deadline including output capture. |
 
-Hannes executes exactly one program with arguments, directly without a shell.
-Whitespace separates arguments; single/double quotes keep spaces within one
-argument. Backslash escapes whitespace or quotes outside quotes. Inside single
-quotes everything is literal; inside double quotes backslash escapes `"`, `\`,
-`$` and backticks. Quoted empty arguments are preserved. These command-string
-rules apply after TOML decoding: TOML literal strings (`'…'`) preserve backslashes;
-TOML basic strings (`"…"`) require their own escaping.
+Checks inherit the environment, receive no stdin and keep the consuming project's
+root as their working directory. `HANNES_RULE_DIRECTORY` is the absolute directory
+of the check, for bundled resources such as a scanner configuration or helper.
+For example, Python can read `Path(os.environ["HANNES_RULE_DIRECTORY"]) / "config.json"`.
 
-| Command configuration | Supported? |
-| --- | --- |
-| `command = "cargo test --locked"` | Yes: executable and two arguments. |
-| `command = "npm run test"` | Yes: use the project's task runner. |
-| `command = "git log -1 --format='%h %s'"` | Yes: the format stays one argument. |
-| `command = 'git commit -m "Fix broken tests"'` | Yes: quoted argument (but checks should avoid changing Git state). |
-| `command = 'my-tool --path "directory with spaces/file.txt"'` | Yes: quoted path; executable paths can be quoted too. |
-| `command = 'my-tool --message "Hello; world"'` | Yes: the semicolon is literal. |
-| `command = 'my-tool directory\ with\ spaces/file.txt'` | Yes: escaped spaces. |
-| `cargo test && cargo clippy`, `test \|\| fallback`, `test; next` | No: command composition. |
-| `test \| tee out`, `test > out`, `test < in`, `test &` | No: pipes, redirection or background execution. |
-| `echo $HOME`, `echo $(date)`, `` echo `date` ``, `ls *.rs` | No: expansions or substitutions. |
+Exit 0 is PASS; nonzero is FAIL except **exit 2**, which explicitly reports an
+execution ERROR. A wrapper around a scanner must map its infrastructure failures
+to exit 2. Spawn, capture and timeout failures are always ERROR. A non-blocking
+FAIL remains visible and permits reviews and overall success; an ERROR remains
+fatal regardless of blocking. Output capture and process cleanup are shared
+across direct and interpreter execution.
 
-`hannes pass auf` rejects these shell constructs, unmatched quotes, trailing
-escapes, empty commands and missing executable names, including in disabled checks. Unquoted
-`?`/`[ab]` globs, shell comments and tilde expansion are also rejected. Quote or
-escape special characters intended as literal arguments. Single quotes protect
-`$HOME` and substitutions; double quotes alone do not.
-To combine commands, use an npm script, Gradle task, Makefile or dedicated script.
-An explicitly invoked shell is possible, but Hannes supplies no shell semantics.
-
-Commands inherit the environment and receive no stdin. Bare executable names use
-PATH; relative executables such as `./scripts/check.sh` resolve from
-`working_directory` and must remain inside the project. Absolute executable paths
-and parent traversal are rejected. Validation checks syntax and path containment,
-not executable availability or permissions; a missing or non-executable program
-is a runtime ERROR.
-
-Exit 0 becomes PASS; a nonzero exit or signal becomes FAIL. Timeout, startup or
-output-capture problems become ERROR. Checks are trusted local commands and are
-not sandboxed: they can access files and the network. Avoid commands that modify
-the files being verified, because changes during a run prevent overall PASS.
+Resource confinement is not process sandboxing. Checks execute with Hannes'
+permissions and can access files, credentials and the network. Only import
+executable checks from trusted sources. Changes to evaluated files during
+execution prevent PASS.
 
 ### Configure the AI provider
+
 
 The **provider** runs the AI requests. Hannes currently supports only **Codex CLI**
 and uses its existing local login. Install and authenticate Codex before enabling
@@ -562,109 +554,79 @@ Hannes does not rewrite your Codex configuration. It removes `OPENAI_API_KEY` an
 account allowance. Missing CLI/login, incompatible CLI options or exhausted allowance
 produce ERROR. No credentials are copied to CI.
 
+
+`provider.toml` is optional; omission uses the generated provider settings above.
+When the file is present its required fields must be supplied.
+
 ### Add a review
 
-A review consists of a TOML definition and a Markdown file containing the
-criterion. Decide what the AI should establish and where it can find the evidence.
-“Compare documented CLI options with the implementation” is more useful than
-“check code quality.” The generated `product-consistency` review stays disabled
-until you customize and enable it.
-
-For example, if `My_App` is a Rust CLI with `src/main.rs` and a `Usage` section
-in its README, create `.hannes/reviews/cli-help.toml`:
+Create `.hannes/reviews/architecture/rule.toml`:
 
 ```toml
-[[reviews]]
-id = "cli-help"
+id = "architecture-review"
+description = "Review architectural consistency"
+blocking = false
 run_at = ["pre-push"]
-description = "Compare documented commands with their implementation"
-enabled = true
-instructions = "cli-help.md"
-files = ["src/main.rs"]
 
-[[reviews.context]]
-path = "README.md"
-headings = ["Usage"]
+[review]
+prompt = "prompt.md"
 ```
 
-Create `.hannes/reviews/cli-help.md`:
+Create `.hannes/reviews/architecture/prompt.md`:
 
 ```markdown
-Compare the commands and options documented in the supplied README Usage section
-with their implementation. Start with the listed source file and follow relevant
-dependencies. Report FAIL for a concrete contradiction, ERROR when essential
-evidence is unavailable, and PASS only with supporting file and line references.
+Compare the implementation with the project's documented architectural boundaries.
+Report concrete contradictions as FAIL, missing essential evidence as ERROR,
+and PASS only with supporting file paths and line numbers.
 ```
 
-Replace the paths, heading and criterion with ones that exist in your project.
-After [provider setup](#configure-the-ai-provider), run `hannes pass auf`, then
-`hannes mach was`. All selected reviews use one AI call, after checks pass.
-
-In addition to the [shared fields](#fields-shared-by-checks-and-reviews):
+The Markdown contains instructions only, with no frontmatter or repeated metadata.
+Prompts resolve exclusively inside their review directory. Reviews evaluate the
+consumer through the existing shared provider call, after deterministic checks.
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `instructions` | Required | Nonblank UTF-8 `.md` criteria file relative to its defining TOML document. It must stay inside `.hannes/`. |
-| `files` | Optional; `[]` | Up to 64 unique existing source files relative to the project root. Exact paths, not globs. These are starting points for inspection. |
-| `context` | Optional; `[]` | Up to 32 document selections, written as `[[reviews.context]]` entries. They supply requirements or other background to the AI. |
-| `context.path` | Required per entry | Existing UTF-8 file relative to the project root. |
-| `context.headings` | Optional; `[]` | Up to 32 nonblank exact Markdown heading titles. Empty or omitted includes the whole document. |
+| `review.prompt` | Required | Nonblank UTF-8 `.md` filename in the review directory. |
+| `review.files` | Optional; `[]` | Up to 64 unique existing consumer-relative source files; exact paths, not globs. Starting points, not an evidence boundary. |
+| `review.context` | Optional; `[]` | Up to 32 document selections as `[[review.context]]`. |
+| `review.context.path` | Required | Existing UTF-8 consumer-relative file. |
+| `review.context.headings` | Optional; `[]` | Up to 32 nonblank exact ATX Markdown headings; empty selects the whole document. |
 
-`instructions` says **what to judge**; `files` says **where to start reading code**;
-`context` supplies **the documented expectations**. Entry files do not restrict
-further dependency reads. Criteria do not change provider permissions or the
-required response format.
+Context includes subsections and preserves original lines. Code-block headings
+are ignored; missing or ambiguous headings are errors. Overlapping selections
+are merged. All context is bounded to 32 distinct files, 1 MiB per file and 64 KiB
+selected text; disabled definitions are validated too. Entry/context paths must
+stay within the consumer. Supporting review files require no resource-import system.
 
-Heading titles match ATX Markdown headings (`#` through `######`) without the
-hash prefix. Each selection includes its subsections until the next heading of
-equal or higher level. Headings in code blocks are ignored; missing or ambiguous
-titles are errors. Shared or overlapping selections are sent once with their
-original line numbers. Across all definitions, including disabled reviews, context
-is limited to 32 distinct files, 1 MiB per file and 64 KiB of selected text.
-Missing or excessive context is rejected, not silently dropped.
-
-When every selected review declares `files`, the initial file list and diff hints
-focus on the combined entry/context paths. Otherwise these hints cover the project.
-The AI still evaluates the current working files, not only changed lines.
-Untracked content needs direct inspection. The snapshot always covers the full
-relevant working tree, regardless of the hints supplied to the AI.
-
-Hannes asks for exactly one PASS/FAIL/ERROR per requested review, a nonblank one-line
-summary of at most 120 characters, and up to 20 detailed findings of at most 2000
-bytes each. PASS/FAIL need a verified existing file and a positive line reference.
-Missing, duplicate or malformed results make the batch ERROR. You write criteria,
-not a custom output schema; Hannes sends these response constraints to the provider
-and checks the returned result locally, including evidence and UTF-8 byte limits.
+The provider must return exactly one PASS/FAIL/ERROR per requested ID. PASS/FAIL
+need an existing in-snapshot file and positive line reference. Malformed JSON,
+missing/duplicate verdicts, invalid evidence and provider failures produce ERROR.
+Summaries are single lines up to 120 characters; at most 20 findings per review,
+2000 bytes each. Non-blocking FAIL is visible; incomplete verification stays fatal.
 
 ### Group rules into rule sets
 
-Create a TOML document anywhere under `.hannes/`, for example
-`.hannes/backend/quality.toml`, referencing the earlier `unit-tests` rule:
+Create `.hannes/rule-sets/repository.toml`:
 
 ```toml
-[[rule_sets]]
-id = "quality"
-enabled = true
-rules = ["unit-tests"]
+id = "repository"
+description = "General repository governance"
 run_at = ["pre-push", "check"]
+rules = ["repository-readme", "architecture-review"]
 ```
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `id` | Required | Unique rule-set ID: 1–80 lowercase ASCII letters, digits, `-` or `_`, starting with a letter/digit. Independent of rule IDs. |
-| `enabled` | Required | `false` disables this set's assignments. |
-| `rules` | Required | Unique existing rule IDs. Other rule sets cannot be referenced. An empty list is allowed. |
-| `run_at` | Optional; `[]` | Known execution points; must be nonempty for an active set. |
+| `id` | Required | Unique set ID: 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Independent of rule IDs. |
+| `description` | Required | Nonblank explanation. |
+| `run_at` | Required | Nonempty list of known execution points. |
+| `rules` | Required | Unique rule IDs defined in the same scope. Empty is allowed; set references are unsupported. |
 
-An active rule with no active set membership uses its own `run_at`. Membership
-in one or more active sets replaces the rule's own list with the union of those
-sets' lists. Hannes reports overridden own assignments as a hint. A rule runs
-once per invocation, even when multiple sets assign it to the same point.
-
-Disabled sets contribute nothing. A rule referenced only by disabled sets needs
-its own `run_at` when active. A disabled rule never runs and needs no assignment,
-even when included in active sets. All references are still validated: typos such
-as `chekc`, duplicate declarations/references and missing rule IDs are errors.
+Present sets always apply; they have no enabled, blocking or source attributes.
+Remove a set or its rule references to stop using it. Set membership overrides a
+rule's own assignments; multiple memberships contribute their union. Each rule
+runs at most once at a point. Standalone enabled rules use their own `run_at`.
+Disabled rules never execute. All references, even overridden ones, are validated.
 
 ```sh
 hannes pass auf
@@ -675,122 +637,62 @@ hannes mach was --at check
 hannes mach was --at release --plan --json
 ```
 
-Without `--at`, Hannes selects `pre-push`. Each selected rule is mandatory;
-FAIL, ERROR or NOT_RUN prevents success. An empty execution point succeeds
-without establishing any rule PASS. Checks run before reviews, each ordered by
-ID. `--geiz-ist-geil` is accepted only when the point requires no reviews.
-`--plan` prepares the same selection offline without execution or reconciliation.
-
-See [execution and plan details](docs/profiles-and-plans.md).
+Checks precede reviews, ordered by ID. Empty points succeed. Every selected rule
+must execute; `--geiz-ist-geil` cannot omit required reviews. An offline plan
+prepares the same selection without rules, provider calls or reconciliation.
 
 ### Import rule sets from Git
 
-Reference each external set with three required fields. Imports and local
-definitions can coexist in the same document:
+Add imports only to `.hannes/config.toml`:
 
 ```toml
-[[rule_sets]]
+[[imports]]
 git = "https://github.com/company/hannes-governance.git"
 path = "repository"
 ref = "v1.2.0"
 
-[[rule_sets]]
+[[imports]]
 git = "https://github.com/company/hannes-governance.git"
-path = "software"
+path = "releasable-software"
 ref = "v1.2.0"
-
-[[rule_sets]]
-git = "https://github.com/company/hannes-governance.git"
-path = "rust"
-ref = "main"
 ```
 
 | Field | Required / default | Meaning |
 | --- | --- | --- |
-| `git` | Required | Repository selector using host Git authentication: HTTPS, HTTP, SSH, SCP-style SSH, Git protocol, file URL or local path. Local paths are consumer-relative. |
-| `path` | Required | Directory within the repository, or `"."` for its root. Parent traversal and symlinks are rejected. |
-| `ref` | Required | Exact branch, tag or full commit hash, 1–1024 bytes. No version ranges. |
+| `git` | Required | Repository selector using host Git authentication: HTTP(S), SSH, SCP-style SSH, Git protocol, file URL or consumer-relative local repository. |
+| `path` | Required | Selected directory, or `"."` for repository root; no parents or symlinks. |
+| `ref` | Required | Exact branch, tag or full commit hash, 1–1024 bytes. |
 
-A shared repository can contain independently addressable sets:
+No other import fields or consumer overrides are accepted. Remove the import to
+stop using it. A selected directory is its own governance root, with exactly one
+set in `config.toml` and its own `checks/` and `reviews/`. It has no nested
+`.hannes/`, `rule-sets/`, project settings or imports. Its `config.toml` uses the
+same four fields shown for a local Rule Set. References stay within that scope.
+Identical rule IDs across independent sources do not collide; imported identities
+and commit provenance remain deterministic.
 
-```text
-hannes-governance/
-  repository/
-    ruleset.toml
-    rules/readme.toml
-  software/
-    ruleset.toml
-    rules/changelog.toml
-  rust/
-    ruleset.toml
-    rules/formatting.toml
-```
+`pass auf` resolves refs and validates all sources before atomically publishing
+resolution state. A failed refresh preserves prior state. Execution, hooks and
+plans reuse the validated immutable cache offline; missing/changed state or corrupt
+contents require `hannes pass auf`. Multiple sets at one repository/commit share
+one checkout. Full hashes pin content; branches/tags can move when refreshed.
 
-Each selected directory must define exactly one set using the same
-`[[rule_sets]]`, `[[checks]]` and `[[reviews]]` syntax as local documents.
-Rules may live in nested TOML files; file names carry no entity semantics.
-References resolve only within that directory's subtree. Declare custom points
-such as `check` in the consumer's `[execution_points]` table. Imports cannot
-declare them or import further sets.
-
-`hannes pass auf` resolves references, downloads missing revisions and validates
-the combined configuration. It executes no rules. Only successful full validation
-publishes resolved commits. Branches and movable tags can change on refresh; use
-a full commit hash to pin contents. Sets at the same repository and commit share
-one immutable cached checkout.
-
-Execution, Git hooks and plans use the last validated revisions without network
-access. Missing state, changed imports and missing/corrupt cached contents block
-execution and request `hannes pass auf`. A failed refresh reports an error and
-preserves previous state; later execution still uses that saved revision.
-Removing an import removes it from execution immediately.
-
-Consumers cannot disable or override imported definitions, membership or settings.
-Normal source-side `enabled = false` semantics still apply. Local IDs retain their
-meaning; imported IDs include a deterministic source namespace and original ID.
-Reports retain repository identity, directory, configured ref and resolved commit.
-
-Checks run in the consuming project with ordinary consumer-relative command and
-working-directory paths. Review instructions load relative to their imported
-document and must stay within the selected directory. Review entry/context paths
-refer to consumer files. Imported checks receive `HANNES_RULE_SET_SOURCE` for
-explicit access to source scripts/resources; Hannes does not rewrite arguments.
-
-Importing a set trusts its commands to run with Hannes' permissions. Hannes
-provides no command sandbox. Retrieval runs no downloaded hooks or initialization
-scripts. Configure authentication through host Git or SSH; do not put passwords
-or tokens in repository URLs.
-
-See [complete source examples, cache locations and troubleshooting](docs/external-rule-sets.md).
-
+See [external source structure, cache and trust](https://github.com/christianpflugradt/hannes/blob/main/docs/external-rule-sets.md).
 
 ### Reports and other files
 
-`.hannes/reports/last.json` is generated atomically and replaced by each run that
-can produce a report. It contains verdicts, short summaries, detailed findings,
-captured check output, available token usage and input identity. Invalid
-configuration preserves the previous report. Delete the report to clear saved
-status; use the status commands to read it rather than editing its contents.
+Reports use schema 4 and plans use schema 3. These output schema numbers describe
+machine-readable results, not configuration variants. Results record blocking,
+status, evidence, durations and captured output. ERROR always takes precedence;
+blocking FAIL follows; unexecuted selected rules prevent success. Disabled rules
+are listed in plans and stay out of results. JSON records FAIL even when the
+overall outcome is PASS because that violation is non-blocking.
 
-Schema 3 records the execution point, plan, source documents and effective
-assignments. Status displays the saved selection. Failed checks leave reviews
-NOT_RUN. Historical schema-1 and schema-2 reports remain readable as saved evidence.
-
-Check stdout/stderr are each captured up to 64 KiB, with byte totals and truncation
-recorded. Full findings and retained output appear with `--details`. Output is
-not automatically redacted; avoid printing secrets from check commands. Status
-cannot calculate line deltas from its hash-only baseline.
-
-Keep reports local with `.hannes/reports/.gitignore`:
-
-```gitignore
-*
-!.gitignore
-```
-
-Commit configuration, rule definitions and criteria; exclude reports and credentials.
-`.hannes/README.md` is editable guidance and has no parsed settings. Extra files
-have no implicit execution behavior; a review must reference its criteria Markdown.
+`reports/last.json` is replaced atomically after a run. Invalid configuration
+preserves a previous report. Keep reports and credentials local. Stdout/stderr
+retain the first 64 KiB each with full byte totals/truncation indicators; output
+is not automatically redacted. `--details` displays retained output and findings.
+Status compares the saved working-tree snapshot without executing rules again.
 
 ## Limits and unsupported features
 
@@ -798,9 +700,9 @@ These limits are built in, not additional configuration fields:
 
 | Area | Limit or behavior |
 | --- | --- |
-| Configuration metadata | 64 KiB per TOML file; up to 256 configuration documents, 256 rules and 256 rule sets. |
+| Configuration metadata | 64 KiB per metadata file; at most 256 rules and 256 Rule Sets including imports. |
 | External Git sources | 64 KiB resolution state; cached repositories: 8 MiB/file, 128 MiB total, 100,000 entries, 128 directory levels. Fetch timeout 60 seconds, local Git operations and lock waits 30 seconds. |
-| Review criteria | 32 KiB per instructions file; 256 KiB combined, including disabled reviews. |
+| Review criteria | 32 KiB per prompt file; 256 KiB combined, including disabled reviews. |
 | Initial AI hints | Up to 200 file-list entries and 32 KiB of diff, with truncation indicated. Necessary evidence still needs inspection. |
 | Snapshot | 8 MiB per file, 128 MiB total, 100,000 paths; Git file enumeration capped at 64 KiB; `.hannes` nesting limited to 16 levels. |
 | Snapshot coverage | Tracked and nonignored untracked files, plus `.hannes` even if ignored. `.git` and `.hannes/reports` are excluded. Unsupported symlinks, submodules, paths or exceeded limits prevent PASS. |

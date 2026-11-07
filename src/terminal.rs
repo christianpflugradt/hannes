@@ -218,7 +218,7 @@ pub fn render_progress(event: &crate::Progress<'_>, color: bool) -> String {
             clean(&item.kind),
             clean(&item.id),
             item.duration_ms,
-            short_summary(&item.reason)
+            short_summary(&item_reason(item))
         ),
         Progress::ReviewBatch {
             count,
@@ -249,21 +249,9 @@ pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
             },
             color
         ),
-        clean(if plan.at.is_empty() {
-            &plan.profile
-        } else {
-            &plan.at
-        }),
-        clean(if plan.at.is_empty() {
-            &plan.profile_source
-        } else {
-            "execution point"
-        }),
-        if plan.at.is_empty() {
-            "Legacy selection"
-        } else {
-            "Execution point"
-        },
+        clean(&plan.at),
+        "execution point",
+        "Execution point",
         clean(&plan.input.kind),
         plan.plan_id,
         plan.input.head.as_deref().unwrap_or("unborn"),
@@ -287,12 +275,11 @@ pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
     ));
     for (index, rule) in plan.scheduled.iter().enumerate() {
         text.push_str(&format!(
-            "[{}] {} {} · {}\n    Tags: {} · Auswahl: {}\n",
+            "[{}] {} {} · {}\n    Auswahl: {}\n",
             index + 1,
             rule.kind,
             clean(&rule.id),
             clean(&rule.description),
-            clean(&rule.tags.join(", ")),
             clean(&rule.selected_by.join(", "))
         ));
     }
@@ -368,20 +355,13 @@ pub fn render(report: &Report, color: bool) -> String {
         clean(&report.project),
         paint(&clean(&report.timestamp), Tone::Muted, color)
     );
-    if let Some(plan) = &report.plan {
+    {
+        let plan = &report.plan;
         text.push_str(&format!(
             "Execution Point: {} · Input: {} · {}{}\n",
-            clean(if plan.at.is_empty() {
-                &plan.profile
-            } else {
-                &plan.at
-            }),
+            clean(&plan.at),
             clean(&plan.input.kind),
-            if plan.at.is_empty() {
-                "Legacy selection"
-            } else {
-                "Execution point"
-            },
+            "Execution point",
             if plan.selection_complete {
                 ""
             } else {
@@ -391,8 +371,6 @@ pub fn render(report: &Report, color: bool) -> String {
         if plan.scheduled.is_empty() {
             text.push_str("Keine aktiven Regeln ausgewählt; kein Regel-PASS belegt.\n");
         }
-    } else {
-        text.push_str("Legacy-Report ohne Execution-Point-Zuordnung\n");
     }
     if report.checks_only {
         text.push_str(&paint(
@@ -416,7 +394,7 @@ pub fn render(report: &Report, color: bool) -> String {
             status(item.status, color),
             " ".repeat(9 - item.status.label().len()),
             format!("{} ms", item.duration_ms),
-            short_summary(&item.reason)
+            short_summary(&item_reason(item))
         ));
     }
     text.push_str(&format!("\nGesamt: {}\nReport: .hannes/reports/last.json\nDetails: hannes was ist phase --details\n", status(report.overall, color)));
@@ -446,7 +424,8 @@ pub fn render(report: &Report, color: bool) -> String {
 /// Render the saved report only; this never executes commands or invokes a provider.
 pub fn render_details(report: &Report, color: bool) -> String {
     let mut text = render(report, color);
-    if let Some(plan) = &report.plan {
+    {
+        let plan = &report.plan;
         text.push_str(&format!(
             "Plan-ID: {} · Auswahl: {}\n",
             clean(&plan.plan_id),
@@ -492,7 +471,7 @@ pub fn render_details(report: &Report, color: bool) -> String {
             "\n{} · {}\n{}\n",
             paint(&clean(&item.id), Tone::Accent, color),
             status(item.status, color),
-            clean(&item.reason)
+            clean(&item_reason(item))
         ));
         for finding in &item.findings {
             let reference = finding
@@ -561,4 +540,12 @@ pub fn render_changes(changes: &Changes, color: bool) -> String {
     }
     text.push_str("Insertions/deletions since verification: unavailable (hash-only baseline)\n");
     text
+}
+
+fn item_reason(item: &crate::report::Item) -> String {
+    if item.status == crate::report::Status::Fail && !item.blocking {
+        format!("Non-blocking: {}", item.reason)
+    } else {
+        item.reason.clone()
+    }
 }

@@ -95,9 +95,9 @@ Hannes must preserve this distinction rather than presenting all verification re
 
 Hannes should support quality gates that prevent progression when required conditions have not been satisfied.
 
-For the initial implementation, every selected rule is mandatory.
-
-A failed check, a failed review, or an inability to complete verification prevents a successful overall result.
+Every selected rule must execute. Rules explicitly declare whether completed
+violations block success; the default is blocking. An inability to complete
+verification always prevents a successful overall result.
 
 Hannes must distinguish actual violations from technical verification failures.
 

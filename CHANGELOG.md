@@ -1,3 +1,11 @@
+## [0.11.0](https://github.com/christianpflugradt/hannes/compare/v0.10.1...v0.11.0) (2026-11-07)
+
+### Features
+
+* **provider:** execute generic CLI reviews with runtime requirements ([3c10d90](https://github.com/christianpflugradt/hannes/commit/3c10d90be3cb11524d9952b88a1bb2c348938ced))
+* **provider:** resolve named configurations across rule sets ([3e19086](https://github.com/christianpflugradt/hannes/commit/3e19086f406a21a2b541b7b0aadc68112a92b27a))
+* **reviews:** select reviews with file-change triggers ([6b53d42](https://github.com/christianpflugradt/hannes/commit/6b53d42ea8f2a20ed7d40d50633784c7e25a916e))
+
 ## [0.10.1](https://github.com/christianpflugradt/hannes/compare/v0.10.0...v0.10.1) (2026-11-07)
 
 ### Bug Fixes

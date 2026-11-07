@@ -127,14 +127,17 @@ changes; every execution point must validate and plan with the proposed release.
 Push/PR jobs retain the native Linux x64, tooling, MSRV and audit checks. Releases
 reuse those jobs and run native validation on all four supported hosts. Tool
 installation, dependency preparation, release stamping, packaging and publication
-remain separate operations. The publisher prepares stable Rustfmt because its
-automated version commit invokes the managed pre-commit hook; release lifecycle
-tests exercise those hooks in a disposable repository. After artifact collection,
+remain separate operations. Before publication, the publisher installs stable Rust
+with rustfmt and Clippy and fetches locked Cargo dependencies. Its automated
+version commit and push invoke managed hooks with offline checks; release lifecycle
+tests exercise hooks in a disposable repository. After artifact collection,
 release-artifacts verifies
 the complete set and its source/version binding; the publication plugin repeats
 its integrity checks. No release process or permissions change is introduced.
 
-Jobs retain their failure-report uploads. Schema-3 last.json records execution
+Jobs retain their failure-report uploads. The publisher saves artifact-verification
+evidence before publication and uploads hook reports afterward, even on failure,
+as separate artifacts. Schema-3 last.json records execution
 point, required rules, source state and results. The [execution wrapper](../scripts/run-execution-point.py)
 adds execution.json with governor version/digest, execution point, checked commit
 and exit code. Managed hooks and direct CLI invocations write the ordinary report;

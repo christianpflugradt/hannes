@@ -105,8 +105,6 @@ class GovernanceTests(unittest.TestCase):
         self.assertIn("python3 scripts/run-execution-point.py release-artifacts", release)
         self.assertIn("if: always()", release)
         self.assertIn("include-hidden-files: true", release)
-        self.assertIn("rustup toolchain install stable --profile minimal --component rustfmt", release)
-        self.assertLess(release.index("Prepare managed release commit hooks"), release.index("Publish versioned CLI archives and release notes"))
         for text in (workflow, release):
             self.assertNotIn("releases/latest", text)
             self.assertNotRegex(text, r"run: (cargo \+stable (test|clippy|audit)|npm (test|audit)|python3 scripts/(check-commits|verify-release|test-))")
@@ -117,6 +115,26 @@ class GovernanceTests(unittest.TestCase):
         action = (ROOT / ".github/actions/setup-hannes/action.yml").read_text()
         self.assertIn('"$HANNES_EXECUTABLE" pass auf --auto-approve', action)
         self.assertNotRegex(workflow + release + action, r"--profil(?:\s|=|$)")
+
+    def test_release_prepares_offline_hooks_and_uploads_reports_after_publication(self):
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        prepare, publish, upload = (
+            release.index(name) for name in (
+                "      - name: Prepare managed release hooks",
+                "      - name: Publish versioned CLI archives and release notes",
+                "      - name: Upload release hook evidence",
+            )
+        )
+        self.assertLess(prepare, publish)
+        self.assertLess(publish, upload)
+        preparation = release[prepare:publish]
+        self.assertIn("run: |", preparation)
+        self.assertIn("rustup toolchain install stable --profile minimal --component rustfmt --component clippy", preparation)
+        self.assertIn("cargo +stable fetch --locked", preparation)
+        self.assertLess(preparation.index("rustup toolchain install"), preparation.index("cargo +stable fetch"))
+        evidence = release[upload:].split("\n      - ")[0]
+        for required in ("if: always()", "uses: actions/upload-artifact@", "name: quality-release-hooks", "path: .hannes/reports/*.json", "include-hidden-files: true"):
+            self.assertIn(required, evidence)
 
     def test_hook_launcher_preserves_arguments_and_offline_environment(self):
         probe = "import json,os,sys; print(json.dumps([sys.argv[1:], {k:os.environ.get(k) for k in ['CARGO_NET_OFFLINE','npm_config_offline','RUSTUP_AUTO_INSTALL','HANNES_GIT_HOOK_ARG_1']}]))"

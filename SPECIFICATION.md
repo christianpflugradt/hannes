@@ -303,7 +303,11 @@ Check subprocesses retain the inherited environment and recursion guard. A small
 command launcher sets Cargo/npm offline mode and disables Rustup auto-install
 when invoked by a managed Git hook; it then executes the original check command.
 CI invokes pass auf --auto-approve once before execution. Execution never repairs
-hooks noninteractively. Reports use schema 3 and a companion execution record
+hooks noninteractively. The publish job prepares stable Rust with rustfmt and
+Clippy and fetches locked Cargo dependencies before publication, so its managed
+commit and push hooks can run offline. Report artifacts are uploaded after
+publication with an always condition, including when a release hook fails.
+Reports use schema 3 and a companion execution record
 stores governor version/digest, execution point, checked commit and exit code.
 See [repository self-integration](docs/self-governance.md) for coverage and setup.
 

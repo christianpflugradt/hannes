@@ -100,11 +100,15 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
    calculates `SHA256SUMS`, and runs the `release-artifacts` Hannes gate for
    completeness, hashes, permissions, documentation, source commit and the planned
    version. Independent publication guards repeat verification before tagging.
+   Before publication, the job installs stable Rust with rustfmt and Clippy and
+   fetches locked Cargo dependencies for its offline commit and push hooks.
 5. For the initial release, GitHub CLI publishes v0.1.0 at the tested source SHA.
    For subsequent releases, Semantic Release updates Cargo.toml/Cargo.lock and CHANGELOG.md, commits them as
    `build(release): VERSION [skip ci]`, tags the release and publishes the archives,
    checksums, README and LICENSE to GitHub Releases. Nothing is published to npm
    or crates.io. Issue/PR comments and release labels are disabled.
+   Hook reports are uploaded after publication with `if: always()`, including on
+   failure, separately from the earlier artifact-verification evidence.
 
 If main advanced while building, publication is refused; rerun on its latest
 commit. Do not push new work during publication. Ordinary Git pushes reject a

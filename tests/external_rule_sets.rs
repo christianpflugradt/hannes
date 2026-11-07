@@ -1648,3 +1648,121 @@ fn shared_rule_references_reject_symlink_components() {
         assert!(f.load(true).is_err(), "accepted symlink {component}");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn imported_and_local_checks_and_reviews_receive_the_consumer_execution_point() {
+    let f = Fixture::new();
+    write(
+        &f.remote,
+        "repository/config.toml",
+        "id = 'quality'\ndescription = 'Context rules'\nrules = ['repository/checks/required-files', 'repository/reviews/context']\nrun_at = ['source-point']\n",
+    );
+    let script = r#"set -eu
+test "$HANNES_EXECUTION_POINT" = verify
+test "$HANNES_PARAM_LABEL" = preserved
+test "$(cat "$HANNES_RULE_DIRECTORY/resource")" = bundled
+printf '%s' "$HANNES_EXECUTION_POINT"
+"#;
+    write(
+        &f.remote,
+        "repository/checks/required-files/index.sh",
+        script,
+    );
+    write(
+        &f.remote,
+        "repository/checks/required-files/resource",
+        "bundled\n",
+    );
+    let path = f.remote.join("repository/checks/required-files/rule.toml");
+    fs::write(
+        &path,
+        format!(
+            "{}\n[parameters.label]\ntype = 'string'\nrequired = true\n",
+            fs::read_to_string(&path).unwrap()
+        ),
+    )
+    .unwrap();
+    write(
+        &f.remote,
+        "repository/reviews/context/rule.toml",
+        "id = 'imported-review'\ndescription = 'Imported context'\n[review]\nprompt = 'prompt.md'\n",
+    );
+    write(
+        &f.remote,
+        "repository/reviews/context/prompt.md",
+        "Inspect evidence.",
+    );
+    commit(&f.remote);
+    mapped_imports(
+        &f,
+        &[(
+            "repository",
+            "[imports.execution_points]\nsource-point = 'verify'\n[imports.rule_parameters.required-files]\nlabel = 'preserved'",
+        )],
+        &["verify"],
+    );
+    support::check(&f.root, "local-context", &["verify"], script);
+    let path = f.root.join(".hannes/checks/local-context/rule.toml");
+    fs::write(
+        &path,
+        format!(
+            "{}\n[parameters.label]\ntype = 'string'\nvalue = 'preserved'\n",
+            fs::read_to_string(&path).unwrap()
+        ),
+    )
+    .unwrap();
+    write(
+        &f.root,
+        ".hannes/checks/local-context/resource",
+        "bundled\n",
+    );
+    write(
+        &f.root,
+        ".hannes/reviews/local-context/rule.toml",
+        "id = 'local-review'\ndescription = 'Local context'\nrun_at = ['verify']\n[review]\nprompt = 'prompt.md'\n",
+    );
+    write(
+        &f.root,
+        ".hannes/reviews/local-context/prompt.md",
+        "Inspect evidence.",
+    );
+    write(&f.root, "evidence", "Evidence\n");
+    let setup = cli(&f, &["pass", "auf", "--auto-approve"]);
+    assert!(
+        setup.status.success(),
+        "{}",
+        String::from_utf8_lossy(&setup.stderr)
+    );
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    let fake = tempfile::tempdir().unwrap();
+    support::context_provider(fake.path());
+    let path = std::env::join_paths(
+        std::iter::once(fake.path().to_path_buf())
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    let calls = fake.path().join("calls");
+    let output = Command::new(env!("CARGO_BIN_EXE_hannes"))
+        .current_dir(&f.root)
+        .args(["mach", "was", "--at", "verify"])
+        .env("XDG_CACHE_HOME", &f.cache)
+        .env("PATH", path)
+        .env("HANNES_EXECUTION_POINT", "source-point")
+        .env("EXPECTED_EXECUTION_POINT", "verify")
+        .env("CONTEXT_CALLS", &calls)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report = hannes::report::read(&f.root).unwrap();
+    assert_eq!(report.overall, Status::Pass);
+    assert_eq!(report.results.len(), 4);
+    for check in report.results.iter().filter(|r| r.kind == "check") {
+        assert_eq!(check.stdout.as_ref().unwrap().text, "verify");
+    }
+    assert_eq!(fs::read_to_string(calls).unwrap(), "discovery\nreview\n");
+}

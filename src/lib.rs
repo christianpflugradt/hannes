@@ -157,7 +157,7 @@ pub fn verify_project_with_context(
             });
         }
         let item = if plan.executable() {
-            checks::execute_with_context(&project, check, hook)
+            checks::execute_with_context(&project, check, &plan.at, hook)
         } else {
             Item::simple(
                 &check.id,
@@ -213,6 +213,7 @@ pub fn verify_project_with_context(
                     anyhow::anyhow!("executable review plan has no prepared input")
                 })?,
                 provider,
+                &plan.at,
             );
             provider_usage = usage;
             for (offset, item) in results.iter().enumerate() {

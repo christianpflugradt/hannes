@@ -214,7 +214,11 @@ fn file_parameters_reject_symlink_traversal_even_when_the_target_is_inside() {
             "\n[parameters.scope]\ntype = 'file'\nvalue = 'link/scopes'\n",
         );
         let p = config::load(root.path()).unwrap();
-        let item = hannes::checks::execute(&p, p.checks.iter().find(|c| c.id == "linked").unwrap());
+        let item = hannes::checks::execute(
+            &p,
+            p.checks.iter().find(|c| c.id == "linked").unwrap(),
+            "check",
+        );
         assert_eq!(item.status, Status::Error);
         assert!(item.reason.contains("scope") && item.reason.contains("symlink"));
     }
@@ -411,6 +415,7 @@ fn provider_subprocess_receives_only_its_batch_parameters_and_clears_inherited_v
     let script = fake.path().join("codex");
     fs::write(&script, r#"#!/bin/sh
 set -eu
+test "$HANNES_EXECUTION_POINT" = check
 test "${HANNES_PARAM_UNDECLARED+x}" != x
 if [ "${1:-}" = mcp ]; then printf '[]'; exit 0; fi
 test "${HANNES_PARAM_UNDECLARED+x}" != x
@@ -442,6 +447,7 @@ printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input
         .args(["mach", "was", "--at", "check"])
         .current_dir(root.path())
         .env("PATH", path)
+        .env("HANNES_EXECUTION_POINT", "spoofed")
         .env("HANNES_PARAM_UNDECLARED", "secret")
         .env("HANNES_PARAM_OPTIONAL", "secret")
         .env("HANNES_PARAM_FILE", "wrong")

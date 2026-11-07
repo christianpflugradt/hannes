@@ -106,17 +106,19 @@ pub fn execute(
     active: &[&Review],
     snapshot: &Snapshot,
     provider: &dyn Provider,
+    execution_point: &str,
 ) -> Vec<Item> {
-    execute_with_usage(project, active, snapshot, provider).0
+    execute_with_usage(project, active, snapshot, provider, execution_point).0
 }
 pub fn execute_with_usage(
     project: &Project,
     active: &[&Review],
     snapshot: &Snapshot,
     provider: &dyn Provider,
+    execution_point: &str,
 ) -> (Vec<Item>, Option<TokenUsage>) {
     match crate::review_input::PreparedReviewInput::prepare(project, active, snapshot) {
-        Ok(input) => execute_prepared(project, active, snapshot, &input, provider),
+        Ok(input) => execute_prepared(project, active, snapshot, &input, provider, execution_point),
         Err(error) => (
             active
                 .iter()
@@ -132,6 +134,7 @@ pub fn execute_prepared(
     snapshot: &Snapshot,
     input: &crate::review_input::PreparedReviewInput,
     provider: &dyn Provider,
+    execution_point: &str,
 ) -> (Vec<Item>, Option<TokenUsage>) {
     let mut groups =
         std::collections::BTreeMap::<crate::parameters::Environment, Vec<&Review>>::new();
@@ -174,6 +177,7 @@ pub fn execute_prepared(
                 snapshot,
                 input,
                 parameters: &parameters,
+                execution_point,
             })
         } else {
             crate::provider::Response {

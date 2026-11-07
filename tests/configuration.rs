@@ -750,6 +750,7 @@ fn prepared_input_is_shared_without_rereading_resources() {
     assert!(input.excerpts[0].text.contains("My_App"));
     assert_eq!(p.reviews[0].text, "Inspect documented expectations.\n");
     let rendered = hannes::provider::prompt(&Request {
+        execution_point: "pre-push",
         parameters: &Default::default(),
         project: &p,
         reviews: &[&p.reviews[0]],

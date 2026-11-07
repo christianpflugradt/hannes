@@ -528,6 +528,13 @@ produce a clear startup ERROR.
 Checks inherit the environment, receive no stdin and keep the consuming project's
 root as their working directory. `HANNES_RULE_DIRECTORY` is the absolute directory
 of the check, for bundled resources such as a scanner configuration or helper.
+Checks and AI review provider subprocesses also receive `HANNES_EXECUTION_POINT`,
+the effective execution point (for example, `pre-commit`, `commit-msg`, `pre-push`,
+`check` or a configured custom point). Hannes supplies this runtime context from
+the validated execution plan and overrides inherited values. It is not a
+configurable rule parameter and has no TOML field. Local and imported rules
+receive the same context; mapped imports receive the consumer execution point.
+
 For example, Python can read `Path(os.environ["HANNES_RULE_DIRECTORY"]) / "config.json"`.
 
 Exit **0 = PASS**, **1 = FAIL**, **2 = ERROR**. Unexpected numeric codes produce

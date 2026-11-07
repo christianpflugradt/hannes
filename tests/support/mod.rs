@@ -29,3 +29,27 @@ pub fn review_path(root: &Path, id: &str) -> std::path::PathBuf {
     .unwrap();
     directory.join("rule.toml")
 }
+
+/// Credential-free provider which checks runtime context in discovery and review.
+#[cfg(unix)]
+pub fn context_provider(directory: &Path) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let script = directory.join("codex");
+    fs::write(&script, r#"#!/usr/bin/env python3
+import json, os, sys
+assert os.environ["HANNES_EXECUTION_POINT"] == os.environ["EXPECTED_EXECUTION_POINT"]
+with open(os.environ["CONTEXT_CALLS"], "a") as log:
+    log.write("discovery\n" if sys.argv[1] == "mcp" else "review\n")
+if sys.argv[1] == "mcp":
+    print("[]")
+else:
+    prompt = sys.stdin.read()
+    line = next(line for line in prompt.splitlines() if line.startswith("Configured reviews (JSON data): "))
+    reviews = json.loads(line.split(": ", 1)[1])
+    output = sys.argv[sys.argv.index("--output-last-message") + 1]
+    with open(output, "w") as document:
+        json.dump({"reviews": [{"id": r["id"], "status": "PASS", "reason": "Context delivered", "findings": [{"message": "Evidence inspected", "path": "evidence", "line": 1}]} for r in reviews]}, document)
+"#).unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    script
+}

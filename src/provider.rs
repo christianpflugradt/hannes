@@ -18,6 +18,7 @@ use std::{
 
 pub struct Request<'a> {
     pub project: &'a Project,
+    pub execution_point: &'a str,
     pub reviews: &'a [&'a Review],
     pub snapshot: &'a Snapshot,
     pub input: &'a crate::review_input::PreparedReviewInput,
@@ -189,7 +190,8 @@ impl Codex {
         input.write_all(prompt(request)?.as_bytes())?;
         input.seek(SeekFrom::Start(0))?;
         let started = Instant::now();
-        let overrides = review_overrides(&self.executable, request.project)?;
+        let overrides =
+            review_overrides(&self.executable, request.project, request.execution_point)?;
         let mut command = command_with_executable(
             &self.executable,
             &request.project.root,
@@ -202,6 +204,7 @@ impl Codex {
             command.arg("--config").arg(value);
         }
         crate::parameters::configure(&mut command, request.parameters);
+        command.env("HANNES_EXECUTION_POINT", request.execution_point);
         command.arg("-");
         command.stdin(input);
         let remaining = Duration::from_secs(request.project.provider.timeout_seconds)
@@ -242,7 +245,11 @@ impl Codex {
         Ok(Response { verdict, usage })
     }
 }
-fn review_overrides(executable: &Path, project: &Project) -> Result<Vec<String>> {
+fn review_overrides(
+    executable: &Path,
+    project: &Project,
+    execution_point: &str,
+) -> Result<Vec<String>> {
     #[derive(serde::Deserialize)]
     struct Server {
         name: String,
@@ -263,6 +270,7 @@ fn review_overrides(executable: &Path, project: &Project) -> Result<Vec<String>>
     ];
     let mut discovery = Command::new(executable);
     crate::parameters::configure(&mut discovery, &Default::default());
+    discovery.env("HANNES_EXECUTION_POINT", execution_point);
     discovery
         .args(["mcp", "list", "--json"])
         .current_dir(&project.root)

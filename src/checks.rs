@@ -7,13 +7,14 @@ use std::{
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
-pub fn execute(project: &Project, check: &Check) -> Item {
-    execute_with_context(project, check, None)
+pub fn execute(project: &Project, check: &Check, execution_point: &str) -> Item {
+    execute_with_context(project, check, execution_point, None)
 }
 
 pub fn execute_with_context(
     project: &Project,
     check: &Check,
+    execution_point: &str,
     hook: Option<&crate::reconciliation::HookContext>,
 ) -> Item {
     let start = Instant::now();
@@ -55,6 +56,7 @@ pub fn execute_with_context(
     };
     crate::parameters::configure(&mut command, &environment);
     command.env("HANNES_RULE_DIRECTORY", check.entrypoint.parent().unwrap());
+    command.env("HANNES_EXECUTION_POINT", execution_point);
     command.current_dir(&project.root).stdin(Stdio::null());
     if let Some(hook) = hook {
         hook.configure(&mut command);

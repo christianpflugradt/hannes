@@ -336,7 +336,7 @@ fn real_commit_hooks_forward_message_path_and_preserve_index_and_worktree() {
     let root = project(&["pre-commit", "commit-msg"]);
     checker(
         root.path(),
-        "set -eu\ncase \"$HANNES_GIT_HOOK\" in\npre-commit) test \"$HANNES_GIT_HOOK_ARG_COUNT\" = 0;;\ncommit-msg) test \"$HANNES_GIT_HOOK_ARG_COUNT\" = 1; grep -q '^test: accepted' \"$HANNES_GIT_HOOK_ARG_1\";;\n*) exit 19;;\nesac\n",
+        "set -eu\ntest \"$HANNES_EXECUTION_POINT\" = \"$HANNES_GIT_HOOK\"\ncase \"$HANNES_GIT_HOOK\" in\npre-commit) test \"$HANNES_GIT_HOOK_ARG_COUNT\" = 0;;\ncommit-msg) test \"$HANNES_GIT_HOOK_ARG_COUNT\" = 1; grep -q '^test: accepted' \"$HANNES_GIT_HOOK_ARG_1\";;\n*) exit 19;;\nesac\n",
     );
     fs::write(root.path().join("file"), "staged\n").unwrap();
     ok(git(root.path(), &["add", "file"]));

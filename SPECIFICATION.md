@@ -139,6 +139,12 @@ Every selected rule must execute; only completed non-blocking FAIL is nonfatal. 
 execution before any check starts. Empty execution points succeed without proving
 any rule PASS.
 
+Checks and AI provider subprocesses receive `HANNES_EXECUTION_POINT` from the
+validated execution plan, including custom points and mapped imported assignments.
+Hannes overrides any inherited value. This is runtime context, not a configurable
+rule parameter or TOML field; parameters, rule resources and Git hook arguments
+retain their existing contracts.
+
 ## CHK-001: Deterministic checks
 
 [check] requires entrypoint and accepts optional interpreter and timeout_seconds

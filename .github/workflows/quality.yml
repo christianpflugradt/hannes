@@ -40,7 +40,7 @@ jobs:
         run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
       - name: Install published Hannes through the public Action
         if: runner.os == 'Linux'
-        uses: christianpflugradt/hannes@c1bedc737c8d8f0a746cd964923c67ac5d60d976 # initial public Action publication
+        uses: christianpflugradt/hannes@c6cedb7ea0733d28f5b43ecff00d2dc7d6ebaae4 # initial public Action publication
         with:
           version: ${{ steps.governor.outputs.version }}
           execution-point: check

@@ -284,9 +284,9 @@ executable lookup/permissions still apply. Plans validate syntax without
 requiring existence. Existing filesystem race and trust boundaries remain;
 references provide no sandbox.
 
-Path references require a release containing this feature; published v0.13.0
-does not support them. Active repository configuration and external imports
-remain unchanged and compatible with that governor in this step.
+Path references require Hannes v0.14.0 or later; published v0.13.0 does not
+resolve them. The repository uses published v0.14.0 with all external imports
+pinned to migrated string-command revisions.
 
 Acceptance: `tests/configuration.rs::local_path_references_execute_with_consumer_working_directory`,
 `tests/external_rule_sets.rs::imported_path_references_use_cached_provenance_offline`
@@ -294,10 +294,11 @@ and the offline resolver unit tests cover explicit roots, token boundaries,
 spaces, executable/argument positions, literals, missing paths, symlinks and
 cached shared scripts. Invalid syntax and legacy behavior retain the tests below.
 
-String commands require Hannes v0.13.0 or later. All active local repository
-Checks use strings with the published v0.13.0 governor. External Rules keep their
-compatible legacy syntax and source-root resource resolution. Consumers running
-older governors must retain legacy syntax until they upgrade.
+String commands require Hannes v0.13.0 or later; path references require v0.14.0.
+All 16 local and four imported repository Checks use string commands with the
+published v0.14.0 governor. Imported shell scripts use @rule/index.sh; the shared
+license script uses @source/scripts/file-reference.py. Older consumers retain
+compatible legacy revisions until they upgrade. Legacy support remains unchanged.
 
 Acceptance: `tests/configuration.rs::string_commands_parse_arguments_without_a_shell`,
 `tests/configuration.rs::string_commands_reject_invalid_syntax`,
@@ -536,7 +537,7 @@ An executable plan exits 0; a blocked/invalid plan exits 2.
 
 The root `action.yml` is a public composite GitHub Action for GitHub-hosted
 Ubuntu 24.04 x64 and ARM64 runners. Required `version` is an exact stable release
-tag such as `v0.13.0`. Optional `execution-point` defaults to `check`; `run` defaults
+tag such as `v0.14.0`. Optional `execution-point` defaults to `check`; `run` defaults
 to `true` and accepts only `true` or `false`. Installation downloads the matching
 native archive and SHA256SUMS, verifies the checksum, and adds the executable to
 PATH for subsequent steps. With `run: true` it executes
@@ -599,7 +600,8 @@ Checks and one conditional document Review; dependency audits remain at check wi
 commit/push feedback instead of manually running checks,
 tests, linters or builds. They may read saved reports without rerunning Rules.
 The manual mise check task delegates to published Hannes at pre-push.
-External Rule Set imports, pins, parameters and assignments remain unchanged.
+All three external Rule Set imports pin the same migrated full Git commit.
+Their parameters and execution-point assignments remain unchanged.
 The custom release-build point selects the five native
 checks on each release host; release-artifacts checks the collected archives.
 The self-governance fixture records local rule definitions and selections.
@@ -613,7 +615,7 @@ and HEAD contents at pre-push, without history. The CI quality job explicitly
 runs check with Python 3 and a checksum-verified Gitleaks binary available. The
 release publisher prepares Gitleaks for its managed push hook. Rules and Hannes
 never install these dependencies automatically. The same points import
-repository-conventions from main without a commit or tag pin. It currently
+repository-conventions at a full Git commit pin. It currently
 contains only the blocking license Rule, with target = "LICENSE". The license
 must match an SPDX reference byte-for-byte: Apache-2.0,
 PolyForm-Noncommercial-1.0.0 or Unlicense. Hannes uses the exact Unlicense text.
@@ -759,7 +761,7 @@ with trigger_not_matched. CI uses an explicit verified baseline, preferring the
 PR merge-base. Summaries distinguish PASS, non-blocking FAIL, ERROR and SKIP.
 The rubric is context only. review.include_diff defaults to true; setting it to
 false excludes the diff. The active repository Review sets include_diff = false
-using published Hannes v0.13.0. Batches separate reviews with different diff
+using published Hannes v0.14.0. Batches separate reviews with different diff
 settings, and no diff is assembled or delivered for a batch that disables it.
 Plain HTTP models use only supplied evidence; generic instructions require no tools or repository access.
 

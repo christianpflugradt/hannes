@@ -78,18 +78,18 @@ security and license Rules.
 
 The 16 local [checks](../.hannes/checks) use string commands. Python scripts run
 as `python3 scripts/<name>.py`, relative to the consuming repository root.
-The published v0.13.0 governor supports these commands and the imported Rules'
-legacy entrypoint/interpreter forms without changing their resource resolution.
-There are no index.sh launchers. Each local Rule declares its execution points
-directly; this repository defines no local Rule Sets. External Rule Sets supply
-the commit-message, security and license checks.
+The published v0.14.0 governor supports these commands and explicit path
+references for the four imported Checks. There are no local index.sh launchers.
+Each local Rule declares its execution points directly; this repository defines
+no local Rule Sets. External Rule Sets supply commit-message, security and
+license checks at full Git commit pins.
 
-The imported commit-message, secret-scan and sensitive-files Checks keep their
-rule-local `index.sh` entrypoints with `sh`. The license Check keeps
-`entrypoint = "scripts/file-reference.py"` with `python3`, resolved from the
-imported repository root. These forms remain supported in v0.13.0. Converting
-them to relative commands here would resolve paths against the consumer instead;
-the imports and external repositories remain unchanged.
+The imported commit-message, secret-scan and sensitive-files Checks use
+`command = "sh @rule/index.sh"`. The license Check uses
+`command = "python3 @source/scripts/file-reference.py"` for its shared script.
+These references resolve from the cached Rule directory and imported repository
+root respectively, while execution stays in the consuming repository root.
+Scripts, parameters, timeouts and exit-code handling are unchanged.
 
 All Rust unit, integration, acceptance and documentation tests run in one Cargo
 Rule. Python helper tests use one unittest discovery Rule; test modules use
@@ -171,8 +171,8 @@ contents, including allowed templates; symlink contents are excluded and
 submodules cause ERROR. Scanner configuration comes from the selected snapshot.
 The external Rule Set documents its complete policy and limitations.
 
-The `repository-conventions` import uses `ref = "main"`, without a commit or tag
-pin. It currently includes only the blocking `license`
+The `repository-conventions` import pins the same migrated full Git commit as
+the other imports in `.hannes/config.toml`. It includes only the blocking `license`
 Rule at `check` and `pre-push`, with `target = "LICENSE"`. The Rule uses the shared
 `scripts/file-reference.py` entrypoint and resolves bundled references relative
 to `HANNES_RULE_DIRECTORY`. LICENSE must match Apache-2.0,
@@ -213,7 +213,9 @@ Both installers download the pinned release's assets directly, without a GitHub
 Releases API request. Missing tags, assets or valid checksums fail installation;
 there is no fallback to latest. These installation steps need no GitHub token.
 
-The repository uses published Hannes v0.13.0 for both local hooks and CI.
+The repository uses published Hannes v0.14.0 for both local hooks and CI.
+All public Action references pin the v0.14.0 source commit; their version input
+continues to come from `.hannes-version`.
 The AGENTS.md review sets include_diff = false and its Gemini provider sets
 timeout_seconds = 0, leaving request deadlines and retries to the REST adapter.
 Candidate binaries remain confined to disposable acceptance fixtures and smoke

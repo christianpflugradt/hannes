@@ -3,7 +3,7 @@ set -euo pipefail
 trap 'echo "::error::Hannes installation failed at line $LINENO. Check the release tag, release assets and network access." >&2' ERR
 
 if [[ ! "$HANNES_VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-  echo "::error::version must be an exact stable release tag, such as v0.13.0." >&2
+  echo "::error::version must be an exact stable release tag, such as v0.14.0." >&2
   exit 1
 fi
 if [[ "$HANNES_RUN" != true && "$HANNES_RUN" != false ]]; then

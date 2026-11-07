@@ -2,7 +2,7 @@
 
 This repository uses unversioned, self-contained deterministic rules and pinned
 external commit-message and Security Rule Sets at six execution points, plus
-the unpinned repository-conventions Rule Set at check and pre-push. Its only
+the pinned repository-conventions Rule Set at check and pre-push. Its only
 Rule compares LICENSE against the bundled license references byte-for-byte.
 A conditional AGENTS.md quality Review runs only at check through a named Gemini
 REST adapter through the CLI transport. Git hooks and release-build points select checks only.
@@ -12,7 +12,9 @@ tools and Python scripts relative to the consuming repository root. Cargo, Pytho
 helper and JavaScript tests each have one Rule and run at pre-push and again in CI. Cargo build, test,
 Clippy and MSRV commands and npm tests explicitly select offline mode.
 Each local Rule declares its own run_at; there are no local Rule Sets.
-`config.toml` declares custom points and the external imports.
+`config.toml` declares custom points and pins all three external imports to the
+same migrated revision. All four imported Checks use string commands with
+`@rule/` or `@source/` references.
 `commit-scopes.txt` supplies the commit-message import's required
 scopes_file parameter and matches the scopes in `.githooks/commit-policy`. The
 local message check additionally enforces the narrower Hannes type allowlist and
@@ -24,7 +26,7 @@ hannes mach was --at pre-commit --plan
 hannes was ist phase --details
 ```
 
-The exact published governor pin is v0.13.0 in .hannes-version, shared by local
+The exact published governor pin is v0.14.0 in .hannes-version, shared by local
 hooks and GitHub Actions. The AGENTS.md review excludes the Git diff and its
 Gemini REST provider delegates deadlines to the adapter.
 Do not use a candidate built from this checkout as the governor.

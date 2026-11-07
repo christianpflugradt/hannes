@@ -117,13 +117,13 @@ class GovernanceTests(unittest.TestCase):
         release = (ROOT / ".github/workflows/release.yml").read_text()
         self.assertLess(release.index("Install pinned Gitleaks"), release.index("Publish versioned CLI"))
 
-    def test_repository_conventions_import_tracks_main_and_license_target(self):
+    def test_repository_conventions_import_is_pinned_and_license_target(self):
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
         imported, = [item for item in config["imports"] if item["path"] == "repository-conventions"]
-        self.assertEqual(imported, {
+        self.assertRegex(imported["ref"], r"^[0-9a-f]{40}$")
+        self.assertEqual({key: value for key, value in imported.items() if key != "ref"}, {
             "git": "https://github.com/christianpflugradt/christianpflugradt-rulesets.git",
             "path": "repository-conventions",
-            "ref": "main",
             "rule_parameters": {"license": {"target": "LICENSE"}},
         })
         self.assertFalse((ROOT / ".hannes/checks/license").exists())
@@ -152,11 +152,7 @@ class GovernanceTests(unittest.TestCase):
                     self.assertTrue(rule["blocking"])
                     origin = rule["origin"]["external"]
                     declaration, = [item for item in declarations if item["path"] == origin["path"]]
-                    if declaration["path"] != "repository-conventions":
-                        self.assertEqual(origin["commit"], declaration["ref"])
-                    else:
-                        self.assertEqual(declaration["ref"], "main")
-                        self.assertRegex(origin["commit"], r"^[0-9a-f]{40}$")
+                    self.assertEqual(origin["commit"], declaration["ref"])
                 reviews = [rule for rule in plan["scheduled"] if rule["kind"] == "review"]
                 self.assertEqual([rule["id"] for rule in reviews], ["agents-quality"] if point == "check" and reviews else [])
                 self.assertEqual(set(plan["required_ids"]), set(expected) | {rule["id"] for rule in imported + reviews})

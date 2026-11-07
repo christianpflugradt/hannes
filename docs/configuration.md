@@ -269,10 +269,11 @@ executable permissions. Offline plans validate syntax without requiring referenc
 paths to exist or launching commands. Checks are not a filesystem sandbox, and
 these checks do not eliminate concurrent filesystem replacement races.
 
-Path references require a release containing this feature; v0.13.0 supports
-string commands but does not resolve references. Keep active configurations on
-ordinary commands or legacy entrypoints until their published governor supports
-them. This repository keeps its v0.13.0 governor and active configuration unchanged.
+Path references require Hannes v0.14.0 or later; v0.13.0 supports string commands
+but does not resolve references. Upgrade the published governor before migrating
+shared rules, and keep older consumers pinned to compatible legacy revisions.
+This repository uses published v0.14.0 and pins its external string-command Rules
+to full Git commits.
 
 String commands use this grammar **after TOML decoding**:
 
@@ -307,10 +308,10 @@ plans do not launch commands. Parameters, working directory, Rule-directory
 context, timeout, output capture and exit codes are shared with file entrypoints.
 `interpreter` is only available with `entrypoint`.
 
-String commands require Hannes v0.13.0 or later. Keep legacy syntax in shared
-external rules until every consuming governor is upgraded. This repository uses
-string commands for all local Checks and pins published v0.13.0 for Git hooks and
-CI. Imported Rules retain their compatible legacy syntax.
+String commands require Hannes v0.13.0 or later; explicit path references require
+v0.14.0. This repository uses string commands for all 16 local and four imported
+Checks, with published v0.14.0 for Git hooks and CI. Older consumers must retain
+compatible external revisions until their governors are upgraded.
 
 A filename such as `index.sh` resolves inside the declaring Rule directory.
 A path containing `/`, such as `scripts/check-files.py`, resolves from the

@@ -2,7 +2,7 @@ name: Hannes
 description: Install an exact Hannes release and optionally run an execution point
 inputs:
   version:
-    description: Exact stable Hannes release tag, such as v0.13.0
+    description: Exact stable Hannes release tag, such as v0.14.0
     required: true
   execution-point:
     description: Execution point to run in the consuming repository

@@ -31,8 +31,7 @@ rules = ["rules/checks/readme"]
 id = "repository-readme"
 description = "Require the consumer README"
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+command = "sh @rule/index.sh"
 ```
 
 `rules/checks/readme/index.sh`:
@@ -56,8 +55,7 @@ rules = ["rules/checks/readme", "rules/checks/changelog"]
 id = "release-changelog"
 description = "Require the consumer changelog"
 [check]
-entrypoint = "index.sh"
-interpreter = "sh"
+command = "sh @rule/index.sh"
 ```
 
 `rules/checks/changelog/index.sh`:
@@ -184,11 +182,17 @@ tree; inspect provenance to see which external revision a report evaluated.
 ## Source resources and trust
 
 Imported Checks accept the same preferred string commands and deprecated arrays
-and entrypoint/interpreter forms as local Checks. Examples retain legacy syntax
-for older consumers; published v0.13.0 supports these forms unchanged. Shared rules
-must keep legacy syntax until all consuming governors support string commands. Command paths stay
-relative to the consuming root; switching an imported entrypoint to a command does
-not preserve its source-root resolution automatically.
+and entrypoint/interpreter forms as local Checks. The examples require published
+Hannes v0.14.0 for explicit path references. `@rule/` resolves from the declaring
+Rule directory; `@source/` resolves from the imported Git repository root, so a
+shared script can use `command = "python3 @source/scripts/check-files.py"`.
+`@repo/` addresses consuming repository files. Ordinary command paths still use
+the consuming root. These references add no shell expansion.
+
+Upgrade consumers' published governors before adopting these commands. Consumers
+on older governors must keep compatible full-commit pins; v0.13.0 understands
+string commands but does not resolve path references. Refreshing a moving branch
+can load incompatible rules. Legacy entrypoints and arrays remain supported.
 
 Checks keep the consuming project's working directory. HANNES_RULE_DIRECTORY
 locates bundled resources inside the declaring Rule directory, even for shared

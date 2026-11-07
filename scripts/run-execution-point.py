@@ -29,7 +29,7 @@ def run(point):
         raise ValueError("Installed Hannes returned an invalid version. Reinstall with mise deploy.")
     expected = (root / ".hannes-version").read_text().strip()
     if os.environ.get("CI") == "true" and version != f"hannes {expected.removeprefix('v')}":
-        raise ValueError(f"CI requires published Hannes {expected}; got {version}. Use the setup-hannes action.")
+        raise ValueError(f"CI requires published Hannes {expected}; got {version}. Use the public Hannes Action with the exact .hannes-version pin.")
     env = dict(os.environ, HANNES_EXECUTABLE=str(executable))
     if point in ("pre-commit", "commit-msg", "pre-push"):
         env.update(CARGO_NET_OFFLINE="true", npm_config_offline="true", RUSTUP_AUTO_INSTALL="0")

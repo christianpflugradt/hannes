@@ -58,7 +58,19 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - uses: ./.github/actions/setup-hannes
+      - name: Read the exact governor release pin
+        id: governor
+        shell: bash
+        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
+      - name: Install published Hannes through the public Action
+        if: runner.os == 'Linux'
+        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
+        with:
+          version: ${{ steps.governor.outputs.version }}
+          execution-point: check
+          run: 'false'
+      - name: Reconcile declared Git hooks and external rules
+        run: hannes pass auf --auto-approve
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '26'

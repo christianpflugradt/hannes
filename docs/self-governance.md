@@ -121,13 +121,29 @@ CI checkouts remain authoritative. Exact index/commit inputs are future work.
 
 ## CI, pinning and Renovate
 
-[.hannes-version](../.hannes-version) is the single exact governor pin. The
-[setup action](../.github/actions/setup-hannes/action.yml) downloads that release,
-verifies archive checksum and executable version, installs outside the checkout,
-and runs pass auf --auto-approve once. It never resolves latest or builds the
-governor. The execution wrapper rejects candidates inside the checkout and
-checks CI's executable version against the pin. Local installation must support
-the pinned configuration and unattended setup option.
+[.hannes-version](../.hannes-version) is the single exact governor pin. Workflows
+read it and pass the exact tag through the public [Action](../action.yml)'s
+`version` input, with `execution-point: check` and `run: 'false'` on Ubuntu.
+The Action downloads the release, verifies its checksum and installs outside the
+checkout. macOS release runners retain the [native installer](../scripts/install-governor.py),
+since the public Action initially supports Ubuntu only. Each governance job
+separately runs `hannes pass auf --auto-approve` to reconcile hooks and external
+rules, then runs its existing execution point. No governance job installs the governor twice.
+The execution wrapper rejects candidates inside the checkout and checks CI's
+executable version against the pin.
+
+The initial Action was published on main at
+[`2d3cac2324ce54f076c7090e5bf80969eee4b37e`](https://github.com/christianpflugradt/hannes/commit/2d3cac2324ce54f076c7090e5bf80969eee4b37e)
+before a second commit added public `uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e`
+references. This immutable publication revision contains `action.yml`; it has no
+separate Action release tag or compiled artifact. No major-version tag is created.
+The Action revision and CLI release pin are independent.
+
+The reusable quality workflow also runs a disposable consumer fixture on Ubuntu
+x64 and ARM64. It checks installation of the pinned CLI release, PATH in a subsequent step,
+install-only mode, a custom execution point and the default execution/failure path
+through the public Action. The expected failure is asserted explicitly; all
+repository governance jobs and release gates remain required.
 
 The regex custom manager in [renovate.json](../renovate.json) retains the
 GitHub-releases datasource and disabled automerge. Pin updates remain normal

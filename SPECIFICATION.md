@@ -343,8 +343,9 @@ request write permission. Actions are pinned. See [release policy](docs/releasin
 Repository self-integration continues to use its pinned published governor.
 The governor is an installed, previously published binary outside the checkout;
 local candidate builds never govern the source being checked. `.hannes-version`
-is the sole exact release pin, consumed by the shared CI setup action and updated
-by Renovate GitHub-release PRs without automerge. CI never resolves latest.
+is the sole exact release pin, passed explicitly to the public Action on Ubuntu
+and the native installer on macOS. Renovate updates it through GitHub-release
+PRs without automerge. CI never resolves latest.
 The governor is pinned to published v0.9.0. Repository rules use the unversioned,
 self-contained Rule model and fixed Git-hook execution points.
 

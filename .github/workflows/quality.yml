@@ -24,7 +24,19 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - uses: ./.github/actions/setup-hannes
+      - name: Read the exact governor release pin
+        id: governor
+        shell: bash
+        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
+      - name: Install published Hannes through the public Action
+        if: runner.os == 'Linux'
+        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
+        with:
+          version: ${{ steps.governor.outputs.version }}
+          execution-point: check
+          run: 'false'
+      - name: Reconcile declared Git hooks and external rules
+        run: hannes pass auf --auto-approve
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '26'
@@ -65,7 +77,19 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - uses: ./.github/actions/setup-hannes
+      - name: Read the exact governor release pin
+        id: governor
+        shell: bash
+        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
+      - name: Install published Hannes through the public Action
+        if: runner.os == 'Linux'
+        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
+        with:
+          version: ${{ steps.governor.outputs.version }}
+          execution-point: check
+          run: 'false'
+      - name: Reconcile declared Git hooks and external rules
+        run: hannes pass auf --auto-approve
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '26'
@@ -96,7 +120,19 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - uses: ./.github/actions/setup-hannes
+      - name: Read the exact governor release pin
+        id: governor
+        shell: bash
+        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
+      - name: Install published Hannes through the public Action
+        if: runner.os == 'Linux'
+        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
+        with:
+          version: ${{ steps.governor.outputs.version }}
+          execution-point: check
+          run: 'false'
+      - name: Reconcile declared Git hooks and external rules
+        run: hannes pass auf --auto-approve
       - run: rustup toolchain install 1.85.0 --profile minimal
       - run: cargo +1.85.0 fetch --locked
       - name: Run minimum Rust gate
@@ -134,7 +170,22 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
-      - uses: ./.github/actions/setup-hannes
+      - name: Read the exact governor release pin
+        id: governor
+        shell: bash
+        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
+      - name: Install published Hannes through the public Action
+        if: runner.os == 'Linux'
+        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
+        with:
+          version: ${{ steps.governor.outputs.version }}
+          execution-point: check
+          run: 'false'
+      - name: Install published Hannes on macOS
+        if: runner.os == 'macOS'
+        run: python3 scripts/install-governor.py
+      - name: Reconcile declared Git hooks and external rules
+        run: hannes pass auf --auto-approve
       - name: Stamp planned release version before verification
         if: inputs.release-version != ''
         env:
@@ -168,3 +219,76 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 7
+
+  action-consumer:
+    name: Public Action / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Read the exact governor release pin
+        id: governor
+        run: echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
+      - name: Prepare an isolated consumer configuration
+        run: |
+          # This disposable checkout tests the public Action without repository imports.
+          mv .hannes "$RUNNER_TEMP/original-hannes"
+          mkdir -p .hannes/checks/consumer
+          cat > .hannes/config.toml <<'TOML'
+          project = "Action_Consumer"
+          [execution_points]
+          custom = ["action-test"]
+          TOML
+          cat > .hannes/checks/consumer/rule.toml <<'TOML'
+          id = "consumer"
+          description = "Record the selected point and return the requested test status"
+          run_at = ["check", "action-test"]
+          [check]
+          entrypoint = "index.sh"
+          interpreter = "sh"
+          TOML
+          cat > .hannes/checks/consumer/index.sh <<'SH'
+          printf '%s\n' "$HANNES_EXECUTION_POINT" >> "$RUNNER_TEMP/action-points"
+          exit "${ACTION_CHECK_STATUS:-0}"
+          SH
+      - name: Install only through the public Action
+        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
+        with:
+          version: ${{ steps.governor.outputs.version }}
+          execution-point: check
+          run: 'false'
+      - name: Verify PATH and skipped execution in a subsequent step
+        env:
+          EXPECTED_VERSION: ${{ steps.governor.outputs.version }}
+        run: |
+          test "$(hannes --version)" = "hannes ${EXPECTED_VERSION#v}"
+          test ! -e "$RUNNER_TEMP/action-points"
+      - name: Run a specified execution point through the public Action
+        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
+        with:
+          version: ${{ steps.governor.outputs.version }}
+          execution-point: action-test
+          run: 'true'
+      - name: Verify default execution propagates a failing check
+        id: failing
+        continue-on-error: true
+        uses: christianpflugradt/hannes@2d3cac2324ce54f076c7090e5bf80969eee4b37e # initial public Action publication
+        env:
+          ACTION_CHECK_STATUS: '1'
+        with:
+          version: ${{ steps.governor.outputs.version }}
+          execution-point: check
+      - name: Assert the expected failure and executed points
+        if: always()
+        env:
+          FAILURE_OUTCOME: ${{ steps.failing.outcome }}
+        run: |
+          test "$FAILURE_OUTCOME" = failure
+          printf 'action-test\ncheck\n' > "$RUNNER_TEMP/expected-points"
+          diff -u "$RUNNER_TEMP/expected-points" "$RUNNER_TEMP/action-points"

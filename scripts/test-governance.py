@@ -123,11 +123,20 @@ class GovernanceTests(unittest.TestCase):
                 self.assertFalse(plan["omitted"])
 
     def test_ci_installs_pinned_governor_and_uploads_failure_reports(self):
-        workflow = (ROOT / ".github/workflows/quality.yml").read_text()
+        workflow = (ROOT / ".github/workflows/quality.yml").read_text().split("  action-consumer:")[0]
         release = (ROOT / ".github/workflows/release.yml").read_text()
         for point in ("ci-native", "ci-tooling", "ci-msrv", "ci-audit"):
             self.assertIn(f"python3 scripts/run-execution-point.py {point}", workflow)
-        self.assertEqual(workflow.count("uses: ./.github/actions/setup-hannes"), 4)
+        self.assertEqual(len(re.findall(r"uses: christianpflugradt/hannes@[0-9a-f]{40}", workflow)), 4)
+        self.assertNotIn("uses: ./", workflow)
+        self.assertEqual(workflow.count("execution-point: check"), 4)
+        self.assertEqual(workflow.count("run: 'false'"), 4)
+        self.assertEqual(workflow.count("version: ${{ steps.governor.outputs.version }}"), 4)
+        self.assertEqual(workflow.count("run: hannes pass auf --auto-approve"), 4)
+        self.assertEqual(workflow.count("run: python3 scripts/install-governor.py"), 1)
+        self.assertIn("if: runner.os == 'macOS'", workflow)
+        self.assertRegex(release, r"uses: christianpflugradt/hannes@[0-9a-f]{40}")
+        self.assertNotIn("uses: ./.github/actions/", release)
         self.assertEqual(workflow.count("if: always()"), 4)
         self.assertEqual(workflow.count("include-hidden-files: true"), 4)
         self.assertIn("python3 scripts/run-execution-point.py release-artifacts", release)
@@ -140,8 +149,9 @@ class GovernanceTests(unittest.TestCase):
         self.assertIn('Path(".hannes-version")', installer)
         self.assertIn("deploy(tag=version", installer)
         self.assertNotIn("cargo", installer)
-        action = (ROOT / ".github/actions/setup-hannes/action.yml").read_text()
-        self.assertIn('"$HANNES_EXECUTABLE" pass auf --auto-approve', action)
+        action = (ROOT / "action.yml").read_text()
+        self.assertIn("run: hannes pass auf --auto-approve", release)
+        self.assertFalse((ROOT / ".github/actions/setup-hannes/action.yml").exists())
         self.assertNotRegex(workflow + release + action, r"--profil(?:\s|=|$)")
 
     def test_release_prepares_offline_hooks_and_uploads_reports_after_publication(self):

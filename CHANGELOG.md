@@ -1,3 +1,10 @@
+## [0.12.0](https://github.com/christianpflugradt/hannes/compare/v0.11.0...v0.12.0) (2026-11-07)
+
+### Features
+
+* **reviews:** integrate conditional AGENTS.md quality review ([8217a53](https://github.com/christianpflugradt/hannes/commit/8217a536367b719d56843cea2e15f1483c631e63))
+* **reviews:** use Gemini REST with bounded retries and explicit context ([cfd7385](https://github.com/christianpflugradt/hannes/commit/cfd7385a95a79af88708bdeab705e899e3f780eb))
+
 ## [0.11.0](https://github.com/christianpflugradt/hannes/compare/v0.10.1...v0.11.0) (2026-11-07)
 
 ### Features

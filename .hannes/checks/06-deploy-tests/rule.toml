@@ -1,6 +1,7 @@
 id = "06-deploy-tests"
 description = "Test published release installation"
 enabled = true
+run_at = ["pre-push", "check"]
 
 [check]
 entrypoint = "index.sh"

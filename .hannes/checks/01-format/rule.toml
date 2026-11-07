@@ -1,7 +1,7 @@
 id = "01-format"
 description = "Verify Rust formatting"
 enabled = true
-run_at = ["check", "release-build", "pre-commit", "pre-push"]
+run_at = ["pre-commit", "pre-push", "check", "release-build"]
 
 [check]
 entrypoint = "index.sh"

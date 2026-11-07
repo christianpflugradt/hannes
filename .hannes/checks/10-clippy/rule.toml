@@ -1,6 +1,7 @@
 id = "10-clippy"
 description = "Lint Rust with warnings denied"
 enabled = true
+run_at = ["pre-push", "check", "release-build"]
 
 [check]
 entrypoint = "index.sh"

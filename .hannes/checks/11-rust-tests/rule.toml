@@ -1,6 +1,7 @@
 id = "11-rust-tests"
 description = "Run unit acceptance documentation and compatibility tests"
 enabled = true
+run_at = ["pre-push", "check", "release-build"]
 
 [check]
 entrypoint = "index.sh"

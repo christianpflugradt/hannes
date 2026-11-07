@@ -15,13 +15,18 @@ npm ci --ignore-scripts
 cargo +stable fetch --locked
 mise deploy
 export PATH="$HOME/.local/bin:$PATH"
-mise run check
+mise hooks:install
 ```
 
 The governor must be a published release; building the source is a check, never
 how the governor is obtained. See [repository quality gates](docs/self-governance.md)
 for execution points, tool prerequisites, CI pinning and Renovate updates. Local hooks
 use offline dependency mode; prepare dependencies explicitly before running them.
+
+Commit and push to receive validation feedback from the installed Hannes hooks.
+Agents must not manually run checks, tests, linters or builds, including
+`mise run check` and `mise docs:check`. Source formatting is allowed. Developers
+can use `mise run check` for an explicit manual run of Hannes at pre-push.
 
 Tests must remain offline and credential-free; mock Codex instead of calling it.
 Keep source, configuration and documentation in English. German CLI phrases are
@@ -82,8 +87,12 @@ creates or amends a commit; pre-push runs the complete local suite. The shared
 message checker reads `.githooks/commit-policy` and never calls a hook. The setup shim retires only the obsolete local `.githooks` setting when its
 event files are absent, then delegates to `hannes pass auf`. Other custom hook
 paths remain configured; Hannes preserves compatible unmanaged hook content. Each clone needs setup;
-Git's `--no-verify` can bypass a local hook. Run `mise run hooks:test` to test the
-policy without committing anything in this repository. Work on `main`.
+Git's `--no-verify` can bypass a local hook; agents must never bypass validation.
+Work on `main`. If a commit hook fails, fix the reported issue and retry the
+commit. If pre-push fails, fix the issue, amend your own unpublished commit when
+appropriate and retry the push. Preserve unrelated work and never force-push.
+Use `hannes was ist phase --details` to inspect captured output without rerunning
+checks. Missing tools or broken hooks must be addressed or reported.
 
 Examples: `chore(deps): update dependencies`, `feat(reviews): add scoped context`, `fix(cli): preserve report output`,
 `docs: clarify local installation`.
@@ -93,11 +102,12 @@ Contributions use the project's [Unlicense](LICENSE). See
 [release instructions](docs/releasing.md) for packaging and publishing.
 
 Native reconciliation tests use temporary repositories and real Git commits/pushes;
-run `cargo test --locked --test reconciliation`. Keep tests offline and never
+they run with the Rust suite at pre-push. Keep tests offline and never
 change developer/global Git configuration. The repository integration uses published Hannes v0.9.0 with `--auto-approve`.
 Do not substitute a candidate built from this checkout.
 
 For release tooling changes, use the Node version in `mise.toml`, prepare npm
-dependencies with `npm ci --ignore-scripts` and run `mise check`. CI also validates all proposed
+dependencies with `npm ci --ignore-scripts`; pre-push runs the release tooling
+tests. CI also validates all proposed
 commit messages and the PR's squash title. Releases are manually started on main;
 Semantic Release handles versions, tags, release notes and four native archives.

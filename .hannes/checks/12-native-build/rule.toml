@@ -1,6 +1,7 @@
 id = "12-native-build"
 description = "Build the candidate native release executable"
 enabled = true
+run_at = ["pre-push", "check", "release-build"]
 
 [check]
 entrypoint = "index.sh"

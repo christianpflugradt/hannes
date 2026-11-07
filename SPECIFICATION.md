@@ -371,8 +371,14 @@ self-contained Rule model and fixed Git-hook execution points.
 
 The three Git-backed built-in points serve Git hooks. Normal CI uses one check
 point for formatting, documentation, tooling, native validation, minimum Rust,
-dependency audits and security. Rule Sets group checks without creating separate
-CI execution points. The custom release-build point selects the five native
+dependency audits and security. Local Rules declare their execution points
+directly, without local Rule Sets. Pre-commit runs formatting and documentation
+validation; pre-push runs the complete local suite, keeping all Rust tests in
+one Rule. Agents use Git commit/push feedback instead of manually running checks,
+tests, linters or builds. They may read saved reports without rerunning Rules.
+The manual mise check task delegates to published Hannes at pre-push.
+External Rule Set imports, pins, parameters and assignments remain unchanged.
+The custom release-build point selects the five native
 checks on each release host; release-artifacts checks the collected archives.
 The self-governance fixture records local rule definitions and selections.
 The commit-msg point additionally imports the conventional-commits set at a full
@@ -493,7 +499,10 @@ reuse the same bounds; this does not add configurable fields or change defaults.
 Every editable configuration field, required/optional marker and default must
 match the README reference. README configuration examples must validate and plan
 offline. Local links/anchors and specification acceptance references must resolve.
-Run these checks through `mise docs:check`, `mise check` and CI. Automated checks
+Repository Git hooks run link/specification checks at pre-commit and pre-push;
+pre-push also runs the checker tests and Rust documentation acceptance tests.
+CI runs them through check. The manual `mise docs:check` and `mise check` tasks
+remain available to developers; agents rely on Git hooks. Automated checks
 complement editorial review; they do not prove prose understandable.
 
 ## Acceptance coverage and change process

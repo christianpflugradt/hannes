@@ -1,6 +1,7 @@
 id = "08-release-rules"
 description = "Test semantic release rules and lifecycle"
 enabled = true
+run_at = ["pre-push", "check"]
 
 [check]
 entrypoint = "index.sh"

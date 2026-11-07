@@ -1,6 +1,7 @@
 id = "05-hooks-tests"
 description = "Test message policy and real Git hook failures"
 enabled = true
+run_at = ["pre-push", "check"]
 
 [check]
 entrypoint = "index.sh"

@@ -1,6 +1,7 @@
 id = "25-npm-audit"
 description = "Audit npm high and critical advisories"
 enabled = true
+run_at = ["check"]
 
 [check]
 entrypoint = "index.sh"

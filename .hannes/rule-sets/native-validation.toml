@@ -1,4 +1,0 @@
-id = "native-validation"
-description = "Validate the native executable"
-rules = ["10-clippy", "11-rust-tests", "12-native-build", "13-native-smoke"]
-run_at = ["pre-push", "check", "release-build"]

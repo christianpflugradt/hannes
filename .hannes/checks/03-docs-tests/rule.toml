@@ -1,6 +1,7 @@
 id = "03-docs-tests"
 description = "Test the documentation checker"
 enabled = true
+run_at = ["pre-push", "check"]
 
 [check]
 entrypoint = "index.sh"

@@ -1,7 +1,7 @@
 id = "02-docs"
 description = "Validate documentation links and specification references"
 enabled = true
-run_at = ["check", "pre-commit", "pre-push"]
+run_at = ["pre-commit", "pre-push", "check"]
 
 [check]
 entrypoint = "index.sh"

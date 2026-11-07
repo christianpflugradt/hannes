@@ -926,15 +926,22 @@ with `mise deploy`. Install Gitleaks v8 with the `dir` command (tested with
 8.30.1) explicitly for the imported Security Rule Set. Ensure Hannes and Gitleaks
 are on PATH.
 
-`mise check` uses the pinned published governor at the `pre-push` execution point:
+Install the pre-commit, commit-msg and pre-push hooks explicitly with
+`mise hooks:install`. Commit and push then invoke Hannes automatically: pre-commit
+checks formatting and documentation, and pre-push runs the complete local suite.
+Agents rely on this feedback and must not manually run checks, tests, linters or
+builds. They may format source and inspect saved results with
+`hannes was ist phase --details`.
+
+For developers who want an explicit manual run, `mise check` delegates to the
+pinned published governor at the `pre-push` execution point:
 formatting, documentation validation, Clippy, Rust tests, release/deployment/hook
 regression tests, an optimized candidate build, smoke test and the imported
 Security Rule Set against `HEAD`. No reviews or real provider calls run. The governor never comes from the candidate build.
 
 `mise docs:check` checks links, specification references, configuration fields and
 executable documentation examples. Individual tasks remain available: `format`,
-`format:check`, `lint`, `test`, `smoke`, `hooks:test`. Install the optional
-pre-commit, commit-msg and pre-push hooks explicitly with `mise hooks:install`.
+`format:check`, `lint`, `test`, `smoke`, `hooks:test` for manual development use.
 Local hooks verify working files; CI checks clean checkouts.
 
 See [repository quality gates](docs/self-governance.md) for setup, every execution point,

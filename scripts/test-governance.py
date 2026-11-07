@@ -27,11 +27,11 @@ def definitions():
         rule = tomllib.loads(path.read_text())
         assert rule["id"] not in checks
         checks[rule["id"]] = rule
-    sets = [tomllib.loads(path.read_text()) for path in sorted((ROOT / ".hannes/rule-sets").glob("*.toml"))]
+    assert not list((ROOT / ".hannes/rule-sets").glob("*.toml")), "Local rules declare their execution points directly"
     assert not list((ROOT / ".hannes/reviews").glob("*/rule.toml")), "Self-integration must not call a provider"
     assert not list((ROOT / ".hannes/checks").glob("*.toml")), "Obsolete check documents must be removed"
     assert not (ROOT / ".hannes/rule-sets.toml").exists(), "Obsolete rule-set document must be removed"
-    return checks, sets
+    return checks
 
 
 class GovernanceTests(unittest.TestCase):
@@ -54,7 +54,7 @@ class GovernanceTests(unittest.TestCase):
         self.assertIn("config:best-practices", config["extends"])
 
     def test_self_governance_checks_settings_and_required_coverage(self):
-        checks, sets = definitions()
+        checks = definitions()
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
         self.assertEqual(set(config), {"project", "max_display_files", "execution_points", "imports"})
         self.assertEqual(set(config["execution_points"]["custom"]), set(BASELINE["execution_points"]) - {"pre-commit", "commit-msg", "pre-push", "check"})
@@ -64,27 +64,22 @@ class GovernanceTests(unittest.TestCase):
             self.assertEqual(implementation["interpreter"], "sh")
             self.assertEqual(implementation["entrypoint"], "index.sh")
             original = BASELINE["checks"][rule]
-            self.assertEqual({key: value for key, value in check.items() if key not in ("run_at", "check")},
+            self.assertEqual({key: value for key, value in check.items() if key != "check"},
                              {key: value for key, value in original.items() if key not in ("command", "timeout_seconds")})
             self.assertEqual(implementation["timeout_seconds"], original["timeout_seconds"])
             entrypoint = ROOT / ".hannes/checks" / rule / implementation["entrypoint"]
             self.assertEqual(entrypoint.read_text(), f"#!/bin/sh\nexec python3 scripts/run-check.py {original['command']}\n")
             self.assertNotRegex(original["command"], r"run-execution-point|\bmise\b|\bhannes mach\b")
-        for group in sets:
-            self.assertEqual(set(group), {"id", "description", "rules", "run_at"})
-            self.assertTrue(group["description"])
-            self.assertTrue(group["run_at"])
-            self.assertEqual(len(group["rules"]), len(set(group["rules"])))
-            self.assertTrue(set(group["rules"]) <= set(checks))
         # The published-governor test below independently checks real resolution.
         for point, expected in BASELINE["execution_points"].items():
             selected = set()
             for rule, check in checks.items():
-                memberships = [group for group in sets if rule in group["rules"]]
-                at = {p for group in memberships for p in group["run_at"]} if memberships else set(check.get("run_at", []))
-                if check["enabled"] and point in at:
+                if check["enabled"] and point in check["run_at"]:
                     selected.add(rule)
             self.assertEqual(selected, set(expected), point)
+        task = tomllib.loads((ROOT / "mise.toml").read_text())["tasks"]["check"]
+        self.assertEqual(task["run"], "python3 scripts/run-execution-point.py pre-push")
+        self.assertNotIn("depends", task)
 
     def test_external_commit_message_import_is_pinned_and_scopes_match_policy(self):
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())

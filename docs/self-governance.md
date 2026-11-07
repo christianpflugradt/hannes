@@ -22,7 +22,6 @@ cargo +stable fetch --locked
 mise deploy
 export PATH="$HOME/.local/bin:$PATH"
 mise hooks:install
-mise check
 ```
 
 The setup task delegates hook management to hannes pass auf. If an old clone still
@@ -74,8 +73,10 @@ security Rules.
 
 The [checks](../.hannes/checks) retain their validation commands, timeout settings
 and enabled state. Each Rule has an index.sh entrypoint that invokes the shared
-command launcher to preserve offline hook behavior. The
-[rule sets](../.hannes/rule-sets) group checks sharing execution points; standalone rules reference the same built-in and declared points.
+command launcher to preserve offline hook behavior. Each local Rule declares
+its execution points directly; this repository defines no local Rule Sets.
+The external commit-message and Security Rule Sets retain their own assignments.
+All Rust unit, integration, acceptance and documentation tests remain in one Rule.
 
 Formatting, documentation, Clippy, Rust acceptance tests, deployment
 and release regression tests, Conventional Commits, actionlint, minimum Rust 1.85,
@@ -84,6 +85,8 @@ the points shown above. Audits need advisory feeds; release artifact verificatio
 requires EXPECTED_RELEASE_VERSION, GITHUB_SHA and a complete dist/ artifact set.
 These checks cannot all be meaningfully executed in an unprepared local checkout.
 
+For manual developer use:
+
 ```sh
 hannes mach was --at pre-commit
 hannes mach was --at pre-push --plan
@@ -91,9 +94,27 @@ python3 scripts/run-execution-point.py check
 hannes was ist phase --details
 ```
 
-mise check uses the execution wrapper at pre-push. Individual format, lint, test,
-smoke and docs:check tasks remain available. Format explicitly edits source;
-verification only checks formatting.
+For explicit manual use, mise check delegates through the execution wrapper to
+Hannes at pre-push. Individual format, lint, test, smoke and docs:check tasks
+remain available to developers. Format explicitly edits source; verification
+only checks formatting.
+
+## Agent workflow
+
+Agents receive validation feedback from Git commit and push. They must not run
+checks, tests, linters or builds manually, including mise check, mise docs:check,
+individual Cargo/npm commands or direct Hannes execution. Source formatting is
+allowed. The fast formatting and documentation checks run at pre-commit; pre-push
+runs the complete local suite, including those checks again. There is no result
+cache, so a manual full run before pushing would repeat the suite.
+
+If pre-commit or commit-msg fails, fix the issue and retry the commit. If pre-push
+fails, fix the issue, amend only the agent's own unpublished commit when appropriate
+and retry the push. Do not bypass hooks, force-push or rewrite unrelated work.
+Read hook output or use hannes was ist phase --details for saved output without
+rerunning rules. Address missing tools or hook drift, or report the blocker.
+Prepare the intended commit before the final push: general local checks inspect
+working files, while the imported pre-push security checks inspect HEAD.
 
 ## Git hooks
 

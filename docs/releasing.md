@@ -168,8 +168,9 @@ approved release identity (typically a GitHub App) before using this workflow in
 such a repository; do not disable branch protection or bypass required checks.
 This setup does not create an App or change repository rules automatically.
 
-Run `mise check` before committing workflow/tooling changes, after preparing the
-published governor and dependencies. The [quality-gate catalogue](self-governance.md)
+Prepare the published governor and dependencies before committing workflow/tooling
+changes. Git hooks run local validation at commit and push; agents must not run
+`mise check` or other checks manually. The [quality-gate catalogue](self-governance.md)
 documents every execution point, installation, the Renovate-managed pin and report artifacts.
 
 The pipeline also runs actionlint, dependency audits and the minimum-Rust check.

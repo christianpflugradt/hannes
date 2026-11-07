@@ -70,12 +70,16 @@ Prefer focused functions and tests over framework abstractions. Keep dependencie
 lean and Cargo.lock current. Keep tests focused on the single supported
 configuration model. See docs/design.md for module boundaries and limits.
 
-For Rust changes, run `mise run check`, or the equivalent commands in
-CONTRIBUTING.md. Tests must not call Codex, the network or a paid API; Cargo may
-fetch build dependencies. For documentation/config-only changes, validate affected
-formats, links and commands. Keep README approachable, concise and complete for
-supported CLI commands and every user-editable `.hannes` field, default and limit.
-Run `mise docs:check` when documentation or configuration changes.
+Use the installed Hannes Git hooks for validation. Do not manually run checks,
+tests, linters or builds, including `mise run check`, `mise docs:check`, Cargo/npm
+test commands or direct `hannes mach was` execution. Pre-commit checks formatting
+and documentation; pre-push runs the complete local suite. Formatting commands
+that edit source are allowed. Read hook output and, when needed, inspect the saved
+report with `hannes was ist phase --details`; this does not rerun checks.
+Tests must not call Codex, the network or a paid API; Cargo may fetch build
+dependencies during explicit preparation. Keep README approachable, concise and
+complete for supported CLI commands and every user-editable `.hannes` field,
+default and limit.
 Update it alongside behavior/configuration changes, clearly separating current
 features from planned work. Implementation details belong in docs/.
 Keep LICENSE and Cargo.toml license metadata aligned. Do not add machine-specific
@@ -99,10 +103,16 @@ private projects.
   `reviews`, `snapshot`, `tests`. `.githooks/commit-policy` is the source of truth.
   See CONTRIBUTING.md. Install the project Git hooks explicitly with
   `sh scripts/setup-git-hooks.sh`; never bypass it to force an invalid message.
-- After completing each coherent change, run the applicable validation, commit it
-  on `main` using the allowed commit types, and push `main` to `origin` automatically.
+- After completing each coherent change, commit it on `main` using the allowed
+  commit types and push `main` to `origin` automatically. Git hooks run validation;
+  do not run the same checks before committing or pushing.
   This applies to documentation-only changes too; no further approval is needed.
 - Stage only the files belonging to that change. Preserve unrelated user edits,
   keep commits focused, and never bypass hooks or force-push to complete this flow.
+- If pre-commit or commit-msg fails, fix the reported problem and retry the commit.
+  If pre-push fails, fix the problem and amend only your own unpublished commit
+  when appropriate, then retry the push. Do not reset or rewrite other work.
+  Report missing tools or broken hooks if they cannot be repaired within the
+  authorized scope; never replace hook validation with manual check runs.
 - Report the commit and push result. If validation, commit or push fails, retain
   the work and report the failure; do not claim that an unpushed change is pushed.

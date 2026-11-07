@@ -88,7 +88,7 @@ class GovernanceTests(unittest.TestCase):
 
     def test_external_commit_message_import_is_pinned_and_scopes_match_policy(self):
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
-        imported, = config["imports"]
+        imported, = [item for item in config["imports"] if item["path"] == "commit-msg/conventional-commits"]
         self.assertEqual(imported["git"], "https://github.com/christianpflugradt/christianpflugradt-rulesets.git")
         self.assertEqual(imported["path"], "commit-msg/conventional-commits")
         self.assertRegex(imported["ref"], r"^[0-9a-f]{40}$")
@@ -97,11 +97,34 @@ class GovernanceTests(unittest.TestCase):
         expected = [line.split()[1] for line in (ROOT / ".githooks/commit-policy").read_text().splitlines() if line.startswith("scope ")]
         self.assertEqual((ROOT / parameters["scopes_file"]).read_text().splitlines(), expected)
 
+    def test_security_import_is_pinned_and_ci_executes_check_with_dependencies(self):
+        config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
+        security, = [item for item in config["imports"] if item["path"] == "multi-point/security"]
+        self.assertEqual(set(security), {"git", "path", "ref"})
+        self.assertEqual(security["git"], "https://github.com/christianpflugradt/christianpflugradt-rulesets.git")
+        self.assertRegex(security["ref"], r"^[0-9a-f]{40}$")
+        self.assertFalse((ROOT / ".hannes/checks/secret-scan").exists())
+        self.assertFalse((ROOT / ".hannes/checks/sensitive-files").exists())
+        workflow = (ROOT / ".github/workflows/quality.yml").read_text()
+        tooling = workflow.split("  tooling:", 1)[1].split("\n  audit:", 1)[0]
+        run = "run: python3 scripts/run-execution-point.py check"
+        self.assertEqual(workflow.count(run + "\n"), 1)
+        self.assertLess(tooling.index("actions/setup-python@"), tooling.index(run))
+        self.assertLess(tooling.index("Install pinned Gitleaks"), tooling.index(run))
+        self.assertLess(tooling.index(run), tooling.index("name: quality-check"))
+        for text in (tooling, (ROOT / ".github/workflows/release.yml").read_text()):
+            self.assertIn("v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz", text)
+            self.assertIn("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb", text)
+            self.assertIn("sha256sum --check", text)
+            self.assertIn('echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"', text)
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertLess(release.index("Install pinned Gitleaks"), release.index("Publish versioned CLI"))
+
     def test_published_governor_can_plan_every_execution_point_without_execution(self):
         executable = os.environ.get("HANNES_EXECUTABLE") or shutil.which("hannes")
         self.assertTrue(executable, "Install the compatible published Hannes release before running governance acceptance")
         self.assertFalse(Path(executable).resolve().is_relative_to(ROOT))
-        for point, expected in BASELINE["execution_points"].items():
+        for point, expected in {**BASELINE["execution_points"], "check": []}.items():
             with self.subTest(point=point):
                 result = subprocess.run([executable, "mach", "was", "--at", point, "--plan", "--json"], cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
@@ -110,14 +133,16 @@ class GovernanceTests(unittest.TestCase):
                 local = [rule for rule in plan["scheduled"] if not rule["origin"].get("external")]
                 imported = [rule for rule in plan["scheduled"] if rule["origin"].get("external")]
                 self.assertEqual([rule["id"] for rule in local], sorted(expected))
-                self.assertEqual(len(imported), 1 if point == "commit-msg" else 0)
+                expected_rules = {"commit-message"} if point == "commit-msg" else (
+                    {"secret-scan", "sensitive-files"} if point in ("check", "pre-push") else set())
+                self.assertEqual({rule["id"].rsplit(":", 1)[-1] for rule in imported}, expected_rules)
+                self.assertEqual(len(imported), len(expected_rules))
+                declarations = tomllib.loads((ROOT / ".hannes/config.toml").read_text())["imports"]
                 for rule in imported:
-                    self.assertTrue(rule["id"].endswith(":commit-message"))
                     self.assertTrue(rule["blocking"])
                     origin = rule["origin"]["external"]
-                    declaration, = tomllib.loads((ROOT / ".hannes/config.toml").read_text())["imports"]
+                    declaration, = [item for item in declarations if item["path"] == origin["path"]]
                     self.assertEqual(origin["commit"], declaration["ref"])
-                    self.assertEqual(origin["path"], declaration["path"])
                 self.assertEqual(set(plan["required_ids"]), set(expected) | {rule["id"] for rule in imported})
                 self.assertEqual(plan["planned_model_calls"], 0)
                 self.assertFalse(plan["omitted"])
@@ -137,8 +162,8 @@ class GovernanceTests(unittest.TestCase):
         self.assertIn("if: runner.os == 'macOS'", workflow)
         self.assertRegex(release, r"uses: christianpflugradt/hannes@[0-9a-f]{40}")
         self.assertNotIn("uses: ./.github/actions/", release)
-        self.assertEqual(workflow.count("if: always()"), 4)
-        self.assertEqual(workflow.count("include-hidden-files: true"), 4)
+        self.assertEqual(workflow.count("if: always()"), 5)
+        self.assertEqual(workflow.count("include-hidden-files: true"), 5)
         self.assertIn("python3 scripts/run-execution-point.py release-artifacts", release)
         self.assertIn("if: always()", release)
         self.assertIn("include-hidden-files: true", release)

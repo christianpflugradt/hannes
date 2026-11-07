@@ -358,6 +358,12 @@ The commit-msg point additionally imports the conventional-commits set at a full
 Git commit pin. Its scopes_file parameter uses .hannes/commit-scopes.txt, which
 must match the scopes in .githooks/commit-policy. The existing local message check
 retains Hannes' narrower type allowlist and stricter summary whitespace policy.
+The check and pre-push points also import multi-point/security at a full commit
+pin. Its sensitive-files and secret-scan checks inspect the working tree at check
+and HEAD contents at pre-push, without history. The tooling CI job explicitly
+runs check with Python 3 and a checksum-verified Gitleaks binary available. The
+release publisher prepares Gitleaks for its managed push hook. Rules and Hannes
+never install these dependencies automatically.
 Checks remain mandatory and no reviews are enabled. Missing tools and errors
 block success. Setup, dependency installation and release publication remain
 outside rule execution.

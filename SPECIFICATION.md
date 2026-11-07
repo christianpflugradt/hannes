@@ -138,7 +138,13 @@ supported. Rules run once, checks first and each kind ordered by ID.
 selection reasons, omissions, required rules, input identity, declared provider
 settings and bounded context sizes, without running checks, Codex, MCPs or network
 calls, changing project/Git state or replacing the report. `--plan --json` uses
-plan schema 3 and structured diagnostics. A plan is neither a cache nor proof
+plan schema 3 and structured diagnostics. Every JSON preview includes
+plan_schema_version, status and blocking_reasons. Configuration or selection
+errors return status blocked with nonempty blocking_reasons and exit 2; unavailable
+plan metadata is omitted. Prepared plans retain their complete metadata, including
+when blocked by an incomplete snapshot. Acceptance:
+`tests/acceptance.rs::json_plan_errors_use_current_schema_and_blocking_reasons`.
+A plan is neither a cache nor proof
 that a later input is identical. Provider availability is not checked offline.
 
 `--geiz-ist-geil` runs checks only, without provider discovery, model calls or MCP

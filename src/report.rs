@@ -151,7 +151,7 @@ pub fn read(root: &Path) -> Result<Report> {
     );
     let plan = &report.plan;
     ensure!(
-        plan.plan_schema_version == 3
+        plan.plan_schema_version == crate::planner::PLAN_SCHEMA_VERSION
             && !plan.at.is_empty()
             && matches!(plan.status.as_str(), "planned" | "blocked")
             && plan.executable() == plan.blocking_reasons.is_empty()

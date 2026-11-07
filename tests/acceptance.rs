@@ -99,6 +99,68 @@ fn cli(root: &Path, args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 #[test]
+fn json_plan_errors_use_current_schema_and_blocking_reasons() {
+    let d = project();
+    support::check(
+        d.path(),
+        "always-ok",
+        &["pre-push"],
+        "echo executed > executed",
+    );
+    let report = path(d.path(), "reports/last.json");
+    fs::write(&report, "prior report").unwrap();
+    let preview = |args: &[&str], code| {
+        let output = cli(d.path(), args);
+        assert_eq!(output.status.code(), Some(code));
+        let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(document["plan_schema_version"], 3);
+        assert_eq!(
+            document["status"],
+            if code == 0 { "planned" } else { "blocked" }
+        );
+        let reasons = document["blocking_reasons"].as_array().unwrap();
+        assert_eq!(reasons.is_empty(), code == 0);
+        assert!(
+            reasons
+                .iter()
+                .all(|reason| !reason.as_str().unwrap().trim().is_empty())
+        );
+        assert!(document.get("errors").is_none());
+        assert_eq!(fs::read_to_string(&report).unwrap(), "prior report");
+        assert!(!d.path().join("executed").exists());
+        assert!(!d.path().join(".git/hooks/pre-push").exists());
+        document
+    };
+    let args = ["mach", "was", "--plan", "--json"];
+    let valid = preview(&args, 0);
+    assert!(serde_json::from_value::<hannes::planner::Plan>(valid).is_ok());
+    let unknown = preview(&["mach", "was", "--plan", "--json", "--at", "missing"], 2);
+    assert!(
+        unknown["blocking_reasons"][0]
+            .as_str()
+            .unwrap()
+            .contains("unknown execution point")
+    );
+    assert!(unknown.get("input").is_none());
+
+    let oversized = d.path().join("oversized");
+    fs::File::create(&oversized)
+        .unwrap()
+        .set_len(hannes::limits::MAX_SNAPSHOT_FILE_BYTES + 1)
+        .unwrap();
+    let blocked = preview(&args, 2);
+    assert_eq!(blocked["input"]["complete"], false);
+    assert!(serde_json::from_value::<hannes::planner::Plan>(blocked).is_ok());
+    fs::remove_file(oversized).unwrap();
+
+    for invalid in ["[invalid", "project = ''\n"] {
+        fs::write(path(d.path(), "config.toml"), invalid).unwrap();
+        let blocked = preview(&args, 2);
+        assert!(blocked.get("input").is_none());
+    }
+}
+
+#[test]
 fn all_command_paths_and_standard_help() {
     for words in [
         "fang an",

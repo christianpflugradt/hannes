@@ -296,7 +296,10 @@ hannes mach was --at pre-push --plan --json
 hannes mach was --at pre-push
 ```
 
-See [rule sets and execution points](#group-rules-into-rule-sets) for assignments.
+JSON previews use schema 3 and always include `status` and `blocking_reasons`.
+Configuration or selection errors return `status: "blocked"`, nonempty reasons
+and exit code 2; unavailable plan details are omitted. See
+[rule sets and execution points](#group-rules-into-rule-sets) for assignments.
 
 ### Use a Git hook or CI
 

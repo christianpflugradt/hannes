@@ -28,6 +28,13 @@ Incomplete snapshots or context preparation block execution. Preview does not
 certify a later source state. Reports use schema 4 and plans use schema 3. Blocking metadata distinguishes
 completed advisory failures from fatal errors; disabled Rules are listed separately.
 
+Every JSON preview includes `plan_schema_version`, `status` and `blocking_reasons`.
+Configuration and selection errors use schema 3, `status: "blocked"` and nonempty
+`blocking_reasons`, with exit code 2. They omit unavailable plan metadata instead
+of inventing input or selection details. A prepared plan blocked by an incomplete
+snapshot retains its full metadata. Consumers can read the common diagnostic
+fields before processing plan details.
+
 External Git rule sets select shared repository-relative Rule directories, then
 use the same resolver in independent import scopes. The
 loader maps effective points per import, then namespaces validated rules before

@@ -575,6 +575,15 @@ fn cli_refresh_cached_plan_and_offline_hook_keep_existing_lifecycle() {
         &["mach", "was", "--at", "pre-commit", "--plan", "--json"],
     );
     assert_eq!(plan.status.code(), Some(2));
+    let diagnostic: serde_json::Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(diagnostic["plan_schema_version"], 3);
+    assert_eq!(diagnostic["status"], "blocked");
+    assert!(
+        !diagnostic["blocking_reasons"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert!(
         !f.root.join(".git/hannes").exists(),
         "missing-state preview must remain read-only"

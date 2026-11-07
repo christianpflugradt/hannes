@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
+pub const PLAN_SCHEMA_VERSION: u32 = 3;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
@@ -297,7 +299,7 @@ pub fn build(
     let mut provider = project.provider.clone();
     provider.mcp_servers.sort();
     let mut plan = Plan {
-        plan_schema_version: 3,
+        plan_schema_version: PLAN_SCHEMA_VERSION,
         plan_id: String::new(),
         status: if blocking_reasons.is_empty() {
             "planned"
@@ -368,7 +370,7 @@ pub fn build(
         .as_ref()
         .map_or(&[][..], |input| input.excerpts.as_slice());
     let identity = serde_json::json!({
-        "plan_schema_version": 3, "verifier_version": env!("CARGO_PKG_VERSION"),
+        "plan_schema_version": PLAN_SCHEMA_VERSION, "verifier_version": env!("CARGO_PKG_VERSION"),
         "project": project.config.project,
         "at": name, "checks_only": checks_only, "checks": checks, "reviews": reviews,
         "provider": plan.provider, "head": snapshot.head, "files": files, "context": excerpts,

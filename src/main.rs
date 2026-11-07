@@ -73,9 +73,11 @@ fn execute(cli: Cli) -> Result<i32> {
                     Err(error) if json => {
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(
-                                &serde_json::json!({"plan_schema_version":1,"status":"blocked","errors":[format!("{error:#}")]})
-                            )?
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "plan_schema_version": hannes::planner::PLAN_SCHEMA_VERSION,
+                                "status": "blocked",
+                                "blocking_reasons": [format!("{error:#}")]
+                            }))?
                         );
                         Ok(2)
                     }

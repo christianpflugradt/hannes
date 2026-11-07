@@ -231,3 +231,11 @@ Runtime requirements inspect the effective child environment immediately before
 execution, after deterministic gating. Imported executable definitions retain the
 same explicit source trust boundary as checks. Generic tool sandboxing and wire
 envelope translation belong to the configured tool/wrapper, not Hannes.
+
+File-change triggers filter enabled, point-selected Reviews inside the existing
+planner before preparing input or counting provider groups. `git_snapshot::changed_paths`
+resolves an explicit `HANNES_CHANGE_BASE` and uses bounded NUL Git output for a
+net commit-to-worktree comparison, including untracked configuration. The baseline
+commit and omission decisions enter plan identity. No history inference, fetch,
+provider-specific CI resolution or additional scheduler is involved. Omitted reviews
+are excluded from required IDs/results; reports retain their omission metadata.

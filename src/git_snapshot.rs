@@ -43,6 +43,7 @@ fn git(root: &Path) -> Command {
     let mut c = Command::new("git");
     c.current_dir(root)
         .env("GIT_OPTIONAL_LOCKS", "0")
+        .env("GIT_NO_LAZY_FETCH", "1")
         .stdin(Stdio::null());
     c
 }
@@ -344,4 +345,90 @@ pub fn working_summary(root: &Path) -> Result<String> {
     Ok(format!(
         "Git status: {staged} staged, {unstaged} unstaged, {untracked} untracked paths (categories may overlap; not changes since verification)"
     ))
+}
+
+/// Explicit net comparison for triggers, separate from snapshot freshness.
+pub fn changed_paths(root: &Path, base: &str) -> Result<(String, BTreeSet<String>)> {
+    require_root(root)?;
+    ensure!(
+        !base.is_empty() && base.len() <= 1024 && !base.contains('\0'),
+        "invalid HANNES_CHANGE_BASE"
+    );
+    let resolved = crate::process::run(
+        git(root).args([
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            &format!("{base}^{{commit}}"),
+        ]),
+        Duration::from_secs(10),
+    )?;
+    ensure!(
+        resolved.status.success() && !resolved.timed_out && !resolved.stdout.truncated,
+        "cannot resolve HANNES_CHANGE_BASE; fetch the baseline commit in shallow clones"
+    );
+    let commit = resolved.stdout.text.trim().to_owned();
+    ensure!(
+        matches!(commit.len(), 40 | 64) && commit.bytes().all(|b| b.is_ascii_hexdigit()),
+        "invalid baseline commit ID"
+    );
+    let index = crate::process::run(
+        git(root).args(["ls-files", "-v", "-z"]),
+        Duration::from_secs(30),
+    )?;
+    ensure!(
+        index.status.success() && !index.timed_out && !index.stdout.truncated,
+        "cannot inspect index flags for change comparison"
+    );
+    ensure!(
+        index
+            .stdout
+            .text
+            .split_terminator('\0')
+            .all(|entry| entry.starts_with("H ")),
+        "change comparison requires ordinary tracked files; remove assume-unchanged/skip-worktree flags and resolve index conflicts"
+    );
+    let mut paths = BTreeSet::new();
+    for arguments in [
+        vec![
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--ignore-submodules=none",
+            "--no-renames",
+            "--name-only",
+            "-z",
+            &commit,
+            "--",
+        ],
+        vec!["ls-files", "--others", "--exclude-standard", "-z"],
+        vec![
+            "ls-files",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "-z",
+            "--",
+            ".hannes/",
+        ],
+    ] {
+        let output = crate::process::run(git(root).args(arguments), Duration::from_secs(30))?;
+        ensure!(
+            output.status.success() && !output.timed_out && !output.stdout.truncated,
+            "change comparison unavailable, timed out or exceeded 64 KiB; ensure baseline tree is available"
+        );
+        let text = output.stdout.text;
+        ensure!(
+            !text.contains('\u{fffd}') && (text.is_empty() || text.ends_with('\0')),
+            "unsupported or incomplete changed filename output"
+        );
+        for path in text.split_terminator('\0') {
+            crate::config::relative(Path::new(path))?;
+            if !excluded(Path::new(path)) {
+                paths.insert(path.to_owned());
+            }
+            ensure!(paths.len() <= MAX_FILES, "changed path limit exceeded");
+        }
+    }
+    Ok((commit, paths))
 }

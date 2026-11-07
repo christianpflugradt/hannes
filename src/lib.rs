@@ -16,6 +16,7 @@ pub mod report;
 pub mod review_context;
 pub mod review_contract;
 pub mod review_input;
+pub mod review_trigger;
 pub mod reviews;
 pub mod rules;
 pub mod terminal;

@@ -340,6 +340,37 @@ to change role or permissions. The ordinary CLI prompt is not a privileged syste
 message. No repair loops, automatic retries, commits, delegated coding or inferred
 requirements. Missing essential evidence or material uncertainty is ERROR.
 
+## TRIG-001: File-change review selection
+
+Optional `[review.trigger]` has required `changed_files` (1–64 patterns, each
+1–1024 UTF-8 bytes). Paths are consumer-repository-relative with `/` separators:
+exact components, `*` and `?` within components, and whole-component `**` for zero
+or more directories. Matching is case-sensitive; hidden files match normally.
+Empty/dot/parent components, absolute paths, backslashes, colons, control
+characters, brackets, braces and embedded `**` are rejected, including imports.
+Reviews without triggers retain ordinary selection.
+
+For enabled reviews at the requested point, `HANNES_CHANGE_BASE` explicitly names
+a locally available Git commit/ref. Resolve it once to a commit ID; compare that
+commit directly to current working files, including staged/unstaged changes and
+nonignored untracked files (plus ignored `.hannes/` files except reports).
+Use net differences, not per-commit history; renames match both old and new paths.
+CI supplies a fetched baseline commit, such as the PR merge base computed by its
+caller. Never infer HEAD^, a remote branch or GitHub context. Shallow repositories
+work only when the named baseline commit and tree are locally available. No fetch.
+Index conflicts and assume-unchanged/skip-worktree flags block comparison.
+Missing/invalid refs, unavailable trees, invalid filename encoding, incomplete
+snapshots, timeouts or truncated Git output block planning/execution, never skip.
+Git uses direct argument arrays, NUL filename output and existing 64 KiB capture
+and 30-second deadlines. Snapshot/context limits remain unchanged.
+
+Apply triggers before context preparation, parameter resolution and model-call
+estimation. Nonmatches have omission reason `trigger_not_matched` in preview and
+saved report plans, no result and no required ID; they do not require provider
+credentials/executables. Disabled and inapplicable rules need no comparison.
+Record the resolved baseline in the plan and its identity. Deterministic checks
+still gate all scheduled reviews globally. Acceptance: `tests/review_triggers.rs`.
+
 ## PREP-001: Shared review input
 
 Planning prepares bounded requirement excerpts, manifest hints and orientation
@@ -652,6 +683,7 @@ Public documentation explains supported behavior; proposals remain in the roadma
 
 | Requirement | Representative acceptance test |
 | --- | --- |
+| TRIG-001 | `tests/review_triggers.rs::preview_and_execution_agree_and_nonmatches_need_no_provider_or_context` |
 | PROV-002 | `tests/cli_providers.rs::stdin_results_and_provider_isolation` |
 | PROV-001 | `tests/named_providers.rs::named_references_load_without_changing_legacy_defaults` |
 | EXT-001 | `tests/external_rule_sets.rs::shared_rules_are_reused_across_sets_and_points_offline` |

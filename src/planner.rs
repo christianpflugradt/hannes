@@ -75,6 +75,8 @@ pub struct ContextPlan {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Plan {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_base: Option<String>,
     pub plan_schema_version: u32,
     pub plan_id: String,
     pub status: String,
@@ -168,11 +170,33 @@ pub fn build(
             .get(id)
             .is_some_and(|r| r.execution_points.contains(name))
     };
+    let snapshot = git_snapshot::capture(&project.root).unwrap_or_else(|error| Snapshot {
+        head: None,
+        fingerprint: String::new(),
+        files: Default::default(),
+        complete: false,
+        limitations: vec![format!("{error:#}")],
+    });
+    let needs_changes = project
+        .reviews
+        .iter()
+        .any(|r| r.enabled && selects(&r.id) && r.trigger.is_some());
+    let changes = needs_changes.then(|| -> Result<_> {
+        let base = std::env::var("HANNES_CHANGE_BASE").map_err(|_| {
+            anyhow::anyhow!(
+                "HANNES_CHANGE_BASE must explicitly name a baseline commit for triggered reviews"
+            )
+        })?;
+        git_snapshot::changed_paths(&project.root, &base)
+    });
     let mut scheduled = Vec::new();
     let mut omitted = Vec::new();
     let mut disabled_rules = Vec::new();
     let mut required_ids = Vec::new();
     let mut blocking_reasons = Vec::new();
+    if let Some(Err(error)) = &changes {
+        blocking_reasons.push(format!("Cannot determine review changes: {error:#}"));
+    }
     for (id, display_name, kind, description, enabled, blocking) in project
         .checks
         .iter()
@@ -228,6 +252,17 @@ pub fn build(
             disabled_rules.push(rule);
             continue;
         }
+        if let (Some(trigger), Some(Ok((_, paths)))) =
+            (review.and_then(|r| r.trigger.as_ref()), &changes)
+        {
+            if !crate::review_trigger::matches(trigger, paths) {
+                omitted.push(Omission {
+                    rule,
+                    reason: "trigger_not_matched".into(),
+                });
+                continue;
+            }
+        }
         required_ids.push(id.clone());
         if checks_only && kind == "review" {
             omitted.push(Omission {
@@ -242,13 +277,14 @@ pub fn build(
     if !selection_complete {
         blocking_reasons.push("Execution point requires every selected rule; checks-only cannot omit required reviews".into());
     }
-    let snapshot = git_snapshot::capture(&project.root).unwrap_or_else(|error| Snapshot {
-        head: None,
-        fingerprint: String::new(),
-        files: Default::default(),
-        complete: false,
-        limitations: vec![format!("{error:#}")],
-    });
+    if needs_changes && changes.as_ref().is_some_and(|r| r.is_ok()) {
+        match git_snapshot::capture(&project.root) {
+            Ok(after) if git_snapshot::compare(&snapshot, &after, 0).state == "CURRENT" => {}
+            _ => blocking_reasons.push(
+                "Working files changed during change comparison or coverage is incomplete".into(),
+            ),
+        }
+    }
     if !snapshot.complete {
         blocking_reasons.push("Input snapshot is incomplete; no verification can start".into());
     }
@@ -288,7 +324,7 @@ pub fn build(
         .selections
         .dedup_by(|a, b| a.path == b.path && a.headings == b.headings);
     let mut review_input = None;
-    if !active.is_empty() {
+    if !active.is_empty() && blocking_reasons.is_empty() {
         match crate::review_input::PreparedReviewInput::prepare(project, &active, &snapshot) {
             Ok(input) => {
                 context.selected_bytes = input.excerpts.iter().map(|e| e.text.len()).sum();
@@ -312,6 +348,10 @@ pub fn build(
     let mut provider = project.provider.clone();
     provider.mcp_servers.sort();
     let mut plan = Plan {
+        change_base: changes
+            .as_ref()
+            .and_then(|r| r.as_ref().ok())
+            .map(|(base, _)| base.clone()),
         plan_schema_version: PLAN_SCHEMA_VERSION,
         plan_id: String::new(),
         status: if blocking_reasons.is_empty() {
@@ -377,6 +417,10 @@ pub fn build(
         .cloned()
         .collect();
     for review in &mut reviews {
+        if let Some(trigger) = &mut review.trigger {
+            trigger.changed_files.sort();
+            trigger.changed_files.dedup();
+        }
         review.files.sort();
         review.run_at.sort();
         for context in &mut review.context {
@@ -404,7 +448,7 @@ pub fn build(
         "project": project.config.project,
         "at": name, "checks_only": checks_only, "checks": checks, "reviews": reviews,
         "provider": plan.provider, "named_providers": named_providers, "head": snapshot.head, "files": files, "context": excerpts,
-        "complete": snapshot.complete,
+        "complete": snapshot.complete, "change_base": plan.change_base, "scheduled": plan.scheduled, "omitted": plan.omitted,
     });
     plan.plan_id = format!("{:x}", Sha256::digest(serde_json::to_vec(&identity)?));
     Ok(PreparedPlan {

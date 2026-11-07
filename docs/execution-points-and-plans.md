@@ -18,19 +18,28 @@ Empty points are valid.
 
 The loader records source paths. The domain resolver computes effective
 assignments once. Validation, CLI planning and execution share that result.
-Checks run before reviews, ordered by ID and deduplicated. Every selected rule is
-required. Checks-only execution rejects required reviews before any command starts.
+Review file-change triggers then filter enabled reviews at the requested point,
+before context preparation or provider requirements. Checks run before scheduled
+reviews, ordered by ID and deduplicated. Every scheduled rule is required. Checks-only execution rejects required reviews before any command starts.
 
 Plans include the selected point, rule sources, effective points, contributing
 sets, required IDs, input identity, bounded context and declared provider settings.
 Each review with an explicit provider reference also records `provider` (the named
 ID) and `provider_config` (its complete effective settings). Absent fields select
 the plan's legacy project provider. Model calls count distinct provider references
-and resolved parameter environments.
+and resolved parameter environments for Codex; CLI reviews each count one call.
 No check, Codex request, network access or reconciliation occurs during preview.
 Incomplete snapshots or context preparation block execution. Preview does not
 certify a later source state. Reports use schema 4 and plans use schema 3. Blocking metadata distinguishes
 completed advisory failures from fatal errors; disabled Rules are listed separately.
+
+Triggered reviews require an explicit `HANNES_CHANGE_BASE` commit/ref, resolved to
+`change_base` in the plan. Net commit-to-worktree changes include committed and
+uncommitted work. Supply the intended PR merge-base commit in CI; no baseline is
+inferred or fetched. Missing comparison data blocks the plan. Nonmatches appear
+under `omitted` with `trigger_not_matched`, outside required IDs, results, context
+and model-call estimates. Disabled/inapplicable reviews need no baseline. See
+[trigger configuration and limits](configuration.md#add-a-review).
 
 Every JSON preview includes `plan_schema_version`, `status` and `blocking_reasons`.
 Configuration and selection errors use schema 3, `status: "blocked"` and nonempty

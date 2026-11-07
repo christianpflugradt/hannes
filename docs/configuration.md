@@ -388,6 +388,8 @@ consumer through the existing shared provider call, after deterministic checks.
 | Field | Required / default | Meaning |
 | --- | --- | --- |
 | `review.provider` | Optional; `null` (omitted in TOML) | Named provider ID; omission uses the legacy project provider. |
+| `review.trigger` | Optional; `null` (omitted in TOML) | Select this review only for matching changed files. |
+| `review.trigger.changed_files` | Required | 1–64 repository-relative patterns, each at most 1024 UTF-8 bytes; any match selects the review. |
 | `review.prompt` | Required | Nonblank UTF-8 `.md` filename in the review directory. |
 | `review.files` | Optional; `[]` | Up to 64 unique existing consumer-relative source files; exact paths, not globs. Starting points, not an evidence boundary. |
 | `review.context` | Optional; `[]` | Up to 32 document selections as `[[review.context]]`. |
@@ -399,6 +401,52 @@ are ignored; missing or ambiguous headings are errors. Overlapping selections
 are merged. All context is bounded to 32 distinct files, 1 MiB per file and 64 KiB
 selected text; disabled definitions are validated too. Entry/context paths must
 stay within the consumer. Supporting review files require no resource-import system.
+
+To run a review only for relevant changes, add this to its `rule.toml`:
+
+```toml
+[review.trigger]
+changed_files = ["src/**", "docs/design.md", ".hannes/reviews/architecture/prompt.md"]
+```
+
+Patterns match consumer-repository paths, including imported reviews. Matching
+is case-sensitive and uses `/`: `*` matches zero or more characters within one
+component, `?` matches one character, and a whole component `**` matches zero or
+more directories. Hidden files match normally. Absolute paths, empty/dot/parent
+components, backslashes, colons, controls, brackets, braces and embedded `**`
+(such as `src/**.rs`) are invalid. Exact paths need not currently exist, so deleted
+files can trigger reviews. A trigger selects execution; it does not supply context.
+
+Set `HANNES_CHANGE_BASE` to an explicit locally available Git commit or reference:
+
+```sh
+HANNES_CHANGE_BASE=main hannes mach was --at check --plan --json
+HANNES_CHANGE_BASE=main hannes mach was --at check
+```
+
+Hannes resolves the reference once and records its commit ID as `change_base` in
+the plan. It compares that commit directly with current working files: committed,
+staged and unstaged net changes, nonignored untracked files and ignored `.hannes/`
+files except reports. Renames match old and new paths. Changes reverted back to
+the baseline do not trigger a review. Locally, choose the intended starting commit;
+use `HEAD` explicitly when only uncommitted changes matter. In CI, fetch the intended
+baseline and provide its commit ID. For a multi-commit PR, the caller can compute
+and supply its merge base with the target branch; Hannes never assumes `HEAD^` or
+infers GitHub context. It does not fetch missing refs. Shallow clones work when
+the supplied commit and tree are available locally. Index conflicts and
+assume-unchanged/skip-worktree flags (including sparse checkouts) block comparison;
+clear them before using triggers.
+
+Missing/invalid baselines, unavailable trees, incomplete snapshots, unsupported
+filename encoding, timeouts and Git output above 64 KiB block execution with ERROR,
+never a successful skip. Disabled reviews and reviews at other points need no
+baseline. Reviews without triggers keep their existing behavior.
+
+Nonmatches appear in preview and saved report plans under `omitted` with reason
+`trigger_not_matched`; they have no result or required ID, need no provider runtime
+credentials/executables, and contribute no context or planned model calls. Scheduled
+reviews still wait for the global deterministic-check gate. Snapshot and context
+limits remain unchanged.
 
 The provider must return exactly one PASS/FAIL/ERROR per requested ID. PASS/FAIL
 need an existing in-snapshot file and positive line reference. Malformed JSON,
@@ -440,7 +488,7 @@ hannes mach was --at check
 hannes mach was --at release --plan --json
 ```
 
-Checks precede reviews, ordered by ID. Empty points succeed. Every selected rule
+Checks precede reviews, ordered by ID. Empty points succeed. Every scheduled rule
 must execute; `--geiz-ist-geil` cannot omit required reviews. An offline plan
 prepares the same selection without rules, provider calls or reconciliation.
 

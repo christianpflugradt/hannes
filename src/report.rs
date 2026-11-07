@@ -218,7 +218,29 @@ pub fn read(root: &Path) -> Result<Report> {
     ensure!(
         required.len() == plan.required_ids.len()
             && required == plan.scheduled.iter().map(|r| &r.id).collect()
-            && plan.omitted.is_empty()
+            && plan
+                .omitted
+                .iter()
+                .all(|o| o.reason == "trigger_not_matched"
+                    && o.rule.kind == "review"
+                    && !required.contains(&o.rule.id)
+                    && o.rule
+                        .origin
+                        .as_ref()
+                        .is_some_and(|r| r.execution_points.contains(&plan.at)))
+            && plan
+                .omitted
+                .iter()
+                .map(|o| &o.rule.id)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                == plan.omitted.len()
+            && (plan.omitted.is_empty() || plan.change_base.is_some())
+            && plan
+                .change_base
+                .as_ref()
+                .is_none_or(|base| matches!(base.len(), 40 | 64)
+                    && base.bytes().all(|b| b.is_ascii_hexdigit()))
             && plan.selection_complete,
         "inconsistent required rules"
     );

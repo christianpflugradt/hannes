@@ -520,6 +520,9 @@ pub fn render_plan(plan: &crate::planner::Plan, color: bool) -> String {
             "UNKNOWN"
         }
     );
+    if let Some(base) = &plan.change_base {
+        text.push_str(&format!("Vergleichsbasis: {}\n", clean(base)));
+    }
     if plan.checks_only {
         text.push_str("Modus: Nur Checks · kein Provider-Aufruf\n");
     }
@@ -639,6 +642,13 @@ pub fn render(report: &Report, color: bool) -> String {
         if plan.scheduled.is_empty() {
             text.push_str("Keine aktiven Regeln ausgewählt; kein Regel-PASS belegt.\n");
         }
+    }
+    for omission in &report.plan.omitted {
+        text.push_str(&format!(
+            "Ausgelassen: {} · {}\n",
+            clean(omission.rule.display_name()),
+            clean(&omission.reason)
+        ));
     }
     if report.checks_only {
         text.push_str(&paint(

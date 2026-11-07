@@ -113,6 +113,7 @@ pub struct Check {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Review {
+    pub trigger: Option<ReviewTrigger>,
     pub provider: Option<String>,
     pub id: String,
     pub name: String,
@@ -166,12 +167,18 @@ pub struct CheckDefinition {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReviewDefinition {
+    pub trigger: Option<ReviewTrigger>,
     pub provider: Option<String>,
     pub prompt: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub context: Vec<ReviewContext>,
+}
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewTrigger {
+    pub changed_files: Vec<String>,
 }
 #[derive(Debug)]
 pub struct Project {
@@ -372,6 +379,9 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
     for (path, mut review) in loaded.reviews {
         (|| -> Result<()> {
             identity(&review.id, &review.description, &mut ids)?;
+            if let Some(trigger) = &review.trigger {
+                crate::review_trigger::validate(trigger)?;
+            }
             ensure!(
                 review.files.len() <= MAX_ENTRY_FILES
                     && review.context.len() <= MAX_CONTEXT_ENTRIES,
@@ -425,7 +435,13 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
     }
     checks.sort_by(|a, b| a.id.cmp(&b.id));
     reviews.sort_by(|a, b| a.id.cmp(&b.id));
-    crate::review_context::collect(&root, &reviews.iter().collect::<Vec<_>>())?;
+    crate::review_context::collect(
+        &root,
+        &reviews
+            .iter()
+            .filter(|r| r.trigger.is_none())
+            .collect::<Vec<_>>(),
+    )?;
     let effective =
         crate::rules::resolve(&config.execution_points, &assignments, &loaded.rule_sets)?;
     let rule_sets = loaded.rule_sets.into_iter().map(|(_, set)| set).collect();

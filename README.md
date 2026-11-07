@@ -315,7 +315,7 @@ steps:
   - uses: actions/checkout@v7
   - uses: christianpflugradt/hannes@main
     with:
-      version: v0.9.0
+      version: v0.12.0
       execution-point: check
 ```
 
@@ -326,7 +326,7 @@ for Hannes' own immutable pin.
 
 | Input | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `version` | Yes | None | Exact stable release tag, including `v`, such as `v0.9.0`. |
+| `version` | Yes | None | Exact stable release tag, including `v`, such as `v0.12.0`. |
 | `execution-point` | No | `check` | Point passed to `hannes mach was --at`. |
 | `run` | No | `'true'` | Set to `'false'` to install only. |
 

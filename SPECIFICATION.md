@@ -472,7 +472,7 @@ An executable plan exits 0; a blocked/invalid plan exits 2.
 
 The root `action.yml` is a public composite GitHub Action for GitHub-hosted
 Ubuntu 24.04 x64 and ARM64 runners. Required `version` is an exact stable release
-tag such as `v0.9.0`. Optional `execution-point` defaults to `check`; `run` defaults
+tag such as `v0.12.0`. Optional `execution-point` defaults to `check`; `run` defaults
 to `true` and accepts only `true` or `false`. Installation downloads the matching
 native archive and SHA256SUMS, verifies the checksum, and adds the executable to
 PATH for subsequent steps. With `run: true` it executes
@@ -694,10 +694,10 @@ File triggers select only root AGENTS.md; other changes omit the review
 with trigger_not_matched. CI uses an explicit verified baseline, preferring the
 PR merge-base. Summaries distinguish PASS, non-blocking FAIL, ERROR and SKIP.
 The rubric is context only. review.include_diff defaults to true; setting it to
-false excludes the diff. The active repository configuration omits this field for
-v0.11.0 compatibility; enabling it is deferred until release adoption. Batches separate reviews with different diff settings, and no diff
-is assembled or delivered for a batch that disables it. Plain HTTP models use
-only supplied evidence; generic instructions require no tools or repository access.
+false excludes the diff. The active repository Review sets include_diff = false
+using published Hannes v0.12.0. Batches separate reviews with different diff
+settings, and no diff is assembled or delivered for a batch that disables it.
+Plain HTTP models use only supplied evidence; generic instructions require no tools or repository access.
 
 The adapter sends the complete prompt in one user text part to generateContent,
 using HANNES_MODEL (configured as gemini-3.8-flash), x-goog-api-key from
@@ -711,10 +711,8 @@ At most five HTTP attempts use 30/60/120/240 second delays for HTTP
 429/500/502/503/504 and transient connections. Retry-After seconds or dates may
 increase a delay up to 240 seconds. Every request has a 600-second timeout;
 timeouts stop immediately. Authentication, invalid requests and invalid responses
-are not retried. The adapter has no overall deadline. CLI timeout_seconds = 0
-disables its enclosing deadline in the new implementation. The active repository
-provider retains its 180-second enclosing deadline until a separate migration
-after release adoption; this can interrupt requests or retries.
+are not retried. The adapter has no overall deadline. The active repository
+provider sets CLI timeout_seconds = 0 to disable its enclosing deadline.
 Concise safe retry/error diagnostics exclude keys, prompts and response content.
 CI reserves 90 minutes for checks plus review retries. No live provider is
 required by automated tests.

@@ -204,11 +204,11 @@ Both installers download the pinned release's assets directly, without a GitHub
 Releases API request. Missing tags, assets or valid checksums fail installation;
 there is no fallback to latest. These installation steps need no GitHub token.
 
-The active configuration remains compatible with the v0.11.0 pin: it omits
-review.include_diff and retains the existing 180-second CLI deadline. Enabling
-include_diff = false and timeout_seconds = 0 is deferred until a supporting release
-is published and adopted. Candidate binaries remain confined to disposable acceptance fixtures and
-smoke tests; they never govern this checkout.
+The repository uses published Hannes v0.12.0 for both local hooks and CI.
+The AGENTS.md review sets include_diff = false and its Gemini provider sets
+timeout_seconds = 0, leaving request deadlines and retries to the REST adapter.
+Candidate binaries remain confined to disposable acceptance fixtures and smoke
+tests; they never govern this checkout.
 
 The initial Action was published on main at
 [`2d3cac2324ce54f076c7090e5bf80969eee4b37e`](https://github.com/christianpflugradt/hannes/commit/2d3cac2324ce54f076c7090e5bf80969eee4b37e)

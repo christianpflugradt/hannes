@@ -7,6 +7,7 @@ run_at = ["check"]
 [review]
 provider = "gemini-flash"
 prompt = "prompt.md"
+include_diff = false
 files = ["AGENTS.md", "docs/agents-review-rubric.md"]
 
 [[review.context]]

@@ -67,25 +67,6 @@ fn repository_review_uses_complete_context_and_triggered_cli() {
         ] {
             write(root.path(), path, text);
         }
-        // Exercise the new configuration only inside the candidate acceptance fixture.
-        // The repository's active governance must remain compatible with v0.11.0.
-        let review_path = root.path().join(".hannes/reviews/agents-quality/rule.toml");
-        fs::write(
-            &review_path,
-            fs::read_to_string(&review_path).unwrap().replace(
-                "prompt = \"prompt.md\"",
-                "prompt = \"prompt.md\"\ninclude_diff = false",
-            ),
-        )
-        .unwrap();
-        let provider_path = root.path().join(".hannes/providers/gemini-flash.toml");
-        fs::write(
-            &provider_path,
-            fs::read_to_string(&provider_path)
-                .unwrap()
-                .replace("timeout_seconds = 180", "timeout_seconds = 0"),
-        )
-        .unwrap();
         git(root.path(), &["add", "."]);
         git(
             root.path(),

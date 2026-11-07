@@ -24,8 +24,9 @@ hannes mach was --at pre-commit --plan
 hannes was ist phase --details
 ```
 
-The exact published governor pin is recorded in .hannes-version. It must support
-named CLI providers and file-change triggers.
+The exact published governor pin is v0.12.0 in .hannes-version, shared by local
+hooks and GitHub Actions. The AGENTS.md review excludes the Git diff and its
+Gemini REST provider delegates deadlines to the adapter.
 Do not use a candidate built from this checkout as the governor.
 Agents rely on pre-commit and pre-push feedback instead of running checks manually.
 The manual `mise check` task remains available to developers and delegates to

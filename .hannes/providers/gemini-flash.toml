@@ -2,7 +2,7 @@ provider = "cli"
 command = "python3"
 args = ["scripts/gemini-review.py"]
 model = "gemini-3.8-flash"
-timeout_seconds = 180
+timeout_seconds = 0
 
 [requirements]
 executables = ["python3"]

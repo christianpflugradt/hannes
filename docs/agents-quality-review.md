@@ -23,11 +23,9 @@ concrete source evidence and consequences; verbosity earns no credit.
 The [Review](../.hannes/reviews/agents-quality/rule.toml) runs only at check.
 Both AGENTS.md and the rubric are selected as whole-file context, without heading
 filters. Hannes supplies their complete current text and original line numbers,
-the review instructions and its existing response schema. The active configuration
-keeps the orientation diff until the new governor is released and adopted.
-The implemented `include_diff = false` setting will exclude it after that separate
-configuration migration. Existing context and snapshot limits apply; oversized or missing
-context produces ERROR rather than silently reviewing an excerpt.
+the review instructions and its existing response schema. `include_diff = false`
+excludes the Git diff. Existing context and snapshot limits apply; oversized or
+missing context produces ERROR rather than silently reviewing an excerpt.
 
 ## Provider and local execution
 
@@ -40,10 +38,9 @@ hannes mach was --at check
 hannes was ist phase --details
 ```
 
-The active configuration remains compatible with published Hannes v0.11.0.
-It omits `review.include_diff` and retains its 180-second CLI deadline. Adopting a
-release containing these changes and enabling `include_diff = false` and
-`timeout_seconds = 0` are separate future operations.
+The repository pins published Hannes v0.12.0 for local hooks and GitHub Actions.
+The active Review disables diff inclusion, and its provider sets
+`timeout_seconds = 0` so the adapter controls request deadlines and retries.
 For a local branch comparison, use the merge-base with the target branch as
 HANNES_CHANGE_BASE; HEAD is suitable for uncommitted edits. Only AGENTS.md changes
 trigger the Review. Rubric changes alone omit it, without checking credentials.
@@ -71,14 +68,13 @@ connection failures use delays of 30, 60, 120 and 240 seconds. Retry-After secon
 or HTTP dates may increase each delay, capped at 240 seconds. Authentication,
 invalid requests and malformed model responses are not retried. Each request uses
 a 600-second HTTP timeout; a timeout stops immediately without retry. The adapter
-has no overall execution deadline. The active provider retains its existing
-180-second enclosing CLI deadline, which can interrupt a request or its retry
-budget. After release adoption, timeout_seconds = 0 can disable that enclosing
-deadline. Other providers retain their configured deadlines.
+has no overall execution deadline. The provider's `timeout_seconds = 0` also
+disables the enclosing CLI deadline. Other providers retain their configured
+deadlines.
 No fallback model or provider is selected.
 
 Normal success is quiet. Each scheduled retry prints one safe diagnostic to
-stderr. The new Hannes implementation forwards only fixed Gemini diagnostic formats and bounded numeric
+stderr. Hannes forwards only fixed Gemini diagnostic formats and bounded numeric
 fields; arbitrary provider stderr stays private. Final provider errors remain in
 reports and CLI output. API error envelopes are parsed when possible, but HTTP
 status controls retries and API message content is never logged. Redirects are
@@ -114,7 +110,7 @@ publishes evidence where available:
 | --- | --- | --- |
 | PASS | No substantive issues found | Success if all other rules succeeded |
 | FAIL | Substantive issues found | Non-blocking because blocking = false |
-| ERROR | Review could not complete reliably | Fatal with v0.11.0; non-blocking with the new implementation |
+| ERROR | Review could not complete reliably | Non-blocking; other blocking failures still fail the job |
 | SKIP | Trigger did not match, or checks prevented execution | Check failures still fail the job |
 
 Missing credentials, malformed responses, timeouts and provider failures remain
@@ -125,5 +121,6 @@ probabilistic and grounded references do not establish their correctness.
 
 Offline Python tests cover the size boundary, envelope handling, baselines and
 summaries. A Rust acceptance fixture uses the real Rule, provider and adapter with
-fixture-only new settings and mocked HTTP responses to verify full context, AGENTS.md-only triggering, omission,
-global gating, credentials, PASS, non-blocking FAIL and malformed output.
+the active configuration and mocked HTTP responses to verify full context,
+AGENTS.md-only triggering, omission, global gating, credentials, PASS, non-blocking
+FAIL and malformed output.

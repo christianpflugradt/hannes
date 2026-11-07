@@ -1,0 +1,8 @@
+id = "release-artifacts"
+description = "Verify the complete tested release artifact set"
+enabled = true
+run_at = ["release-artifacts"]
+
+[check]
+command = "python3 scripts/check-release-artifacts.py"
+timeout_seconds = 180

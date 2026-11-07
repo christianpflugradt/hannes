@@ -69,17 +69,21 @@ security and license Rules.
 
 | Execution point | Required checks |
 | --- | --- |
-| pre-commit | 01-format, 02-docs, 04-agents-size |
-| commit-msg | 20-commit-message plus imported commit-message |
-| pre-push (default) | 01-format, 02-docs, 03-python-tests, 04-agents-size, 08-release-rules, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke, 22-workflows, 23-msrv plus imported license, secret-scan and sensitive-files |
-| check | All pre-push checks plus 21-commit-range, 24-rust-audit and 25-npm-audit: 17 checks total; conditional agents-quality Review |
-| release-build | 01-format, 10-clippy, 11-rust-tests, 12-native-build, 13-native-smoke |
-| release-artifacts | 30-release-artifacts |
+| pre-commit | format, docs, agents-size |
+| commit-msg | commit-message plus imported commit-message |
+| pre-push (default) | format, docs, python-tests, agents-size, release-rules, clippy, rust-tests, native-build, native-smoke, workflows, msrv plus imported license, secret-scan and sensitive-files |
+| check | All pre-push checks plus commit-range, rust-audit and npm-audit: 17 checks total; conditional agents-quality Review |
+| release-build | format, clippy, rust-tests, native-build, native-smoke |
+| release-artifacts | release-artifacts |
 
 The 16 local [checks](../.hannes/checks) use string commands. Python scripts run
 as `python3 scripts/<name>.py`, relative to the consuming repository root.
 The published v0.14.0 governor supports these commands and explicit path
 references for the four imported Checks. There are no local index.sh launchers.
+Local Rule directories and IDs use descriptive names without numeric prefixes.
+The local commit-message Rule and the imported Rule have distinct identities:
+imports retain their git-prefixed binding namespace. ID sorting still places
+native-build before native-smoke, which consumes the candidate executable.
 Each local Rule declares its execution points directly; this repository defines
 no local Rule Sets. External Rule Sets supply commit-message, security and
 license checks at full Git commit pins.
@@ -155,7 +159,7 @@ pinned to the full commit in `.hannes/config.toml`. It receives
 require this file to match the scopes in `.githooks/commit-policy`.
 Both message checks consume HANNES_GIT_HOOK_ARG_1 and require exactly one
 commit-msg argument. The imported Rule validates the header, type and scope.
-The local `20-commit-message` check also enforces Hannes' narrower type allowlist
+The local `commit-message` check also enforces Hannes' narrower type allowlist
 and summary whitespace requirements using the same policy checker as CI.
 `pass auf` retrieves and validates the import during setup; subsequent checks and
 hooks use its immutable cache offline. A fresh clone needs access to the source

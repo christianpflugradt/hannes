@@ -1,8 +1,0 @@
-id = "01-format"
-description = "Verify Rust formatting"
-enabled = true
-run_at = ["pre-commit", "pre-push", "check", "release-build"]
-
-[check]
-command = "cargo +stable fmt --all -- --check"
-timeout_seconds = 120

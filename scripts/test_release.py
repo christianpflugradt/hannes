@@ -208,7 +208,7 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, result.stderr or result.stdout)
                 report = json.loads((root / ".hannes/reports/last.json").read_text())
                 self.assertEqual(report["overall"], "FAIL")
-                self.assertEqual(report["results"][0]["id"], "30-release-artifacts")
+                self.assertEqual(report["results"][0]["id"], "release-artifacts")
 
     def test_missing_or_extra_archives_are_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

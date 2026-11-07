@@ -36,8 +36,8 @@ fn repository_review_uses_complete_context_and_triggered_cli() {
         fs::remove_dir_all(root.path().join(".hannes/reviews")).unwrap();
         for (path, text) in [
             (
-                ".hannes/checks/04-agents-size/rule.toml",
-                include_str!("../.hannes/checks/04-agents-size/rule.toml"),
+                ".hannes/checks/agents-size/rule.toml",
+                include_str!("../.hannes/checks/agents-size/rule.toml"),
             ),
             (
                 ".hannes/reviews/agents-quality/rule.toml",

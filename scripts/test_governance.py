@@ -221,12 +221,12 @@ class GovernanceTests(unittest.TestCase):
 
     def test_native_checks_remain_offline_without_a_launcher(self):
         checks = definitions()
-        for rule in ("10-clippy", "11-rust-tests", "12-native-build", "23-msrv"):
+        for rule in ("clippy", "rust-tests", "native-build", "msrv"):
             self.assertIn("--offline", shlex.split(checks[rule]["check"]["command"]))
-        self.assertEqual(shlex.split(checks["08-release-rules"]["check"]["command"]), ["npm", "--offline", "test"])
+        self.assertEqual(shlex.split(checks["release-rules"]["check"]["command"]), ["npm", "--offline", "test"])
         self.assertFalse((ROOT / "scripts/run-check.py").exists())
         for point in ("pre-push", "check"):
-            self.assertTrue({"03-python-tests", "08-release-rules", "11-rust-tests", "22-workflows", "23-msrv"}.issubset(BASELINE["execution_points"][point]))
+            self.assertTrue({"python-tests", "release-rules", "rust-tests", "workflows", "msrv"}.issubset(BASELINE["execution_points"][point]))
 
     def test_commit_message_checker_consumes_managed_hook_arguments(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,7 +1,7 @@
 {
   "checks": {
-    "01-format": {
-      "id": "01-format",
+    "format": {
+      "id": "format",
       "description": "Verify Rust formatting",
       "enabled": true,
       "command": [
@@ -20,8 +20,8 @@
         "release-build"
       ]
     },
-    "02-docs": {
-      "id": "02-docs",
+    "docs": {
+      "id": "docs",
       "description": "Validate documentation links and specification references",
       "enabled": true,
       "command": [
@@ -35,8 +35,8 @@
         "check"
       ]
     },
-    "03-python-tests": {
-      "id": "03-python-tests",
+    "python-tests": {
+      "id": "python-tests",
       "description": "Test Python helpers and repository integration",
       "enabled": true,
       "command": [
@@ -55,8 +55,8 @@
         "check"
       ]
     },
-    "04-agents-size": {
-      "id": "04-agents-size",
+    "agents-size": {
+      "id": "agents-size",
       "description": "Limit AGENTS.md to 1200 ASCII-whitespace-separated words",
       "enabled": true,
       "command": [
@@ -72,8 +72,8 @@
         "check"
       ]
     },
-    "08-release-rules": {
-      "id": "08-release-rules",
+    "release-rules": {
+      "id": "release-rules",
       "description": "Test semantic release rules and lifecycle",
       "enabled": true,
       "command": [
@@ -87,8 +87,8 @@
         "check"
       ]
     },
-    "10-clippy": {
-      "id": "10-clippy",
+    "clippy": {
+      "id": "clippy",
       "description": "Lint Rust with warnings denied",
       "enabled": true,
       "command": [
@@ -109,8 +109,8 @@
         "release-build"
       ]
     },
-    "11-rust-tests": {
-      "id": "11-rust-tests",
+    "rust-tests": {
+      "id": "rust-tests",
       "description": "Run unit acceptance documentation and compatibility tests",
       "enabled": true,
       "command": [
@@ -127,8 +127,8 @@
         "release-build"
       ]
     },
-    "12-native-build": {
-      "id": "12-native-build",
+    "native-build": {
+      "id": "native-build",
       "description": "Build the candidate native release executable",
       "enabled": true,
       "command": [
@@ -146,8 +146,8 @@
         "release-build"
       ]
     },
-    "13-native-smoke": {
-      "id": "13-native-smoke",
+    "native-smoke": {
+      "id": "native-smoke",
       "description": "Smoke-test the candidate executable",
       "enabled": true,
       "command": [
@@ -161,8 +161,8 @@
         "release-build"
       ]
     },
-    "20-commit-message": {
-      "id": "20-commit-message",
+    "commit-message": {
+      "id": "commit-message",
       "description": "Validate the final Git commit message",
       "enabled": true,
       "command": [
@@ -175,8 +175,8 @@
         "commit-msg"
       ]
     },
-    "21-commit-range": {
-      "id": "21-commit-range",
+    "commit-range": {
+      "id": "commit-range",
       "description": "Validate CI commits and pull request title",
       "enabled": true,
       "command": [
@@ -188,8 +188,8 @@
         "check"
       ]
     },
-    "22-workflows": {
-      "id": "22-workflows",
+    "workflows": {
+      "id": "workflows",
       "description": "Validate GitHub workflow syntax and expressions",
       "enabled": true,
       "command": [
@@ -202,8 +202,8 @@
         "check"
       ]
     },
-    "23-msrv": {
-      "id": "23-msrv",
+    "msrv": {
+      "id": "msrv",
       "description": "Check minimum supported Rust 1.85",
       "enabled": true,
       "command": [
@@ -220,8 +220,8 @@
         "check"
       ]
     },
-    "24-rust-audit": {
-      "id": "24-rust-audit",
+    "rust-audit": {
+      "id": "rust-audit",
       "description": "Audit Rust dependencies",
       "enabled": true,
       "command": [
@@ -234,8 +234,8 @@
         "check"
       ]
     },
-    "25-npm-audit": {
-      "id": "25-npm-audit",
+    "npm-audit": {
+      "id": "npm-audit",
       "description": "Audit npm high and critical advisories",
       "enabled": true,
       "command": [
@@ -248,8 +248,8 @@
         "check"
       ]
     },
-    "30-release-artifacts": {
-      "id": "30-release-artifacts",
+    "release-artifacts": {
+      "id": "release-artifacts",
       "description": "Verify the complete tested release artifact set",
       "enabled": true,
       "command": [
@@ -264,51 +264,51 @@
   },
   "execution_points": {
     "commit-msg": [
-      "20-commit-message"
+      "commit-message"
     ],
     "pre-commit": [
-      "01-format",
-      "02-docs",
-      "04-agents-size"
+      "format",
+      "docs",
+      "agents-size"
     ],
     "pre-push": [
-      "01-format",
-      "02-docs",
-      "03-python-tests",
-      "04-agents-size",
-      "08-release-rules",
-      "10-clippy",
-      "11-rust-tests",
-      "12-native-build",
-      "13-native-smoke",
-      "22-workflows",
-      "23-msrv"
+      "format",
+      "docs",
+      "python-tests",
+      "agents-size",
+      "release-rules",
+      "clippy",
+      "rust-tests",
+      "native-build",
+      "native-smoke",
+      "workflows",
+      "msrv"
     ],
     "release-artifacts": [
-      "30-release-artifacts"
+      "release-artifacts"
     ],
     "check": [
-      "01-format",
-      "02-docs",
-      "03-python-tests",
-      "04-agents-size",
-      "08-release-rules",
-      "10-clippy",
-      "11-rust-tests",
-      "12-native-build",
-      "13-native-smoke",
-      "21-commit-range",
-      "22-workflows",
-      "23-msrv",
-      "24-rust-audit",
-      "25-npm-audit"
+      "format",
+      "docs",
+      "python-tests",
+      "agents-size",
+      "release-rules",
+      "clippy",
+      "rust-tests",
+      "native-build",
+      "native-smoke",
+      "commit-range",
+      "workflows",
+      "msrv",
+      "rust-audit",
+      "npm-audit"
     ],
     "release-build": [
-      "01-format",
-      "10-clippy",
-      "11-rust-tests",
-      "12-native-build",
-      "13-native-smoke"
+      "format",
+      "clippy",
+      "rust-tests",
+      "native-build",
+      "native-smoke"
     ]
   }
 }

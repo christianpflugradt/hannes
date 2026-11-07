@@ -6,7 +6,7 @@ checks whether root AGENTS.md provides usable guidance for coding agents.
 
 ## Size and evaluation
 
-The [size Rule](../.hannes/checks/04-agents-size/rule.toml) runs at pre-commit,
+The [size Rule](../.hannes/checks/agents-size/rule.toml) runs at pre-commit,
 pre-push and check. Its command passes the explicit limit **1200** to
 [scripts/check-word-count.py](../scripts/check-word-count.py). A word is a maximal
 run separated by ASCII whitespace: space, tab, LF, CR, vertical tab or form feed.

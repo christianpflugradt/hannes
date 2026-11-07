@@ -38,6 +38,6 @@ See [repository self-integration](../docs/self-governance.md) for setup, require
 coverage, reports and CI. The general [configuration reference](../docs/configuration.md)
 describes the schema. Reports remain ignored.
 
-The blocking 04-agents-size Check limits AGENTS.md to 1200 words. The
+The blocking agents-size Check limits AGENTS.md to 1200 words. The
 [quality-review example](../docs/agents-quality-review.md) explains counting,
 full-document context, the rubric, Gemini setup, triggers and CI summaries.

@@ -1,3 +1,26 @@
+## [0.6.0](https://github.com/christianpflugradt/hannes/compare/v0.5.0...v0.6.0) (2026-11-07)
+
+### ⚠ BREAKING CHANGES
+
+* **git:** remove configurable hook mappings
+* **config:** adopt unversioned self-contained rules
+
+### Features
+
+* **config:** add standard execution points and import mappings ([4572bb0](https://github.com/christianpflugradt/hannes/commit/4572bb038095a08e87adfbe37b2caa3245376919))
+* **config:** adopt unversioned self-contained rules ([ce94514](https://github.com/christianpflugradt/hannes/commit/ce9451451245a23ba06eb74cf87c42b509139be1))
+* **config:** support external Git rule sets ([9e92188](https://github.com/christianpflugradt/hannes/commit/9e92188286ed8e18649a0c6d462f26f381036c6b))
+
+### Bug Fixes
+
+* **cli:** skip hook reconciliation for explicit execution points ([982e248](https://github.com/christianpflugradt/hannes/commit/982e248df8a1444643c0e889a8ad4f5aac6378cf))
+* **git:** remove configurable hook mappings ([13c8f07](https://github.com/christianpflugradt/hannes/commit/13c8f0784688648cc3a81e923eabdd1539bc6adb))
+* **release:** prepare offline publication hooks ([a4745de](https://github.com/christianpflugradt/hannes/commit/a4745de1f6a8c3cb20db1029ec7b7d6ba3afb143))
+
+### Maintenance
+
+* **ci:** migrate self-governance to execution points ([5aca592](https://github.com/christianpflugradt/hannes/commit/5aca5925b3b4ae7d8a8a25e662c6543e5e20175d))
+
 ## [0.5.0](https://github.com/christianpflugradt/hannes/compare/v0.4.0...v0.5.0) (2026-11-06)
 
 ### Features

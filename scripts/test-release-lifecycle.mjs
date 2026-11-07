@@ -1,7 +1,7 @@
 // Exercise initial GitHub publication and subsequent semantic releases offline.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -40,34 +40,7 @@ async function testLifecycle() {
     mkdirSync(join(cwd, "scripts"));
     for (const file of ["verify-release.py", "set-release-version.py"]) copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
     execFileSync("python3", ["scripts/set-release-version.py", "0.1.0"], { cwd, env });
-    // The publisher reconciles hooks too: release commits must keep working with
-    // the real formatting/message hooks, without recursively invoking this suite.
-    mkdirSync(join(cwd, ".hannes", "reports"), { recursive: true });
-    mkdirSync(join(cwd, ".githooks"));
-    mkdirSync(join(cwd, "src"));
-    writeFileSync(join(cwd, "src", "main.rs"), "fn main() {}\n");
-    copyFileSync(join(source, ".hannes", "provider.toml"), join(cwd, ".hannes", "provider.toml"));
-    copyFileSync(join(source, ".githooks", "commit-policy"), join(cwd, ".githooks", "commit-policy"));
-    for (const file of ["check-commits.py", "check-commit-message.sh"]) {
-      copyFileSync(join(source, "scripts", file), join(cwd, "scripts", file));
-    }
-    writeFileSync(join(cwd, ".hannes", "config.toml"),
-      'project="Release fixture"\nmax_display_files=5\n');
-    const hookRules = [
-      ["format", "pre-commit", ["cargo", "+stable", "fmt", "--all", "--", "--check"]],
-      ["message", "commit-msg", ["python3", "scripts/check-commits.py", "--message"]],
-      ["git", "pre-push", ["git", "--version"]],
-    ];
-    for (const [id, point, command] of hookRules) {
-      const directory = join(cwd, ".hannes", "checks", id);
-      mkdirSync(directory, { recursive: true });
-      writeFileSync(join(directory, "rule.toml"),
-        `id=${JSON.stringify(id)}\ndescription="Release hook fixture"\nrun_at=[${JSON.stringify(point)}]\n[check]\ncommand=${JSON.stringify(command)}\ntimeout_seconds=30\n`
-      );
-    }
-    const governor = env.HANNES_EXECUTABLE || "hannes";
-    execFileSync(governor, ["pass", "auf", "--auto-approve"], { cwd, env, stdio: "pipe" });
-    writeFileSync(join(cwd, ".gitignore"), "dist/\n.hannes/reports/\n");
+    writeFileSync(join(cwd, ".gitignore"), "dist/\n");
     git("add", "."); git("commit", "-m", "feat: initialize fixture"); git("push", "--set-upstream", "origin", "main");
     env.GITHUB_SHA = git("rev-parse", "HEAD");
     function archives(version) {
@@ -120,19 +93,42 @@ for target in targets:
     });
     const options = { ...config, repositoryUrl: remote, ci: false, plugins };
     const context = { cwd, env, stdout: quiet, stderr: quiet };
+    // Fail if publication tries to create a commit; record ordinary push-hook use.
+    for (const event of ["pre-commit", "commit-msg", "pre-push"]) {
+      const path = join(cwd, ".git", "hooks", event);
+      writeFileSync(path, event === "pre-push"
+        ? '#!/bin/sh\nprintf "push\\n" >> "$(git rev-parse --git-path release-pushes)"\n'
+        : '#!/bin/sh\necho "Publication must not create commits" >&2\nexit 1\n');
+      chmodSync(path, 0o755);
+    }
     const original = readFileSync(join(cwd, "Cargo.toml"), "utf8");
+    const originalLock = readFileSync(join(cwd, "Cargo.lock"), "utf8");
     const preview = await semanticRelease({ ...options, dryRun: true }, context);
     assert.equal(preview.nextRelease.version, "0.1.1"); assert.equal(git("tag"), "v0.1.0");
     assert.equal(readFileSync(join(cwd, "Cargo.toml"), "utf8"), original);
     await assert.rejects(semanticRelease(options, { ...context, env: { ...env, EXPECTED_RELEASE_VERSION: "9.9.9" } }));
     assert.equal(git("tag"), "v0.1.0"); assert.equal(git("rev-parse", "HEAD"), env.GITHUB_SHA);
+    const checksums = readFileSync(join(cwd, "dist", "SHA256SUMS"), "utf8");
+    writeFileSync(join(cwd, "dist", "SHA256SUMS"), "corrupt checksums\n");
+    await assert.rejects(semanticRelease(options, context));
+    assert.equal(git("tag"), "v0.1.0");
+    assert.equal(git("rev-parse", "HEAD"), env.GITHUB_SHA);
+    writeFileSync(join(cwd, "dist", "SHA256SUMS"), checksums);
+    await assert.rejects(semanticRelease(options, { ...context, env: { ...env, GITHUB_SHA: "0".repeat(40) } }));
+    assert.equal(git("tag"), "v0.1.0");
     const result = await semanticRelease(options, context);
     assert.equal(result.nextRelease.version, "0.1.1");
-    assert.match(readFileSync(join(cwd, "Cargo.toml"), "utf8"), /version = "0.1.1"/);
-    assert.match(readFileSync(join(cwd, "Cargo.lock"), "utf8"), /name = "hannes"\nversion = "0.1.1"/);
-    assert.match(git("log", "-1", "--format=%s"), /^build\(release\): 0\.1\.1 \[skip ci\]$/);
-    assert.equal(git("rev-parse", "v0.1.1"), git("rev-parse", "HEAD"));
+    assert.equal(readFileSync(join(cwd, "Cargo.toml"), "utf8"), original);
+    assert.equal(readFileSync(join(cwd, "Cargo.lock"), "utf8"), originalLock);
+    assert.equal(git("status", "--porcelain"), "");
+    assert.equal(git("rev-parse", "HEAD"), env.GITHUB_SHA);
+    assert.equal(git("rev-parse", "v0.1.1"), env.GITHUB_SHA);
+    assert.equal(git("ls-remote", "origin", "refs/heads/main").split(/\s+/)[0], env.GITHUB_SHA);
     assert.match(git("ls-remote", "origin", "refs/tags/v0.1.1"), /refs\/tags\/v0\.1\.1/);
+    assert.match(git("ls-remote", "origin", "refs/notes/semantic-release-v0.1.1"), /refs\/notes\/semantic-release-v0\.1\.1/);
+    assert.match(readFileSync(join(cwd, ".git", "release-pushes"), "utf8"), /push/);
+    assert.equal(await semanticRelease(options, context), false);
+    for (const event of ["pre-commit", "commit-msg"]) rmSync(join(cwd, ".git", "hooks", event));
     git("commit", "--allow-empty", "-m", "feat!: change fixture contract"); git("push", "origin", "main");
     assert.equal((await semanticRelease({ ...options, plugins: plugins.slice(0, 2), dryRun: true }, context)).nextRelease.version, "0.2.0");
   } finally { rmSync(temporary, { recursive: true, force: true }); }

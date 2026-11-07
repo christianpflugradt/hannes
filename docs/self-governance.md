@@ -209,8 +209,7 @@ separate from repository checks.
 
 The [release-build workflow](../.github/workflows/quality.yml) runs only for
 releases, with four native runners and the `release-build` execution point.
-The release workflow also reuses CI before publication. The publisher installs
-Gitleaks for its managed pre-push hook. macOS release runners use the
+The release workflow also reuses CI before publication. macOS release runners use the
 [native installer](../scripts/install-governor.py). The execution wrapper rejects
 candidate governors inside the checkout and checks CI's version against the pin.
 Both installers download the pinned release's assets directly, without a GitHub
@@ -240,18 +239,15 @@ changes; every execution point must validate and plan with the proposed release.
 Push/PR checks retain native Linux x64, tooling, MSRV and audit coverage. Releases
 reuse that CI workflow and run native validation on all four supported hosts. Tool
 installation, dependency preparation, release stamping, packaging and publication
-remain separate operations. Before publication, the publisher installs stable Rust
-with rustfmt and Clippy, Rust 1.85 and actionlint, and fetches locked Cargo
-dependencies for both toolchains. Its automated
-version commit and push invoke managed hooks with offline checks; release lifecycle
-tests exercise hooks in a disposable repository. After artifact collection,
-release-artifacts verifies
-the complete set and its source/version binding; the publication plugin repeats
-its integrity checks. No release process or permissions change is introduced.
+remain separate operations. Publish installs no governor, managed hooks or check
+prerequisites. It calculates checksums and uses the publication plugin to verify
+the complete artifact set and source/version binding before tagging. The existing
+`release-artifacts` execution point remains available for explicit use; Publish
+does not invoke it. Release lifecycle tests exercise tag and Git note pushes in a
+disposable repository and verify that publication creates no source commit.
 
-Jobs retain their failure-report uploads. The publisher saves artifact-verification
-evidence before publication and uploads hook reports afterward, even on failure,
-as separate artifacts. Schema-4 last.json records execution
+CI and native build jobs retain their failure-report uploads.
+Schema-4 last.json records execution
 point, required rules, source state and results. The [execution wrapper](../scripts/run-execution-point.py)
 adds execution.json with governor version/digest, execution point, checked commit
 and exit code. Managed hooks and direct CLI invocations write the ordinary report;

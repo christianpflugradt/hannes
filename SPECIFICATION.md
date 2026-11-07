@@ -612,9 +612,8 @@ retains Hannes' narrower type allowlist and stricter summary whitespace policy.
 The check and pre-push points also import multi-point/security at a full commit
 pin. Its sensitive-files and secret-scan checks inspect the working tree at check
 and HEAD contents at pre-push, without history. The CI quality job explicitly
-runs check with Python 3 and a checksum-verified Gitleaks binary available. The
-release publisher prepares Gitleaks for its managed push hook. Rules and Hannes
-never install these dependencies automatically. The same points import
+runs check with Python 3 and a checksum-verified Gitleaks binary available. Rules
+and Hannes never install these dependencies automatically. The same points import
 repository-conventions at a full Git commit pin. It currently
 contains only the blocking license Rule, with target = "LICENSE". The license
 must match an SPDX reference byte-for-byte: Apache-2.0,
@@ -637,11 +636,14 @@ paths, without per-rule shell or Python launchers. Cargo build/test/Clippy/MSRV
 commands and npm tests explicitly select offline mode. The execution-point wrapper additionally sets Cargo/npm
 offline mode and disables Rustup auto-install for Git-backed invocations.
 CI invokes pass auf --auto-approve once before execution. Execution never repairs
-hooks noninteractively. The publish job prepares stable Rust with rustfmt and
-Clippy, Rust 1.85 and actionlint, and fetches locked Cargo dependencies for both
-toolchains before publication, so its managed commit and push hooks can run
-offline. Report artifacts are uploaded after
-publication with an always condition, including when a release hook fails.
+hooks noninteractively. Publish installs no governor or managed hooks and runs no
+Hannes checks. It requires successful CI and native build jobs, then verifies the
+complete artifact set, checksums, planned version and tested source SHA before
+tagging. Native builds stamp Cargo.toml/Cargo.lock only in their disposable
+checkouts before testing and packaging; committed versions remain unchanged.
+Semantic Release creates tags, Git notes, GitHub Releases and release notes,
+without generating a changelog or release commit. Release tags target the tested
+source revision. Publication refuses an advanced main branch or invalid artifacts.
 Reports use schema 4 and a companion execution record
 stores governor version/digest, execution point, checked commit and exit code.
 See [repository self-integration](docs/self-governance.md) for coverage and setup.

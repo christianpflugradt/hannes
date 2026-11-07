@@ -18,7 +18,7 @@ export default {
         { type: "fix", release: "patch" },
         { type: "perf", release: "patch" },
         ...["chore", "refactor", "revert"].map(type => ({ type, release: "patch" })),
-        // Match scoped and unscoped builds, reserving build(release) for version commits.
+        // Ignore historical generated version commits.
         { type: "build", scope: "!release", release: "patch" },
         { type: "build", scope: null, release: "patch" },
         { type: "build", scope: "release", release: false },
@@ -42,12 +42,7 @@ export default {
         ],
       },
     }],
-    ["@semantic-release/changelog", { changelogFile: "CHANGELOG.md" }],
     "./scripts/semantic-release-plugin.mjs",
-    ["@semantic-release/git", {
-      assets: ["Cargo.toml", "Cargo.lock", "CHANGELOG.md"],
-      message: "build(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
-    }],
     ["@semantic-release/github", {
       assets: ["dist/*.tar.gz", "dist/SHA256SUMS", "README.md", "LICENSE"],
       successComment: false,

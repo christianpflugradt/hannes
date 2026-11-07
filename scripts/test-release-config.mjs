@@ -78,9 +78,9 @@ test("patch maintenance is visible in release notes; internal and cosmetic chang
   assert.doesNotMatch(notes, /hidden |skip ci/);
 });
 
-test("generated version commit with real breaking release notes cannot trigger another release", async () => {
+test("historical version commit with breaking release notes cannot trigger another release", async () => {
   const notes = await notesFor([commit("feat!: change review format", "a")]);
-  const template = config.plugins.find(plugin => Array.isArray(plugin) && plugin[0] === "@semantic-release/git")[1].message;
+  const template = "build(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}";
   const message = template.replace("${nextRelease.version}", "2.0.0").replace("${nextRelease.notes}", notes);
   assert.equal(await analyze([commit(message, "b")]), null);
 });
@@ -98,6 +98,10 @@ test("notes preserve features, fixes and breaking changes", async () => {
 });
 test("release is main-only with private tooling and no npm publication", () => {
   assert.deepEqual(config.branches, ["main"]);
+  assert.deepEqual(config.plugins.map(plugin => Array.isArray(plugin) ? plugin[0] : plugin), [
+    "./scripts/release-analyzer.mjs", "@semantic-release/release-notes-generator",
+    "./scripts/semantic-release-plugin.mjs", "@semantic-release/github",
+  ]);
   assert.ok(!config.plugins.some(plugin => JSON.stringify(plugin).includes("@semantic-release/npm")));
   const github = config.plugins.at(-1)[1];
   assert.equal(github.successComment, false);

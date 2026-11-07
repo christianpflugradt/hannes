@@ -16,9 +16,3 @@ export function verifyRelease(_config, context) {
     ...execution, stdio: "inherit",
   });
 }
-
-export function prepare(_config, context) {
-  execFileSync("python3", ["scripts/set-release-version.py", context.nextRelease.version], {
-    cwd: context.cwd, env: context.env ?? process.env, stdio: "inherit",
-  });
-}

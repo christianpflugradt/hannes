@@ -62,8 +62,8 @@ use `chore(deps)`; use `fix(deps)` when fixing a known bug or security issue.
 Any type with `!` or a `BREAKING CHANGE:` footer triggers a minor release during
 the 0.x development series, and a major release after explicit stable graduation.
 The initial release is 0.1.0.
-Reserve `build(release)` for automatically generated version commits, which do
-not trigger another release. See [release policy](docs/releasing.md#version-policy)
+Historical `build(release)` version commits do not trigger another release.
+Releases no longer create version commits. See [release policy](docs/releasing.md#version-policy)
 for combined changes and reverts.
 
 | Scopes | Use for |

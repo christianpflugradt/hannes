@@ -106,16 +106,13 @@ class GovernanceTests(unittest.TestCase):
         self.assertLess(workflow.index("bash scripts/prepare-ci.sh"), workflow.index(run))
         self.assertLess(workflow.index(run), workflow.index("name: quality-check"))
         preparation = (ROOT / "scripts/prepare-ci.sh").read_text()
-        for text in (preparation, (ROOT / ".github/workflows/release.yml").read_text()):
-            self.assertIn("v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz", text)
-            self.assertIn("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb", text)
-            self.assertIn("sha256sum --check", text)
-            self.assertIn('echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"', text)
+        self.assertIn("v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz", preparation)
+        self.assertIn("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb", preparation)
+        self.assertIn("sha256sum --check", preparation)
+        self.assertIn('echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"', preparation)
         for required in ("npm ci --ignore-scripts", "cargo +stable fetch --locked", "cargo +1.85.0 fetch --locked",
                          "cargo +stable install cargo-audit --version", "go install github.com/rhysd/actionlint"):
             self.assertIn(required, preparation)
-        release = (ROOT / ".github/workflows/release.yml").read_text()
-        self.assertLess(release.index("Install pinned Gitleaks"), release.index("Publish versioned CLI"))
 
     def test_repository_conventions_import_is_pinned_and_license_target(self):
         config = tomllib.loads((ROOT / ".hannes/config.toml").read_text())
@@ -178,46 +175,35 @@ class GovernanceTests(unittest.TestCase):
         self.assertIn("needs: [plan, checks, quality]", release)
         for obsolete in ("ci-native", "ci-tooling", "ci-msrv", "ci-audit"):
             self.assertNotIn(obsolete, ci + builds)
-        for workflow in (checks, builds, release):
+        for workflow in (checks, builds):
             self.assertRegex(workflow, r"uses: christianpflugradt/hannes@[0-9a-f]{40}")
             self.assertIn("run: 'false'", workflow)
             self.assertIn("version: ${{ steps.governor.outputs.version }}", workflow)
             self.assertIn("if: always()", workflow)
             self.assertNotIn("releases/latest", workflow)
             self.assertNotRegex(workflow, r"run: (cargo \+stable (test|clippy|audit)|npm (test|audit)|python3 scripts/(check-commits|verify-release|test-))")
-        self.assertIn("python3 scripts/run-execution-point.py release-artifacts", release)
         installer = (ROOT / "scripts/install-governor.py").read_text()
         self.assertIn('Path(".hannes-version")', installer)
         self.assertIn("deploy(tag=version", installer)
         self.assertNotIn("cargo", installer)
         self.assertFalse((ROOT / ".github/actions/setup-hannes/action.yml").exists())
 
-    def test_release_prepares_offline_hooks_and_uploads_reports_after_publication(self):
+    def test_publish_uses_validated_artifacts_without_governance_setup(self):
         release = (ROOT / ".github/workflows/release.yml").read_text()
-        prepare, publish, upload = (
-            release.index(name) for name in (
-                "      - name: Prepare managed release hooks",
-                "      - name: Publish versioned CLI archives and release notes",
-                "      - name: Upload release hook evidence",
-            )
-        )
-        self.assertLess(prepare, publish)
-        self.assertLess(publish, upload)
-        preparation = release[prepare:publish]
-        self.assertIn("run: |", preparation)
-        self.assertIn("rustup toolchain install stable --profile minimal --component rustfmt --component clippy", preparation)
-        self.assertIn("cargo +stable fetch --locked", preparation)
-        self.assertIn("rustup toolchain install 1.85.0 --profile minimal", preparation)
-        self.assertIn("cargo +1.85.0 fetch --locked", preparation)
-        self.assertIn("go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12", preparation)
-        self.assertIn('echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"', preparation)
         publisher = release.split("  publish:\n", 1)[1]
-        self.assertIn("uses: actions/setup-go@", publisher[:publisher.index("      - name: Prepare managed release hooks")])
-        self.assertLess(preparation.index("rustup toolchain install 1.85.0"), preparation.index("cargo +1.85.0 fetch"))
-        self.assertLess(preparation.index("rustup toolchain install"), preparation.index("cargo +stable fetch"))
-        evidence = release[upload:].split("\n      - ")[0]
-        for required in ("if: always()", "uses: actions/upload-artifact@", "name: quality-release-hooks", "path: .hannes/reports/*.json", "include-hidden-files: true"):
-            self.assertIn(required, evidence)
+        self.assertIn("needs: [plan, checks, quality]", publisher)
+        self.assertIn("contents: write", publisher)
+        self.assertIn("persist-credentials: false", publisher)
+        for required in ("actions/download-artifact@", "pattern: hannes-*",
+                         "python3 scripts/checksums.py", "npm run release",
+                         "EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}"):
+            self.assertIn(required, publisher)
+        for obsolete in ("hannes pass auf", "steps.governor", "uses: christianpflugradt/hannes@",
+                         "run-execution-point.py", "setup-go@", "rustup", "cargo ",
+                         "gitleaks", "actionlint", ".hannes/reports", "--no-verify",
+                         "core.hooksPath"):
+            self.assertNotIn(obsolete, publisher)
+        self.assertLess(publisher.index("scripts/checksums.py"), publisher.index("npm run release"))
 
     def test_native_checks_remain_offline_without_a_launcher(self):
         checks = definitions()

@@ -27,7 +27,7 @@ verifying its checksum and executable compatibility before replacement.
 ## Version policy
 
 Semantic Release determines the next version from commits since the last `v*`
-release tag, then generates release notes and updates `CHANGELOG.md`:
+release tag, then generates release notes for the GitHub Release:
 
 | Commit | Release |
 | --- | --- |
@@ -35,7 +35,7 @@ release tag, then generates release notes and updates `CHANGELOG.md`:
 | `fix`, `perf`, `chore`, `build`, `refactor`, effective `revert` | Patch |
 | Any allowed type with `!` or a `BREAKING CHANGE:` footer | Minor during `0.x`; Major after explicit stable graduation |
 | `ci`, `docs`, `style`, `test` without a breaking change | None |
-| Generated `build(release)` version commit without a breaking change | None |
+| Historical `build(release)` version commit without a breaking change | None |
 
 The [commit policy](../.githooks/commit-policy) allows eleven types, including
 `chore`, and optional scopes from the list in [CONTRIBUTING.md](../CONTRIBUTING.md#commits).
@@ -50,7 +50,8 @@ The highest required increment across all effective commits wins. During 0.x,
 features and breaking changes both require minor; patch changes never override them. Patch maintenance (`chore`, `build`, `refactor`, `revert`)
 appears in the release notes alongside features, fixes and performance changes.
 Non-release types stay hidden unless they contain a breaking change.
-`build(release)` is reserved for generated version commits and is hidden from notes.
+Historical `build(release)` version commits remain hidden from notes. Releases no
+longer generate version commits.
 
 A revert of an already released change triggers a patch. An original commit and
 its revert within the same unreleased range cancel each other in version
@@ -88,7 +89,7 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
 
 1. Planning on main selects initial 0.1.0 if no semantic tag exists; otherwise a
    Semantic Release dry run calculates the proposed version. Prepare/publish plugins do
-   not run; no tag, commit, changelog update or release is created at this stage.
+   not run; no tag, commit or release is created at this stage.
 2. The quality workflow installs the published governor pinned in `.hannes-version`.
    Each native runner stamps Cargo.toml/Cargo.lock before its `release-build` Hannes
    gate runs formatting, Clippy, tests, candidate build and executable smoke test.
@@ -97,27 +98,34 @@ not to build or run Hannes. Dependencies are locked in `package-lock.json`.
 3. Packaging verifies `hannes --version` matches the proposed version. It archives
    the tested executable, README and Unlicense, and records hashes, target and
    source commit as internal artifact metadata.
-4. Only after every quality job passes, publish downloads the four archives,
-   calculates `SHA256SUMS`, and runs the `release-artifacts` Hannes gate for
-   completeness, hashes, permissions, documentation, source commit and the planned
-   version. Independent publication guards repeat verification before tagging.
-   Before publication, the job installs stable Rust with rustfmt and Clippy and
-   fetches locked Cargo dependencies for its offline commit and push hooks.
+4. Only after CI and all native quality jobs pass, publish downloads the four
+   archives and calculates `SHA256SUMS`. The publication guard verifies completeness,
+   hashes, executable permissions, packaged documentation, source commit and planned
+   version before any release tag is created. Publish installs no Hannes, managed
+   Git hooks, Rust, Go, actionlint or Gitleaks and runs no governance checks.
 5. For the initial release, GitHub CLI publishes v0.1.0 at the tested source SHA.
-   For subsequent releases, Semantic Release updates Cargo.toml/Cargo.lock and CHANGELOG.md, commits them as
-   `build(release): VERSION [skip ci]`, tags the release and publishes the archives,
-   checksums, README and LICENSE to GitHub Releases. Nothing is published to npm
-   or crates.io. Issue/PR comments and release labels are disabled.
-   Hook reports are uploaded after publication with `if: always()`, including on
-   failure, separately from the earlier artifact-verification evidence.
+   For subsequent releases, Semantic Release calculates the version again, checks
+   it against the plan, generates notes, tags the tested source SHA, pushes the tag
+   and Git notes, and publishes archives, checksums, README and LICENSE to GitHub
+   Releases. Nothing is published to npm or crates.io. Issue/PR comments and release
+   labels are disabled. No changelog or release commit is generated.
+
+Cargo.toml and Cargo.lock retain their committed development version. Version
+stamping happens only in the native build checkouts, before compilation and tests;
+Cargo embeds that version in the binaries. Packaging checks the executable version
+against the stamped manifest and planned tag, and records the source SHA and
+binary/archive hashes. The publisher verifies those records against the planned
+version and dispatched source revision. Rebuilding a release version from its tag
+requires the same `scripts/set-release-version.py VERSION` build-time stamping.
+Semantic Release has no version preparation step and never commits generated files.
 
 If main advanced while building, publication is refused; rerun on its latest
-commit. Do not push new work during publication. Ordinary Git pushes reject a
-conflicting remote branch update; there is no force push. Release operations are
-not atomic: a network/API failure after tagging can leave a tag or partially
+commit. Do not push new work during publication. The publisher does not update
+the main branch. Release operations are not atomic: a network/API failure after tagging can leave a tag or partially
 uploaded release. Inspect the workflow log and remote state before retrying;
 never assume a failed run published nothing or delete release tags blindly.
-Pull main after a successful release to obtain its generated version commit.
+A repeat run after a completed release with no new release-worthy commits exits
+without building or publishing again. Partial publication still needs inspection.
 
 ## Native downloads
 
@@ -160,13 +168,11 @@ Native downloads still need Git and, for enabled reviews, Codex CLI/login.
 Normal CI and native builds have read-only repository access and checkout never
 persists credentials. Only release planning/publishing request `contents: write`:
 Semantic Release verifies Git push permission even in a dry run. The job-scoped
-`GITHUB_TOKEN` suffices when repository rules permit release tags and the generated
-main-branch commit. No personal login credentials or Codex secrets belong in CI.
+`GITHUB_TOKEN` suffices when repository rules permit release tags and Git notes.
+No personal login credentials or Codex secrets belong in CI.
 
-Protected branches/rulesets may forbid the generated release commit. Configure an
-approved release identity (typically a GitHub App) before using this workflow in
-such a repository; do not disable branch protection or bypass required checks.
-This setup does not create an App or change repository rules automatically.
+Repository rules must permit the release identity to push tags and Git notes.
+No main-branch release commit or branch-protection bypass is needed.
 
 Prepare the published governor and dependencies before committing workflow/tooling
 changes. Git hooks run local validation at commit and push; agents must not run

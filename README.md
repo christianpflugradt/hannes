@@ -1254,12 +1254,12 @@ built-in `mise fmt` formats `mise.toml`.
 **remote main**, then returns. It does not commit/push local work or wait for
 publication. Hannes starts at 0.1.0; features and breaking changes increment minor
 during 0.x, fixes and maintenance increment patch. Semantic Release handles
-subsequent versions, changelog and native archives;
+subsequent versions, tags, release notes and native archives;
 see [Releasing](docs/releasing.md).
 
 [Usage and Git hooks](docs/usage.md) · [Design and limits](docs/design.md) ·
 [macOS application example](examples/my-app/README.md) ·
-[Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Unlicense](LICENSE)
+[Contributing](CONTRIBUTING.md) · [GitHub Releases](https://github.com/christianpflugradt/hannes/releases) · [Unlicense](LICENSE)
 
 ## Frequently Asked Questions
 

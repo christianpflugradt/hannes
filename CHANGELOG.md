@@ -1,3 +1,13 @@
+## [0.8.0](https://github.com/christianpflugradt/hannes/compare/v0.7.0...v0.8.0) (2026-11-07)
+
+### ⚠ BREAKING CHANGES
+
+* **config:** External rule sets must replace rule IDs in rules with repository-relative rule directory paths. Local rule set references remain unchanged.
+
+### Features
+
+* **config:** share external rules across rule sets ([c2633bf](https://github.com/christianpflugradt/hannes/commit/c2633bf96bf31f59e5152d5271bcb85a7f3ef518))
+
 ## [0.7.0](https://github.com/christianpflugradt/hannes/compare/v0.6.0...v0.7.0) (2026-11-07)
 
 ### Features

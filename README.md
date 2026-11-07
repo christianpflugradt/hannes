@@ -295,8 +295,9 @@ required hooks from effective assignments, including Rule Set inheritance and
 external imports. No hook declaration is needed. Run `hannes pass auf` to review
 and apply the hook changes.
 
-Optional `[hooks.git]` mappings can connect events to other known points, except
-`check`. They cannot redirect an event whose built-in point has enabled Rules.
+The three supported Git hooks always invoke their identically named built-in
+execution points. This relationship cannot be configured. `check` and custom
+execution points are invoked explicitly and have no Git hook.
 `commit-msg` receives the final message file, while `pre-commit` runs before it is
 available. Hannes delegates message validation to your configured checker.
 
@@ -324,7 +325,8 @@ ordinary execution retains its existing confirmation behavior.
 
 Hannes marks its sections explicitly, preserves unmanaged commands, and refuses
 ambiguous ownership or unsafe composition. Hooks no longer required by
-assignments or explicit mappings lose only managed content. Generated hooks verify synchronization read-only and direct you to
+effective Rule assignments lose only managed content. Generated hooks verify
+synchronization read-only and direct you to
 `hannes pass auf` on drift. Local hooks are bypassable and verify working files,
 which may differ from staged or pushed commits. See
 [Git integration and recovery](docs/usage.md#optional-git-hook).
@@ -394,8 +396,6 @@ custom = ["release"]
 | `max_display_files` | Optional; `5` | Integer `1..5`: changed paths shown in status. |
 | `execution_points` | Optional table | Additional execution contexts. |
 | `execution_points.custom` | Optional; `[]` | Unique names of 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Built-in names are reserved. |
-| `hooks` | Optional; `null` (omitted in TOML) | Desired integrations. |
-| `hooks.git` | Optional; `{}` | Optional explicit event mappings. Required hooks are automatic; `check` cannot be a target. A mapping must retain the built-in point when enabled Rules require it. |
 | `imports` | Optional; `[]` | External references, declared only here as `[[imports]]`. |
 
 Built-in points are `pre-commit`, `commit-msg`, `pre-push` and `check`. The first

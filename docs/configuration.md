@@ -59,8 +59,6 @@ custom = ["release"]
 | `max_display_files` | Optional; `5` | Integer `1..5`: changed paths shown in status. |
 | `execution_points` | Optional table | Additional execution contexts. |
 | `execution_points.custom` | Optional; `[]` | Unique names of 1–80 lowercase ASCII letters, digits, `-`, `_`, starting with a letter/digit. Built-in names are reserved. |
-| `hooks` | Optional; `null` (omitted in TOML) | Desired integrations. |
-| `hooks.git` | Optional; `{}` | Optional explicit event mappings. Required hooks are automatic; `check` cannot be a target. A mapping must retain the built-in point when enabled Rules require it. |
 | `imports` | Optional; `[]` | External references, declared only here as `[[imports]]`. |
 
 Built-in points are `pre-commit`, `commit-msg`, `pre-push` and `check`. The first

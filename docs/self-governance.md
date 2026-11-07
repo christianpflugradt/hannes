@@ -93,8 +93,11 @@ verification only checks formatting.
 
 ## Git hooks
 
-The [central configuration](../.hannes/config.toml) maps pre-commit, commit-msg and
-pre-push to their corresponding execution points. Hannes manages their wrappers
+The pinned published governor retains its existing hook declarations until a
+separate release and self-migration. They select pre-commit, commit-msg and
+pre-push at their identically named points. The candidate uses fixed hook semantics
+and rejects those legacy declarations; its fixtures are isolated from repository
+self-integration. The published governor manages this repository's wrappers
 through pass auf, including configured hook paths, compatible unmanaged content,
 ownership checks, argument forwarding and recursion protection. Wrappers inspect
 synchronization read-only; drift tells the developer to rerun pass auf manually.

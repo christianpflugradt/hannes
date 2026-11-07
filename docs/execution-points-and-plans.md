@@ -9,8 +9,8 @@ validated even when disabled. See the [configuration reference](configuration.md
 Use `hannes mach was --at pre-push --plan --json` to inspect an offline plan.
 The default point is pre-push. Built-in points are pre-commit, commit-msg, pre-push and
 check. Enabled effective assignments to the first three require managed hooks;
-no explicit hook declaration is needed. check is invoked only explicitly with
-`hannes mach was --at check`, without inspecting or synchronizing Git hooks.
+each hook invokes its identically named point, with no configurable association.
+`check` is invoked only explicitly with `hannes mach was --at check`, without inspecting or synchronizing Git hooks.
 Direct custom points behave the same way, including on fresh CI checkouts with
 missing or outdated hooks. `hannes pass auf` manages hook installation and updates.
 Hannes generates no workflow and requires no CI integration. Custom points, including release, must be centrally declared.

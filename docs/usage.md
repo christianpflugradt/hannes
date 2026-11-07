@@ -174,22 +174,16 @@ precedence if snapshot coverage is incomplete, even when some differences are kn
 
 ## Optional Git hook
 
-Git hooks are derived automatically from enabled effective assignments to the
-three Git-backed built-ins, including imported Rules. Optional explicit mappings
-can connect other points to events; check is never a hook target. Declare optional
-execution-point mappings in `.hannes/config.toml`, then run `hannes pass auf`:
+Hannes supports three fixed Git hooks: `pre-commit`, `commit-msg` and `pre-push`.
+Each invokes its identically named built-in execution point. Hannes derives
+required hooks automatically from enabled effective Rule assignments, including
+Rule Set inheritance and imported Rules. Run `hannes pass auf` to reconcile them;
+no hook configuration is needed. `check` and custom points are invoked explicitly
+and have no Git hook. External import mappings apply only to custom points.
 
-```toml
-[hooks.git]
-pre-commit = "local"
-commit-msg = "message"
-pre-push = "verify"
-```
-
-Assign rules to these execution points first. Hook names determine timing;
-execution points select rules; check scripts implement validation. Pre-commit runs before
-the message is finalized. Commit-msg receives the final message file. Pre-push
-runs before references are transferred. All failures block Git with nonzero status,
+Assign Rules to the built-in points to choose their timing; check scripts implement
+validation. Pre-commit runs before the message is finalized. Commit-msg receives
+the final message file. Pre-push runs before references are transferred. All failures block Git with nonzero status,
 including a missing `hannes` on PATH. Conventional Commits validation belongs in
 a standalone checker, which must not invoke the hook again.
 
@@ -199,8 +193,7 @@ Direct `mach was` execution of `pre-commit`, `commit-msg` or `pre-push` performs
 the same prerequisite. `hannes mach was --at check` and direct custom points such
 as `release` execute without hook inspection, confirmation or modification, even
 with missing or outdated hooks. They need no hook setup in a fresh CI checkout
-and can run independently from any CI workflow. A custom point invoked through a
-managed hook still validates that hook context and synchronization read-only.
+and can run independently from any CI workflow.
 Synchronized state succeeds without prompting or writing. Changes are displayed
 as creation, managed-section update or removal and require `y`/`yes` in a terminal.
 Declining, missing a terminal, conflicts or failures exit 2 and preserve the
@@ -223,8 +216,8 @@ synchronized. Auto-approval manages declared integrations only; it does not crea
 or repair governed files such as README, LICENSE or `.editorconfig`.
 
 Generated wrappers supply explicit event and wrapper-path arguments validated by
-Hannes against Git's effective directory and the declared execution point. Within hooks,
-reconciliation is read-only: drift fails with instructions to run `hannes pass auf`
+Hannes against Git's effective directory and the identically named execution
+point. Within hooks, reconciliation is read-only: drift fails with instructions to run `hannes pass auf`
 manually. No prompt or hook write occurs. A repository-scoped execution guard
 blocks nested Hannes execution from checker processes.
 

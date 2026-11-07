@@ -3,7 +3,6 @@ use crate::{config::Project, process};
 use anyhow::{Context, Result, bail, ensure};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
     ffi::OsString,
     fs::{self, Permissions},
     io::{IsTerminal, Write},
@@ -204,10 +203,10 @@ fn read(path: &Path) -> Result<Option<FileState>> {
     }))
 }
 
-fn block(owner: &str, event: &str, point: &str) -> String {
-    // Execution-point IDs and events are validated ASCII identifiers, never shell source.
+fn block(owner: &str, event: &str) -> String {
+    // Git events are fixed ASCII names, never shell source.
     format!(
-        "{BEGIN}\n# Hannes repository: {owner}\nhannes mach was --at '{point}' --git-hook '{event}' --git-hook-path \"$0\" -- \"$@\" || exit \"$?\"\n{END}\n"
+        "{BEGIN}\n# Hannes repository: {owner}\nhannes mach was --at '{event}' --git-hook '{event}' --git-hook-path \"$0\" -- \"$@\" || exit \"$?\"\n{END}\n"
     )
 }
 
@@ -215,11 +214,11 @@ fn desired(
     before: Option<&FileState>,
     owner: &str,
     event: &str,
-    point: Option<&String>,
+    required: bool,
 ) -> Result<Option<FileState>> {
     let Some(before) = before else {
-        return Ok(point.map(|point| FileState {
-            text: format!("{HEADER}{}", block(owner, event, point)),
+        return Ok(required.then(|| FileState {
+            text: format!("{HEADER}{}", block(owner, event)),
             mode: 0o755,
         }));
     };
@@ -231,7 +230,7 @@ fn desired(
         || !ends.is_empty()
         || text.contains("Hannes repository:")
         || text.contains("Hannes hook wrapper");
-    if !managed && point.is_none() {
+    if !managed && !required {
         return Ok(Some(before.clone()));
     }
     let shebang = "#!/bin/sh\n";
@@ -281,11 +280,13 @@ fn desired(
         );
         (shebang.len(), shebang.len())
     };
-    let replacement = point
-        .map(|point| block(owner, event, point))
-        .unwrap_or_default();
+    let replacement = if required {
+        block(owner, event)
+    } else {
+        String::new()
+    };
     let whole = text.starts_with(HEADER) && start == HEADER.len() && end == text.len();
-    if whole && point.is_none() {
+    if whole && !required {
         return Ok(None);
     }
     let result = format!("{}{}{}", &text[..start], replacement, &text[end..]);
@@ -295,7 +296,7 @@ fn desired(
     );
     Ok(Some(FileState {
         text: result,
-        mode: if point.is_some() {
+        mode: if required {
             before.mode | 0o100
         } else {
             before.mode
@@ -303,39 +304,22 @@ fn desired(
     }))
 }
 
-/// Include hooks required by effective assignments, after local/imported rules merge.
-pub(crate) fn git_mappings(project: &Project) -> Result<BTreeMap<String, String>> {
-    let mut mappings = project
-        .config
-        .hooks
-        .as_ref()
-        .map(|hooks| hooks.git.clone())
-        .unwrap_or_default();
-    for event in GIT_EVENTS {
-        if project
-            .effective
-            .rules
-            .values()
-            .any(|rule| rule.execution_points.contains(*event))
-        {
-            ensure!(
-                mappings.get(*event).is_none_or(|point| point == event),
-                ".hannes/config.toml: hooks.git.{event}: enabled Rules require execution point {event:?}; remove the conflicting hook mapping"
-            );
-            mappings.insert((*event).into(), (*event).into());
-        }
-    }
-    Ok(mappings)
+/// Effective assignments already include Rule Set inheritance and imported Rules.
+fn hook_required(project: &Project, event: &str) -> bool {
+    project
+        .effective
+        .rules
+        .values()
+        .any(|rule| rule.execution_points.contains(event))
 }
 
 pub fn inspect(project: &Project) -> Result<Plan> {
     let (directory, owner) = location(project)?;
-    let mappings = git_mappings(project)?;
     let mut changes = Vec::new();
     for event in GIT_EVENTS {
         let path = directory.join(event);
         let before = read(&path)?;
-        let after = desired(before.as_ref(), &owner, event, mappings.get(*event))
+        let after = desired(before.as_ref(), &owner, event, hook_required(project, event))
             .with_context(|| format!("inspect hook {}; no changes applied; resolve conflict manually, then run hannes pass auf", path.display()))?;
         if before != after {
             changes.push(Change {
@@ -527,11 +511,9 @@ pub fn prepare(
             GIT_EVENTS.contains(&invocation.event.as_str()),
             "unsupported hook invocation context"
         );
-        let mappings = git_mappings(project)?;
-        let configured = mappings.get(&invocation.event);
         ensure!(
-            configured.map(String::as_str) == point && configured.is_some(),
-            "hook invocation point does not match configuration; run hannes pass auf manually"
+            point == Some(invocation.event.as_str()) && hook_required(project, &invocation.event),
+            "hook invocation point must match its Git event and require enabled Rules; run hannes pass auf manually"
         );
         let path = if invocation.path.is_absolute() {
             invocation.path.clone()
@@ -569,7 +551,19 @@ mod tests {
                 .success()
         );
         crate::config::init(root.path()).unwrap();
-        fs::write(root.path().join(".hannes/config.toml"), "project = 'My_App'\nmax_display_files = 5\n[hooks.git]\npre-commit = 'pre-commit'\npre-push = 'pre-push'\n").unwrap();
+        fs::write(
+            root.path().join(".hannes/config.toml"),
+            "project = 'My_App'\nmax_display_files = 5\n",
+        )
+        .unwrap();
+        let path = root.path().join(".hannes/checks/always-ok/rule.toml");
+        fs::write(
+            &path,
+            fs::read_to_string(&path)
+                .unwrap()
+                .replace("[\"pre-push\"]", "['pre-commit', 'pre-push']"),
+        )
+        .unwrap();
         root
     }
 

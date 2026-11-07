@@ -204,7 +204,6 @@ pub(crate) fn init(root: &Path) -> Result<usize> {
         project: project.into_owned(),
         max_display_files: MAX_DISPLAY_FILES,
         execution_points: Default::default(),
-        hooks: None,
         imports: vec![],
     };
     let (entrypoint, pass, fail) = if cfg!(windows) {

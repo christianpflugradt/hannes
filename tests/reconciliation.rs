@@ -35,27 +35,28 @@ fn ok(output: Output) -> Output {
     );
     output
 }
-fn project(mappings: &str) -> TempDir {
+fn project(points: &[&str]) -> TempDir {
     let root = tempfile::tempdir().unwrap();
     ok(git(root.path(), &["init", "--quiet"]));
     config::init(root.path()).unwrap();
-    let file = root.path().join(".hannes/checks/always-ok/rule.toml");
     fs::write(
-        &file,
-        fs::read_to_string(&file)
-            .unwrap()
-            .replace("[\"pre-push\"]", "['first', 'second', 'all', 'renamed']"),
+        root.path().join(".hannes/config.toml"),
+        "project = 'My_App'\n[execution_points]\ncustom = ['first', 'second']\n",
     )
     .unwrap();
-    mappings_write(root.path(), mappings);
+    assignments_write(root.path(), points);
     root
 }
-fn mappings_write(root: &Path, mappings: &str) {
-    fs::write(
-        root.join(".hannes/config.toml"),
-        format!("project = 'My_App'\nmax_display_files = 5\n[execution_points]\ncustom = ['first', 'second', 'all', 'renamed']\n{mappings}\n"),
-    )
-    .unwrap();
+fn assignments_write(root: &Path, points: &[&str]) {
+    let path = root.join(".hannes/checks/always-ok/rule.toml");
+    let mut rule: toml::Value = toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    rule["run_at"] = toml::Value::Array(
+        points
+            .iter()
+            .map(|point| toml::Value::String((*point).into()))
+            .collect(),
+    );
+    fs::write(path, toml::to_string(&rule).unwrap()).unwrap();
 }
 fn synchronize(root: &Path) {
     reconciliation::reconcile(&config::load(root).unwrap(), &mut |_| Ok(true)).unwrap();
@@ -105,40 +106,45 @@ fn hooked_git(root: &Path, args: &[&str]) -> Output {
 }
 fn checker(root: &Path, script: &str) {
     fs::write(root.join("checker.sh"), script).unwrap();
-    support::check(
-        root,
-        "always-ok",
-        &["first", "second", "all", "renamed"],
-        "exec sh checker.sh",
-    );
+    let path = root.join(".hannes/checks/always-ok/rule.toml");
+    let rule: toml::Value = toml::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+    let points: Vec<_> = rule["run_at"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|point| point.as_str().unwrap())
+        .collect();
+    support::check(root, "always-ok", &points, "exec sh checker.sh");
 }
 
 #[test]
-fn configuration_validates_every_mapping_and_preserves_provider_validation() {
-    let root = project("");
-    for mappings in [
-        "",
+fn obsolete_hooks_are_rejected_and_provider_validation_is_preserved() {
+    let root = project(&["pre-commit"]);
+    let path = root.path().join(".hannes/config.toml");
+    let original = fs::read_to_string(&path).unwrap();
+    for obsolete in [
         "[hooks]",
         "[hooks.git]",
-        "[hooks.git]\npre-commit = 'first'\ncommit-msg = 'second'\npre-push = 'all'",
+        "[hooks.git]\npre-commit = 'first'",
+        "[hooks.git]\npre-commit = 'pre-commit'",
     ] {
-        mappings_write(root.path(), mappings);
-        config::load(root.path()).unwrap();
-    }
-    for mappings in [
-        "[hooks.git]\npost-commit = 'first'",
-        "[hooks.git]\npre-commit = 'missing'",
-        "[hooks.git]\npre-commit = 'Invalid ID'",
-        "[hooks.git]\npre-commit = 1",
-        "[hooks.git]\npre-commit = ['first']",
-        "[hooks.git]\npre-commit = 'first'\npre-commit = 'second'",
-        "[hooks]\nsvn = {}",
-    ] {
-        mappings_write(root.path(), mappings);
-        assert!(config::load(root.path()).is_err(), "{mappings}");
+        fs::write(&path, format!("{original}\n{obsolete}\n")).unwrap();
+        let diagnostic = format!("{:#}", config::load(root.path()).unwrap_err());
+        assert!(
+            diagnostic.contains(".hannes/config.toml")
+                && diagnostic.contains("unknown field `hooks`")
+                && diagnostic.contains("expected"),
+            "{diagnostic}"
+        );
+        assert_eq!(
+            cli(root.path(), &["pass", "auf", "--auto-approve"])
+                .status
+                .code(),
+            Some(2)
+        );
         assert!(!hook(root.path(), "pre-commit").exists());
     }
-    mappings_write(root.path(), "");
+    fs::write(path, original).unwrap();
     let provider = root.path().join(".hannes/provider.toml");
     let original = fs::read_to_string(&provider).unwrap();
     for bad in [
@@ -153,7 +159,7 @@ fn configuration_validates_every_mapping_and_preserves_provider_validation() {
 
 #[test]
 fn approval_updates_removals_and_idempotency() {
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     let p = config::load(root.path()).unwrap();
     let mut prompted = 0;
     assert!(
@@ -176,30 +182,31 @@ fn approval_updates_removals_and_idempotency() {
     );
     assert!(metadata.permissions().mode() & 0o111 != 0);
     ok(cli(root.path(), &["pass", "auf"]));
-    mappings_write(
-        root.path(),
-        "[hooks.git]\npre-commit = 'second'\npre-push = 'first'",
-    );
+    // Outdated managed content is restored to the fixed execution point.
+    fs::write(
+        &path,
+        fs::read_to_string(&path)
+            .unwrap()
+            .replace("--at 'pre-commit'", "--at 'first'"),
+    )
+    .unwrap();
+    assignments_write(root.path(), &["pre-commit", "pre-push"]);
     synchronize(root.path());
-    assert!(fs::read_to_string(&path).unwrap().contains("--at 'second'"));
-    assert!(hook(root.path(), "pre-push").exists());
-    // Mapping changes retain the existing hook ownership and reconciliation flow.
-    mappings_write(root.path(), "[hooks.git]\npre-commit = 'renamed'");
-    synchronize(root.path());
-    assert!(!hook(root.path(), "pre-push").exists());
     assert!(
         fs::read_to_string(&path)
             .unwrap()
-            .contains("--at 'renamed'")
+            .contains("--at 'pre-commit'")
     );
-    mappings_write(root.path(), "");
+    assert!(hook(root.path(), "pre-push").exists());
+    assignments_write(root.path(), &["check"]);
     synchronize(root.path());
     assert!(!path.exists());
+    assert!(!hook(root.path(), "pre-push").exists());
 }
 
 #[test]
 fn mixed_ownership_preserves_bytes_permissions_and_custom_exit_behavior() {
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     let path = hook(root.path(), "pre-commit");
     let original = "#!/bin/sh\n# custom behavior\nprintf 'custom ran\\n' >&2\nexit 17\n";
     executable(&path, original);
@@ -220,14 +227,14 @@ fn mixed_ownership_preserves_bytes_permissions_and_custom_exit_behavior() {
     );
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("custom ran"));
-    mappings_write(root.path(), "");
+    assignments_write(root.path(), &["check"]);
     synchronize(root.path());
     assert_eq!(fs::read_to_string(&path).unwrap(), original);
 }
 
 #[test]
 fn conflicts_preserve_all_hooks_before_confirmation() {
-    let root = project("[hooks.git]\npre-commit = 'first'\npre-push = 'first'");
+    let root = project(&["pre-commit", "pre-push"]);
     let path = hook(root.path(), "pre-push");
     for original in [
         "#!/usr/bin/env python3\nprint('custom')\n",
@@ -262,7 +269,7 @@ fn conflicts_preserve_all_hooks_before_confirmation() {
 
 #[test]
 fn unsafe_paths_symlinks_and_foreign_ownership_fail_safely() {
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     let outside = tempfile::tempdir().unwrap();
     ok(git(
         root.path(),
@@ -279,7 +286,7 @@ fn unsafe_paths_symlinks_and_foreign_ownership_fail_safely() {
     assert!(reconciliation::inspect(&config::load(root.path()).unwrap()).is_err());
     fs::remove_dir(&path).unwrap();
     synchronize(root.path());
-    let other = project("[hooks.git]\npre-commit = 'first'");
+    let other = project(&["pre-commit"]);
     fs::copy(&path, hook(other.path(), "pre-commit")).unwrap();
     assert!(reconciliation::inspect(&config::load(other.path()).unwrap()).is_err());
     ok(git(root.path(), &["config", "core.hooksPath", "linked"]));
@@ -289,11 +296,11 @@ fn unsafe_paths_symlinks_and_foreign_ownership_fail_safely() {
 
 #[test]
 fn commands_block_checks_on_noninteractive_drift_and_keep_plan_read_only() {
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     support::check(
         root.path(),
         "always-ok",
-        &["pre-push"],
+        &["pre-commit", "pre-push"],
         "git config --local hannes.executed yes\n",
     );
     for args in [
@@ -326,7 +333,7 @@ fn commands_block_checks_on_noninteractive_drift_and_keep_plan_read_only() {
 
 #[test]
 fn real_commit_hooks_forward_message_path_and_preserve_index_and_worktree() {
-    let root = project("[hooks.git]\npre-commit = 'first'\ncommit-msg = 'second'");
+    let root = project(&["pre-commit", "commit-msg"]);
     checker(
         root.path(),
         "set -eu\ncase \"$HANNES_GIT_HOOK\" in\npre-commit) test \"$HANNES_GIT_HOOK_ARG_COUNT\" = 0;;\ncommit-msg) test \"$HANNES_GIT_HOOK_ARG_COUNT\" = 1; grep -q '^test: accepted' \"$HANNES_GIT_HOOK_ARG_1\";;\n*) exit 19;;\nesac\n",
@@ -342,17 +349,17 @@ fn real_commit_hooks_forward_message_path_and_preserve_index_and_worktree() {
         "unstaged\n"
     );
     assert_eq!(git(root.path(), &["ls-files", "--stage"]).stdout, index);
-    assert_eq!(hannes::report::read(root.path()).unwrap().plan.at, "second");
+    assert_eq!(
+        hannes::report::read(root.path()).unwrap().plan.at,
+        "commit-msg"
+    );
     assert!(
         !hooked_git(root.path(), &["commit", "--allow-empty", "-m", "invalid"])
             .status
             .success()
     );
     let before = fs::read(hook(root.path(), "pre-commit")).unwrap();
-    mappings_write(
-        root.path(),
-        "[hooks.git]\npre-commit = 'first'\ncommit-msg = 'first'",
-    );
+    assignments_write(root.path(), &["pre-commit"]);
     let output = hooked_git(
         root.path(),
         &["commit", "--allow-empty", "-m", "test: drift"],
@@ -364,7 +371,7 @@ fn real_commit_hooks_forward_message_path_and_preserve_index_and_worktree() {
 
 #[test]
 fn actual_push_hook_blocks_and_allows_pushes() {
-    let root = project("[hooks.git]\npre-push = 'first'");
+    let root = project(&["pre-push"]);
     let remote = tempfile::tempdir().unwrap();
     ok(git(remote.path(), &["init", "--bare", "--quiet"]));
     ok(git(
@@ -406,7 +413,7 @@ fn actual_push_hook_blocks_and_allows_pushes() {
 
 #[test]
 fn custom_hooks_directory_and_worktrees_use_git_resolution() {
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     ok(git(
         root.path(),
         &["config", "core.hooksPath", "custom hooks/nested"],
@@ -449,7 +456,7 @@ fn custom_hooks_directory_and_worktrees_use_git_resolution() {
 
 #[test]
 fn invocation_validation_recursion_and_missing_executable_block_commits() {
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     synchronize(root.path());
     let p = config::load(root.path()).unwrap();
     assert!(
@@ -460,7 +467,7 @@ fn invocation_validation_recursion_and_missing_executable_block_commits() {
                 path: "checker.sh".into(),
                 arguments: vec![]
             }),
-            Some("first"),
+            Some("pre-commit"),
             false
         )
         .is_err()
@@ -525,24 +532,20 @@ fn invocation_validation_recursion_and_missing_executable_block_commits() {
 
 #[test]
 fn stale_approval_and_interrupted_changes_can_be_recovered() {
-    let root = project("[hooks.git]\npre-commit = 'first'\npre-push = 'first'");
+    let root = project(&["pre-commit", "pre-push"]);
     let p = config::load(root.path()).unwrap();
     let plan = reconciliation::inspect(&p).unwrap();
     executable(&hook(root.path(), "pre-push"), "#!/bin/sh\nexit 0\n");
     assert!(reconciliation::apply(&p, &plan).is_err());
     assert!(!hook(root.path(), "pre-commit").exists());
     synchronize(root.path());
-    // Simulate interruption after one complete atomic replacement in a multi-file plan.
-    mappings_write(
-        root.path(),
-        "[hooks.git]\npre-commit = 'second'\npre-push = 'second'",
-    );
+    // Recover outdated managed content after an interrupted update.
     let path = hook(root.path(), "pre-commit");
     fs::write(
         &path,
         fs::read_to_string(&path)
             .unwrap()
-            .replace("--at 'first'", "--at 'second'"),
+            .replace("--at 'pre-commit'", "--at 'first'"),
     )
     .unwrap();
     assert!(
@@ -552,9 +555,9 @@ fn stale_approval_and_interrupted_changes_can_be_recovered() {
     );
     synchronize(root.path());
     assert!(
-        fs::read_to_string(hook(root.path(), "pre-push"))
+        fs::read_to_string(hook(root.path(), "pre-commit"))
             .unwrap()
-            .contains("--at 'second'")
+            .contains("--at 'pre-commit'")
     );
 }
 
@@ -611,11 +614,11 @@ fn actual_terminal_approval_and_rejection_gate_execution() {
         reader.join().unwrap();
         status
     }
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     support::check(
         root.path(),
         "always-ok",
-        &["pre-push"],
+        &["pre-commit", "pre-push"],
         "git config --local hannes.executed yes\n",
     );
     assert_eq!(
@@ -630,7 +633,7 @@ fn actual_terminal_approval_and_rejection_gate_execution() {
     );
     assert!(terminal(root.path(), &["pass", "auf"], b"yes\n").success());
     assert!(hook(root.path(), "pre-commit").exists());
-    mappings_write(root.path(), "[hooks.git]\npre-commit = 'second'");
+    fs::remove_file(hook(root.path(), "pre-commit")).unwrap();
     assert!(terminal(root.path(), &["mach", "was", "--at", "pre-push"], b"y\n").success());
     assert!(
         git(root.path(), &["config", "--get", "hannes.executed"])
@@ -641,8 +644,7 @@ fn actual_terminal_approval_and_rejection_gate_execution() {
 
 #[test]
 fn auto_approve_reconciles_noninteractively_without_executing_rules() {
-    let root =
-        project("[hooks.git]\npre-commit = 'first'\ncommit-msg = 'second'\npre-push = 'first'");
+    let root = project(&["pre-commit", "commit-msg", "pre-push"]);
     checker(
         root.path(),
         "git config --local hannes.executed yes\nexit 99\n",
@@ -691,23 +693,15 @@ fn auto_approve_reconciles_noninteractively_without_executing_rules() {
     )
     .unwrap();
     ok(cli(root.path(), &["mach", "was", "--at", "first"]));
-    mappings_write(root.path(), "[hooks.git]\npre-commit = 'second'");
     ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
-    assert!(
-        fs::read_to_string(hook(root.path(), "pre-commit"))
-            .unwrap()
-            .contains("--at 'second'")
-    );
-    assert!(!hook(root.path(), "commit-msg").exists());
-    assert!(!hook(root.path(), "pre-push").exists());
-    mappings_write(root.path(), "");
-    ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
-    assert!(!hook(root.path(), "pre-commit").exists());
+    for event in reconciliation::GIT_EVENTS {
+        assert!(!hook(root.path(), event).exists());
+    }
 }
 
 #[test]
 fn auto_approve_preserves_conflicts_and_full_configuration_validation() {
-    let root = project("[hooks.git]\npre-commit = 'first'\npre-push = 'first'");
+    let root = project(&["pre-commit", "pre-push"]);
     let path = hook(root.path(), "pre-push");
     let foreign = "#!/usr/bin/env python3\nprint('custom')\n";
     executable(&path, foreign);
@@ -718,7 +712,7 @@ fn auto_approve_preserves_conflicts_and_full_configuration_validation() {
     assert_eq!(fs::read_to_string(&path).unwrap(), foreign);
     assert!(!hook(root.path(), "pre-commit").exists());
     fs::remove_file(&path).unwrap();
-    mappings_write(root.path(), "[hooks.git]\npre-commit = 'missing'");
+    assignments_write(root.path(), &["missing"]);
     assert_eq!(
         cli(root.path(), &["pass", "auf", "--auto-approve"])
             .status
@@ -731,7 +725,7 @@ fn auto_approve_preserves_conflicts_and_full_configuration_validation() {
 
 #[test]
 fn auto_approve_cannot_bypass_hook_recursion_protection() {
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     checker(root.path(), "hannes pass auf --auto-approve\n");
     ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
     let before = fs::read(hook(root.path(), "pre-commit")).unwrap();
@@ -751,48 +745,80 @@ fn auto_approve_cannot_bypass_hook_recursion_protection() {
 }
 
 #[test]
-fn required_hook_assignments_cannot_be_redirected_or_automate_check() {
-    let root = project("");
-    let file = root.path().join(".hannes/checks/always-ok/rule.toml");
-    fs::write(
-        &file,
-        fs::read_to_string(&file)
-            .unwrap()
-            .replace("\"first\"", "\"pre-commit\"")
-            .replace("'first'", "'pre-commit'"),
-    )
-    .unwrap();
-    mappings_write(root.path(), "[hooks.git]\npre-commit = 'second'");
-    let error = format!("{:#}", config::load(root.path()).unwrap_err());
-    assert!(error.contains("enabled Rules require"), "{error}");
-    mappings_write(root.path(), "[hooks.git]\npre-commit = 'check'");
-    assert!(format!("{:#}", config::load(root.path()).unwrap_err()).contains("explicitly invoked"));
-    mappings_write(root.path(), "");
+fn fixed_hooks_select_only_their_own_effective_rules() {
+    let root = project(&["check", "first"]);
+    // A local Rule Set overrides the Rule's own custom assignment.
+    fs::create_dir_all(root.path().join(".hannes/rule-sets")).unwrap();
+    support::check(
+        root.path(),
+        "set-rule",
+        &["first"],
+        "test \"$HANNES_GIT_HOOK\" = commit-msg",
+    );
+    fs::write(root.path().join(".hannes/rule-sets/message.toml"), "id = 'message'\ndescription = 'Message checks'\nrules = ['set-rule']\nrun_at = ['commit-msg']\n").unwrap();
+    for event in ["pre-commit", "pre-push"] {
+        support::check(
+            root.path(),
+            event,
+            &[event],
+            &format!("test \"$HANNES_GIT_HOOK\" = {event}"),
+        );
+    }
+    ok(cli(root.path(), &["pass", "auf", "--auto-approve"]));
+    for (event, expected) in [
+        ("pre-commit", "pre-commit"),
+        ("commit-msg", "set-rule"),
+        ("pre-push", "pre-push"),
+    ] {
+        ok(hooked_git(root.path(), &["hook", "run", event]));
+        let report = hannes::report::read(root.path()).unwrap();
+        assert_eq!(report.plan.at, event);
+        assert_eq!(report.results.len(), 1);
+        assert_eq!(report.results[0].id, expected);
+        for point in ["check", "first"] {
+            let error = reconciliation::prepare(
+                &config::load(root.path()).unwrap(),
+                Some(HookInvocation {
+                    event: event.into(),
+                    path: hook(root.path(), event),
+                    arguments: vec![],
+                }),
+                Some(point),
+                false,
+            )
+            .err()
+            .unwrap();
+            assert!(error.to_string().contains("must match its Git event"));
+        }
+    }
+}
+
+#[test]
+fn only_effective_builtin_assignments_require_hooks() {
+    let root = project(&["first", "check"]);
+    synchronize(root.path());
+    for event in reconciliation::GIT_EVENTS {
+        assert!(!hook(root.path(), event).exists());
+    }
+    assignments_write(root.path(), &["pre-commit"]);
     synchronize(root.path());
     assert!(hook(root.path(), "pre-commit").exists());
     assert!(!hook(root.path(), "pre-push").exists());
-    // Removing effective assignments retires only the now-unneeded managed hook.
-    fs::write(
-        &file,
-        fs::read_to_string(&file)
-            .unwrap()
-            .replace("pre-commit", "check"),
-    )
-    .unwrap();
+    assignments_write(root.path(), &["check"]);
     synchronize(root.path());
     assert!(!hook(root.path(), "pre-commit").exists());
 }
 
 #[test]
 fn explicit_points_execute_noninteractively_without_inspecting_or_changing_hooks() {
-    let root = project("[hooks.git]\npre-commit = 'first'");
+    let root = project(&["pre-commit"]);
     support::check(
         root.path(),
         "always-ok",
-        &["check", "first"],
+        &["check", "first", "pre-commit"],
         "git --version\n",
     );
-    // A declared hook is missing: execution must not ask to install it.
+    // A required hook is missing: execution must not ask to install it.
     for point in ["check", "first"] {
         let output = cli(root.path(), &["mach", "was", "--at", point]);
         ok(output);
@@ -804,7 +830,7 @@ fn explicit_points_execute_noninteractively_without_inspecting_or_changing_hooks
     let file = hook(root.path(), "pre-commit");
     let stale = fs::read_to_string(&file)
         .unwrap()
-        .replace("--at 'first'", "--at 'second'");
+        .replace("--at 'pre-commit'", "--at 'first'");
     fs::write(&file, &stale).unwrap();
     assert!(
         !reconciliation::inspect(&config::load(root.path()).unwrap())

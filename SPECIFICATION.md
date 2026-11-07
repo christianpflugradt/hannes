@@ -90,8 +90,8 @@ invalid references, missing resources and symlinks fail, including disabled Rule
 No recursive TOML discovery or arbitrary definition placement is supported.
 Supporting files inside rule directories are data, never governance documents.
 
-Project settings are project, max_display_files (default 5), execution_points,
-hooks and imports. The README defines all fields and bounds. Resource filenames
+Project settings are project, max_display_files (default 5), execution_points
+and imports. The README defines all fields and bounds. Resource filenames
 must be single nonempty names directly in a Rule directory: no separators,
 absolute paths, parent traversal, symlinks or special files. Review prompts are
 UTF-8 Markdown without frontmatter requirements. Checks may bundle helpers.
@@ -323,8 +323,8 @@ Verify before any checks. Direct execution of `check` and custom points validate
 and resolves Rules, then executes without inspecting or reconciling Git hooks.
 Missing, outdated or unsafe hook paths do not block these explicit points; they
 never prompt for hook synchronization or modify hook files. Repository recursion
-protection still applies. A custom point invoked by a managed hook still validates
-that hook context read-only.
+protection still applies. Managed hooks accept only their identically named
+built-in execution point.
 No discrepancy means no prompt or write. Rejection, unavailable terminal, conflict
 or failure exits 2 and preserves the previous report. `--plan` remains read-only
 and does not reconcile. No provider is called by reconciliation.
@@ -340,15 +340,20 @@ command once before Git-backed execution; explicit points such as `check` need
 no hook setup in CI. Execution itself has no auto-approval.
 Acceptance: `tests/reconciliation.rs::auto_approve_reconciles_noninteractively_without_executing_rules`.
 
-Project configuration optionally maps hooks.git keys pre-commit, commit-msg, pre-push to
-known execution points. Unknown events, duplicate mappings, invalid values and
-unknown points fail full validation. check cannot be a hook target. Explicit
-mappings cannot redirect an event with enabled Rules assigned to its built-in
-point. Required hooks need no declaration, including for imported Rules.
-check has no hook, workflow discovery or CI validation; consumers choose where
-to invoke it, including multiple workflows. Hannes generates no CI workflows.
-Existing generated wrappers are reconciled
-to --at without changing ownership or confirmation behavior.
+Hannes supports exactly three Git hooks: pre-commit, commit-msg and pre-push.
+Each invokes its identically named built-in execution point. This relationship is
+fixed and cannot be configured. Enabled effective assignments determine required
+hooks after Rule Set inheritance and external imports resolve. Removing those
+assignments retires the corresponding managed hook content.
+Project configuration accepts no hooks section; obsolete hook declarations fail
+as unknown fields, with the configuration path and supported fields in the error.
+check and custom execution points have no Git hook and are invoked explicitly.
+External import mappings still apply only to custom points and cannot map built-ins.
+check has no workflow discovery or CI validation; consumers choose where to invoke
+it, including multiple workflows. Hannes generates no CI workflows.
+Acceptance: tests/reconciliation.rs covers fixed event invocation, automatic
+installation, removal, obsolete configuration rejection and explicit-point isolation;
+tests/external_rule_sets.rs covers imported hook Rules and per-import mappings.
 
 Git resolves the effective hook path, including worktrees and `core.hooksPath`.
 Default common-repository hooks are shared by its worktrees; custom paths must
@@ -367,8 +372,8 @@ rollback on failure; a multi-file operation is not an atomic transaction. An
 interrupted process may leave drift; rerun `pass auf` and inspect the reported paths.
 
 Generated wrappers pass explicit event, wrapper path and original arguments to
-`mach was`. Hannes validates this context against the repository, mapping and hook
-state, verifies reconciliation read-only and never prompts or edits hooks. Drift
+`mach was`. Hannes validates this context against the repository, identically
+named execution point and hook state, verifies reconciliation read-only and never prompts or edits hooks. Drift
 instructs the user to run `hannes pass auf` manually. Nested execution from checks
 is rejected using a repository-scoped guard. Checks receive `HANNES_GIT_HOOK`,
 `HANNES_GIT_HOOK_ARG_COUNT` and one-based `HANNES_GIT_HOOK_ARG_1`, etc.; a dedicated

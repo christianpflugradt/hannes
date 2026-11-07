@@ -346,8 +346,6 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
             .filter(|point| !crate::rules::BUILTIN_POINTS.contains(&point.as_str()))
             .cloned()
             .collect();
-        // Consumer hook mappings do not belong to the external governance scope.
-        definitions.config.hooks = None;
         let mut external = config::validate(root.clone(), definitions)
             .with_context(|| format!("invalid external rule set {:?}", import.path))?;
         ensure!(
@@ -435,7 +433,6 @@ pub fn load(root: &Path, refresh: bool, cache_directory: Option<&Path>) -> Resul
     project.checks.sort_by(|a, b| a.id.cmp(&b.id));
     project.reviews.sort_by(|a, b| a.id.cmp(&b.id));
     project.rule_sets.sort_by(|a, b| a.id.cmp(&b.id));
-    crate::reconciliation::git_mappings(&project)?;
     if refresh {
         let bytes = serde_json::to_vec_pretty(&next)?;
         ensure!(

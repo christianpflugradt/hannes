@@ -24,7 +24,7 @@ it with external state and builds an ordered plan. The CLI owns confirmation;
 inspection/application/verification. Direct `check` and custom points retain the
 repository recursion guard, then execute without inspecting hook locations or
 synchronizing hooks. Managed hook invocations still validate hook context and
-synchronization read-only, including when mapped to a custom point.
+synchronization read-only; the execution point must equal the Git event.
 The CLI exposes explicit unattended approval through `pass auf --auto-approve`;
 it uses the same inspection, application and verification path as interactive
 confirmation, including recursion protection and conflict detection.
@@ -41,7 +41,7 @@ Safe composition inserts a section before existing POSIX sh commands; no shell
 parser or arbitrary rewriting is used. Repository-local custom paths are supported;
 external paths, links and ambiguous ownership fail before mutation.
 
-Explicit hook context is checked against the configured event/execution point and effective
+Explicit hook context is checked against the fixed event/execution point and effective
 wrapper path. Hook invocations inspect the same plan read-only; checker subprocesses
 receive arguments as indexed environment values plus a repository recursion guard.
 No provider or network participates. See [usage and recovery](usage.md#optional-git-hook).

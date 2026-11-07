@@ -2,7 +2,7 @@ use crate::limits::*;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     fs,
     io::Read,
     path::{Component, Path, PathBuf},
@@ -44,15 +44,8 @@ pub struct Config {
     pub max_display_files: usize,
     #[serde(default)]
     pub execution_points: ExecutionPoints,
-    pub hooks: Option<Hooks>,
     #[serde(default)]
     pub imports: Vec<crate::external::Import>,
-}
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Hooks {
-    #[serde(default)]
-    pub git: BTreeMap<String, String>,
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -431,24 +424,8 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
     crate::review_context::collect(&root, &reviews.iter().collect::<Vec<_>>())?;
     let effective =
         crate::rules::resolve(&config.execution_points, &assignments, &loaded.rule_sets)?;
-    if let Some(hooks) = &config.hooks {
-        for (event, point) in &hooks.git {
-            ensure!(
-                crate::reconciliation::GIT_EVENTS.contains(&event.as_str()),
-                ".hannes/config.toml: hooks.git: unsupported Git hook: {event}"
-            );
-            ensure!(
-                point != "check",
-                ".hannes/config.toml: hooks.git.{event}: check is explicitly invoked and cannot be a Git hook target"
-            );
-            ensure!(
-                effective.points.contains(point),
-                ".hannes/config.toml: hooks.git.{event}: unknown execution point: {point}"
-            );
-        }
-    }
     let rule_sets = loaded.rule_sets.into_iter().map(|(_, set)| set).collect();
-    let project = Project {
+    Ok(Project {
         root,
         config,
         provider,
@@ -456,9 +433,7 @@ pub(crate) fn validate(root: PathBuf, loaded: crate::discovery::Loaded) -> Resul
         reviews,
         rule_sets,
         effective,
-    };
-    crate::reconciliation::git_mappings(&project)?;
-    Ok(project)
+    })
 }
 
 pub fn init(root: &Path) -> Result<usize> {

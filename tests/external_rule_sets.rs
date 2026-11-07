@@ -550,25 +550,19 @@ fn cli(f: &Fixture, args: &[&str]) -> std::process::Output {
 fn cli_refresh_cached_plan_and_offline_hook_keep_existing_lifecycle() {
     let f = Fixture::new();
     f.imports(&[("repository", "main")]);
-    let path = f.root.join(".hannes/config.toml");
-    let text = fs::read_to_string(&path)
-        .unwrap()
-        .replace("custom = []", "custom = ['quality']");
     let source = f.remote.join("repository/config.toml");
     fs::write(
         &source,
         fs::read_to_string(&source)
             .unwrap()
-            .replace("check", "quality"),
+            .replace("check", "pre-commit"),
     )
     .unwrap();
     commit(&f.remote);
-    fs::write(
-        &path,
-        format!("{text}\n[hooks.git]\npre-commit = \"quality\"\n"),
-    )
-    .unwrap();
-    let plan = cli(&f, &["mach", "was", "--at", "quality", "--plan", "--json"]);
+    let plan = cli(
+        &f,
+        &["mach", "was", "--at", "pre-commit", "--plan", "--json"],
+    );
     assert_eq!(plan.status.code(), Some(2));
     assert!(
         !f.root.join(".git/hannes").exists(),
@@ -581,14 +575,18 @@ fn cli_refresh_cached_plan_and_offline_hook_keep_existing_lifecycle() {
         String::from_utf8_lossy(&refresh.stderr)
     );
     assert!(!f.root.join(".hannes/reports/last.json").exists());
+    assert!(f.root.join(".git/hooks/pre-commit").exists());
     fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
-    let plan = cli(&f, &["mach", "was", "--at", "quality", "--plan", "--json"]);
+    let plan = cli(
+        &f,
+        &["mach", "was", "--at", "pre-commit", "--plan", "--json"],
+    );
     assert!(
         plan.status.success(),
         "{}",
         String::from_utf8_lossy(&plan.stderr)
     );
-    let run = cli(&f, &["mach", "was", "--at", "quality"]);
+    let run = cli(&f, &["mach", "was", "--at", "pre-commit"]);
     assert!(
         run.status.success(),
         "{}",
@@ -612,6 +610,62 @@ fn cli_refresh_cached_plan_and_offline_hook_keep_existing_lifecycle() {
         "{}",
         String::from_utf8_lossy(&hook.stderr)
     );
+}
+
+#[test]
+fn all_fixed_hooks_execute_imported_rules_offline() {
+    let f = Fixture::new();
+    f.imports(&[("repository", "main")]);
+    write(
+        &f.remote,
+        "repository/config.toml",
+        "id = 'quality'\ndescription = 'Reusable rules'\nrules = ['required-files']\nrun_at = ['pre-commit', 'commit-msg', 'pre-push']\n",
+    );
+    write(
+        &f.remote,
+        "repository/checks/required-files/index.sh",
+        "printf '%s' \"$HANNES_GIT_HOOK\"\n",
+    );
+    commit(&f.remote);
+    let setup = cli(&f, &["pass", "auf", "--auto-approve"]);
+    assert!(
+        setup.status.success(),
+        "{}",
+        String::from_utf8_lossy(&setup.stderr)
+    );
+    fs::rename(&f.remote, f.remote.with_extension("offline")).unwrap();
+    let paths = std::env::join_paths(
+        std::iter::once(
+            Path::new(env!("CARGO_BIN_EXE_hannes"))
+                .parent()
+                .unwrap()
+                .to_path_buf(),
+        )
+        .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    for event in ["pre-commit", "commit-msg", "pre-push"] {
+        let output = Command::new(f.root.join(".git/hooks").join(event))
+            .current_dir(&f.root)
+            .env("XDG_CACHE_HOME", &f.cache)
+            .env("PATH", &paths)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let report = hannes::report::read(&f.root).unwrap();
+        assert_eq!(report.plan.at, event);
+        let imported = report
+            .results
+            .iter()
+            .find(|result| result.id.starts_with("git:"))
+            .unwrap();
+        assert_eq!(imported.status, Status::Pass);
+        assert_eq!(imported.stdout.as_ref().unwrap().text, event);
+    }
 }
 
 #[test]

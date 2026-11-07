@@ -413,6 +413,13 @@ local candidate builds never govern the source being checked. `.hannes-version`
 is the sole exact release pin, passed explicitly to the public Action on Ubuntu
 and the native installer on macOS. Renovate updates it through GitHub-release
 PRs without automerge. CI never resolves latest.
+Pinned installation downloads the exact release's native archive and SHA256SUMS
+directly, without a GitHub Releases API lookup or fallback to latest. Only latest
+discovery uses the API, with optional GITHUB_TOKEN Bearer authentication; asset
+requests carry no token. Missing releases/assets, network/API failures and missing,
+malformed or mismatched checksums fail installation and preserve the installed copy.
+Acceptance: `scripts/test_deploy.py` covers direct pinned URLs, optional API
+authentication, safe diagnostics and installation failures with mocked downloads.
 The governor is pinned to published v0.10.0. Repository rules use the unversioned,
 self-contained Rule model and fixed Git-hook execution points.
 

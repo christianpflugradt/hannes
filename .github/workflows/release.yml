@@ -34,7 +34,7 @@ jobs:
       - name: Plan next semantic release without publishing
         id: plan
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run release:plan
 
   checks:
@@ -124,7 +124,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Publish versioned CLI archives and release notes
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}
           INITIAL_RELEASE: ${{ needs.plan.outputs.initial }}
         run: npm run release

@@ -199,6 +199,9 @@ The release workflow also reuses CI before publication. The publisher installs
 Gitleaks for its managed pre-push hook. macOS release runners use the
 [native installer](../scripts/install-governor.py). The execution wrapper rejects
 candidate governors inside the checkout and checks CI's version against the pin.
+Both installers download the pinned release's assets directly, without a GitHub
+Releases API request. Missing tags, assets or valid checksums fail installation;
+there is no fallback to latest. These installation steps need no GitHub token.
 
 The v0.10.0 governor supports the repository's command arrays and shared script
 paths. Candidate binaries remain confined to disposable acceptance fixtures and

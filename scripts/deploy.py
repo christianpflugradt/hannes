@@ -11,6 +11,7 @@ import sys
 import tarfile
 import tempfile
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 REPOSITORY = "https://github.com/christianpflugradt/hannes"
 API = "https://api.github.com/repos/christianpflugradt/hannes/releases/latest"
@@ -26,36 +27,56 @@ def detect_target():
 
 
 def download(url):
-    request = Request(url, headers={"User-Agent": "hannes-deploy", "Accept": "application/vnd.github+json"})
+    headers = {"User-Agent": "hannes-deploy"}
+    if url == API:
+        headers["Accept"] = "application/vnd.github+json"
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
     try:
+        request = Request(url, headers=headers)
         with urlopen(request, timeout=60) as response:
             return response.read()
-    except OSError as error:
-        raise ValueError(f"Could not download {url}: {error}. Check network access and {REPOSITORY}/releases for an available release.") from error
+    except HTTPError as error:
+        error.close()
+        if error.code == 404:
+            reason = "Release or asset not found; check the exact tag and published assets."
+        elif error.code in (403, 429):
+            reason = "Access denied or GitHub rate limit exceeded."
+            if url == API:
+                reason += " Set GITHUB_TOKEN to a valid token or check its permissions and rate limit."
+        else:
+            reason = f"HTTP {error.code}."
+        raise ValueError(f"Could not download {url}: {reason}") from None
+    except (OSError, ValueError):
+        # Do not echo exception text: it may contain request headers or credentials.
+        raise ValueError(f"Could not download {url}: network or request failure. Check connectivity and TLS configuration.") from None
 
 
 def deploy(tag=None, prefix=None):
     target = detect_target()  # Reject unsupported hosts before any network or writes.
-    requested_tag = tag
     if tag is not None and not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag):
         raise ValueError("Expected an exact stable release tag, such as v0.1.0.")
-    url = API if tag is None else API.removesuffix("latest") + f"tags/{tag}"
-    release = json.loads(download(url))
-    tag = release["tag_name"]
-    if requested_tag is not None and tag != requested_tag:
-        raise ValueError(f"Release API returned {tag!r}, expected {requested_tag!r}.")
-    if not isinstance(tag, str) or not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag) or release.get("draft") or release.get("prerelease"):
-        raise ValueError("Latest release has no supported stable version tag.")
+    if tag is None:
+        try:
+            release = json.loads(download(API))
+        except (UnicodeError, json.JSONDecodeError):
+            raise ValueError("GitHub Releases API returned invalid release metadata.") from None
+        if not isinstance(release, dict):
+            raise ValueError("GitHub Releases API returned invalid release metadata.")
+        tag = release.get("tag_name")
+        if not isinstance(tag, str) or not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag) or release.get("draft") or release.get("prerelease"):
+            raise ValueError("Latest release has no supported stable version tag.")
     name = f"hannes-{tag}-{target}"
     archive_name = f"{name}.tar.gz"
-    assets = {asset["name"] for asset in release["assets"]}
-    if not {archive_name, "SHA256SUMS"} <= assets:
-        raise ValueError(f"Release {tag} is missing {archive_name} or SHA256SUMS; check {REPOSITORY}/releases/tag/{tag}.")
     base = f"{REPOSITORY}/releases/download/{tag}"
-    sums = download(f"{base}/SHA256SUMS").decode()
+    try:
+        sums = download(f"{base}/SHA256SUMS").decode("utf-8")
+    except UnicodeError:
+        raise ValueError(f"Malformed SHA256SUMS for release {tag}: expected UTF-8 text.") from None
     matches = re.findall(r"^([0-9a-f]{64})  " + re.escape(archive_name) + r"$", sums, re.M)
     if len(matches) != 1:
-        raise ValueError(f"Missing or duplicate checksum for {archive_name}.")
+        raise ValueError(f"Missing, malformed or duplicate checksum in SHA256SUMS for {archive_name}.")
     data = download(f"{base}/{archive_name}")
     if hashlib.sha256(data).hexdigest() != matches[0]:
         raise ValueError(f"SHA-256 checksum mismatch for {archive_name}; installation aborted.")

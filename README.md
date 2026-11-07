@@ -116,6 +116,9 @@ Python 3.11+ and network access, and never builds local source. Unsupported
 platforms (including Windows and musl Linux) fail with a helpful error.
 Set `CARGO_INSTALL_ROOT=/your/prefix mise deploy` to install into that prefix's
 `bin/` directory. Download or compatibility failures preserve the installed copy.
+Latest-release discovery uses the GitHub API; set the optional `GITHUB_TOKEN`
+environment variable to authenticate that request and reduce rate-limit failures.
+Downloads of release assets do not send the token.
 
 For manual installation, verify the checksum, then extract and install it. Replace
 `VERSION` and `TARGET` below with the downloaded archive's values:

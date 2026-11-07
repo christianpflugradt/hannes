@@ -291,6 +291,36 @@ See [rule sets and execution points](#group-rules-into-rule-sets) for assignment
 
 ### Use a Git hook or CI
 
+For GitHub-hosted Ubuntu 24.04 (x64 or ARM64), use the public composite Action:
+
+```yaml
+steps:
+  - uses: actions/checkout@v7
+  - uses: christianpflugradt/hannes@main
+    with:
+      version: v0.9.0
+      execution-point: check
+```
+
+Pin the Action to a published full commit SHA for reproducible workflows; `main`
+above follows development. The Action revision and installed CLI version are
+independent. See [repository self-integration](docs/self-governance.md#ci-pinning-and-renovate)
+for Hannes' own immutable pin.
+
+| Input | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `version` | Yes | None | Exact stable release tag, including `v`, such as `v0.9.0`. |
+| `execution-point` | No | `check` | Point passed to `hannes mach was --at`. |
+| `run` | No | `'true'` | Set to `'false'` to install only. |
+
+Installation verifies the release archive's SHA-256 checksum and makes `hannes`
+available on PATH to later steps. Execution uses the checked-out repository and
+fails the step when Hannes fails. Prepare `.hannes/` and install tools required by
+your rules before execution; the Action installs only Hannes. If external imports
+need reconciliation, use `run: 'false'`, run `hannes pass auf --auto-approve`, then
+invoke your execution point in a subsequent step. The Action performs no rule
+initialization, hook setup, installed-version comparison or persistent caching.
+
 Assign enabled Rules to `pre-commit`, `commit-msg` or `pre-push`. Hannes derives
 required hooks from effective assignments, including Rule Set inheritance and
 external imports. No hook declaration is needed. Run `hannes pass auf` to review

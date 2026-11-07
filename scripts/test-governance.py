@@ -35,6 +35,9 @@ def definitions():
 
 
 class GovernanceTests(unittest.TestCase):
+    def test_public_action_offline(self):
+        subprocess.run([sys.executable, str(ROOT / "scripts/test-action.py")], check=True)
+
     def test_renovate_extracts_one_published_version_without_automerge(self):
         config = json.loads((ROOT / "renovate.json").read_text())
         manager, = config["customManagers"]

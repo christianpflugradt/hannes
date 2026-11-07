@@ -303,6 +303,18 @@ An executable plan exits 0; a blocked/invalid plan exits 2.
 
 ## REL-001: Distribution and integrations
 
+The root `action.yml` is a public composite GitHub Action for GitHub-hosted
+Ubuntu 24.04 x64 and ARM64 runners. Required `version` is an exact stable release
+tag such as `v0.9.0`. Optional `execution-point` defaults to `check`; `run` defaults
+to `true` and accepts only `true` or `false`. Installation downloads the matching
+native archive and SHA256SUMS, verifies the checksum, and adds the executable to
+PATH for subsequent steps. With `run: true` it executes
+`hannes mach was --at <execution-point>` in the consuming checkout and preserves
+its exit status. Installation errors fail with diagnostics. It installs no rule
+dependencies, initializes no rules or hooks, and has no installed-version
+detection, comparison, upgrade logic or persistent cache.
+Acceptance: `scripts/test-action.py` and the public Action consumer job in CI.
+
 Supported hosted CI/release targets are macOS Apple Silicon, macOS Intel and
 Linux x64 and ARM64 (GNU/glibc); Windows builds/releases are excluded. Linux ARM64
 uses the native `ubuntu-24.04-arm` runner and `aarch64-unknown-linux-gnu` target,

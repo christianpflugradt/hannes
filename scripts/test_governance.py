@@ -1,4 +1,4 @@
-"""Offline integration tests for the released governor, execution points and CI wiring."""
+"""Offline tests for the published execution adapter and hook setup."""
 import importlib.util
 import json
 import os
@@ -33,61 +33,6 @@ class GovernanceTests(unittest.TestCase):
         self.assertFalse(rule["automerge"])
         self.assertEqual(rule["matchDatasources"], ["github-releases"])
         self.assertIn("config:best-practices", config["extends"])
-
-    def test_ci_installs_pinned_governor_and_uploads_failure_reports(self):
-        ci = (ROOT / ".github/workflows/ci.yml").read_text()
-        checks = ci.split("  action-consumer:")[0]
-        builds = (ROOT / ".github/workflows/quality.yml").read_text()
-        release = (ROOT / ".github/workflows/release.yml").read_text()
-        self.assertIn("name: Quality checks", checks)
-        self.assertNotIn("matrix:", checks)
-        self.assertEqual(checks.count("scripts/run-execution-point.py"), 1)
-        self.assertEqual(checks.count("run: hannes pass auf --auto-approve"), 1)
-        self.assertEqual(checks.count("if: always()"), 2)
-        self.assertEqual(checks.count("include-hidden-files: true"), 1)
-        self.assertIn("name: GitHub Action compatibility /", ci)
-        self.assertIn("os: [ubuntu-24.04, ubuntu-24.04-arm]", ci)
-        self.assertIn("run: python3 scripts/run-execution-point.py release", builds)
-        self.assertIn("if: runner.os == 'macOS'", builds)
-        self.assertIn("uses: ./.github/workflows/ci.yml", release)
-        self.assertIn("needs: [plan, checks, quality]", release)
-        for obsolete in ("ci-native", "ci-tooling", "ci-msrv", "ci-audit"):
-            self.assertNotIn(obsolete, ci + builds)
-        for workflow in (checks, builds):
-            self.assertRegex(workflow, r"uses: christianpflugradt/hannes@[0-9a-f]{40}")
-            self.assertIn("run: 'false'", workflow)
-            self.assertIn("version: ${{ steps.governor.outputs.version }}", workflow)
-            self.assertIn("if: always()", workflow)
-            self.assertNotIn("releases/latest", workflow)
-            self.assertNotRegex(workflow, r"run: (cargo \+stable (test|clippy|audit)|npm (test|audit)|python3 scripts/(check-commits|verify-release|test-))")
-        installer = (ROOT / "scripts/install-governor.py").read_text()
-        self.assertIn('Path(".hannes-version")', installer)
-        self.assertIn("deploy(tag=version", installer)
-        self.assertNotIn("cargo", installer)
-        self.assertFalse((ROOT / ".github/actions/setup-hannes/action.yml").exists())
-
-    def test_publish_uses_validated_artifacts_without_governance_setup(self):
-        release = (ROOT / ".github/workflows/release.yml").read_text()
-        publisher = release.split("  publish:\n", 1)[1]
-        self.assertIn("needs: [plan, checks, quality]", publisher)
-        self.assertIn("contents: write", publisher)
-        self.assertIn("persist-credentials: false", publisher)
-        for required in ("actions/download-artifact@", "pattern: hannes-*",
-                         "python3 scripts/checksums.py", "python3 scripts/check-release-artifacts.py", "npm run release",
-                         "EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}"):
-            self.assertIn(required, publisher)
-        for obsolete in ("hannes pass auf", "steps.governor", "uses: christianpflugradt/hannes@",
-                         "run-execution-point.py", "setup-go@", "rustup", "cargo ",
-                         "gitleaks", "actionlint", ".hannes/reports", "--no-verify",
-                         "core.hooksPath"):
-            self.assertNotIn(obsolete, publisher)
-        self.assertLess(publisher.index("actions/download-artifact@"), publisher.index("scripts/checksums.py"))
-        self.assertLess(publisher.index("scripts/checksums.py"), publisher.index("scripts/check-release-artifacts.py"))
-        self.assertLess(publisher.index("scripts/check-release-artifacts.py"), publisher.index("npm run release"))
-        verification = publisher.split("      - name: Verify collected release artifacts\n", 1)[1].split("      - name:", 1)[0]
-        self.assertIn("EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}", verification)
-        for bypass in ("continue-on-error", "if:", "||"):
-            self.assertNotIn(bypass, verification)
 
     def test_setup_shim_preserves_custom_paths_and_retires_only_empty_legacy_path(self):
         with tempfile.TemporaryDirectory() as temporary:

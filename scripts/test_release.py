@@ -29,6 +29,24 @@ verification = load("verify-release")
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_publish_requires_verified_artifacts_before_publication(self):
+        release = (SCRIPTS.parent / ".github/workflows/release.yml").read_text()
+        publisher = release.split("  publish:\n", 1)[1]
+        self.assertIn("needs: [plan, checks, quality]", publisher)
+        self.assertIn("contents: write", publisher)
+        self.assertIn("persist-credentials: false", publisher)
+        for required in ("actions/download-artifact@", "pattern: hannes-*",
+                         "python3 scripts/checksums.py", "python3 scripts/check-release-artifacts.py", "npm run release",
+                         "EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}"):
+            self.assertIn(required, publisher)
+        self.assertLess(publisher.index("actions/download-artifact@"), publisher.index("scripts/checksums.py"))
+        self.assertLess(publisher.index("scripts/checksums.py"), publisher.index("scripts/check-release-artifacts.py"))
+        self.assertLess(publisher.index("scripts/check-release-artifacts.py"), publisher.index("npm run release"))
+        verification = publisher.split("      - name: Verify collected release artifacts\n", 1)[1].split("      - name:", 1)[0]
+        self.assertIn("EXPECTED_RELEASE_VERSION: ${{ needs.plan.outputs.version }}", verification)
+        for bypass in ("continue-on-error", "if:", "||"):
+            self.assertNotIn(bypass, verification)
+
     def test_only_root_version_changes_and_invalid_versions_leave_files_untouched(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

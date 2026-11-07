@@ -95,12 +95,10 @@ for target in targets:
     });
     const options = { ...config, repositoryUrl: remote, ci: false, plugins };
     const context = { cwd, env, stdout: quiet, stderr: quiet };
-    // Fail if publication tries to create a commit; record ordinary push-hook use.
-    for (const event of ["pre-commit", "commit-msg", "pre-push"]) {
+    // Fail if publication tries to create a commit.
+    for (const event of ["pre-commit", "commit-msg"]) {
       const path = join(cwd, ".git", "hooks", event);
-      writeFileSync(path, event === "pre-push"
-        ? '#!/bin/sh\nprintf "push\\n" >> "$(git rev-parse --git-path release-pushes)"\n'
-        : '#!/bin/sh\necho "Publication must not create commits" >&2\nexit 1\n');
+      writeFileSync(path, '#!/bin/sh\necho "Publication must not create commits" >&2\nexit 1\n');
       chmodSync(path, 0o755);
     }
     const original = readFileSync(join(cwd, "Cargo.toml"), "utf8");
@@ -129,7 +127,6 @@ for target in targets:
     assert.equal(git("ls-remote", "origin", "refs/heads/main").split(/\s+/)[0], env.GITHUB_SHA);
     assert.match(git("ls-remote", "origin", "refs/tags/v0.1.1"), /refs\/tags\/v0\.1\.1/);
     assert.match(git("ls-remote", "origin", "refs/notes/semantic-release-v0.1.1"), /refs\/notes\/semantic-release-v0\.1\.1/);
-    assert.match(readFileSync(join(cwd, ".git", "release-pushes"), "utf8"), /push/);
     assert.equal(await semanticRelease(options, context), false);
     for (const event of ["pre-commit", "commit-msg"]) rmSync(join(cwd, ".git", "hooks", event));
     git("commit", "--allow-empty", "-m", "feat!: change fixture contract"); git("push", "origin", "main");

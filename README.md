@@ -1,5 +1,10 @@
 # Hannes
 
+> [!IMPORTANT]
+> **Hannes has grown up into [Please Behave](https://github.com/please-behave/cli).**
+>
+> Hannes was the slightly less serious predecessor of Please Behave. This repository is archived and no longer maintained. For the actively developed successor, head over to **[Please Behave](https://github.com/please-behave/cli)**.
+
 ```text
   /\  /\__ _ _ __  _ __   ___  ___
  / /_/ / _` | '_ \| '_ \ / _ \/ __|

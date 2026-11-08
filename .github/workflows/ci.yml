@@ -39,7 +39,7 @@ jobs:
           bash scripts/prepare-ci.sh
           echo "version=$(cat .hannes-version)" >> "$GITHUB_OUTPUT"
       - name: Install published Hannes
-        uses: christianpflugradt/hannes@eedbc1dbb227110667a8b40bdcf8603bddb33726 # v0.14.1
+        uses: christianpflugradt/hannes@2d94095b7746d60acb6702420389b515eba8c83e # v0.14.2
         with:
           version: ${{ steps.governor.outputs.version }}
           run: 'false'
@@ -104,7 +104,7 @@ jobs:
           exit "${ACTION_CHECK_STATUS:-0}"
           SH
       - name: Install only through the public Action
-        uses: christianpflugradt/hannes@eedbc1dbb227110667a8b40bdcf8603bddb33726 # v0.14.1
+        uses: christianpflugradt/hannes@2d94095b7746d60acb6702420389b515eba8c83e # v0.14.2
         with:
           version: ${{ steps.governor.outputs.version }}
           execution-point: check
@@ -116,7 +116,7 @@ jobs:
           test "$(hannes --version)" = "hannes ${EXPECTED_VERSION#v}"
           test ! -e "$RUNNER_TEMP/action-points"
       - name: Run a specified execution point through the public Action
-        uses: christianpflugradt/hannes@eedbc1dbb227110667a8b40bdcf8603bddb33726 # v0.14.1
+        uses: christianpflugradt/hannes@2d94095b7746d60acb6702420389b515eba8c83e # v0.14.2
         with:
           version: ${{ steps.governor.outputs.version }}
           execution-point: action-test
@@ -124,7 +124,7 @@ jobs:
       - name: Verify default execution propagates a failing check
         id: failing
         continue-on-error: true
-        uses: christianpflugradt/hannes@eedbc1dbb227110667a8b40bdcf8603bddb33726 # v0.14.1
+        uses: christianpflugradt/hannes@2d94095b7746d60acb6702420389b515eba8c83e # v0.14.2
         env:
           ACTION_CHECK_STATUS: '1'
         with:
